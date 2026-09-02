@@ -33,9 +33,11 @@ Antes de qualquer novo trabalho:
 
 Os marcos e sua ordem são definidos em `09_IMPLEMENTATION_PLAN.md`.
 
-Cada marco continua sendo unidade independente de implementação, validação, branch, PR, merge, confirmação pós-merge e limpeza Git.
+Cada marco continua sendo unidade independente de implementação, validação, branch, PR, merge e confirmação pós-merge.
 
-O avanço automático ao marco seguinte é permitido somente depois de todos os gates do marco anterior terem sido satisfeitos, conforme D-034 e D-035.
+O avanço automático ao marco seguinte é permitido somente depois de todos os gates funcionais e de integração do marco anterior terem sido satisfeitos, conforme D-034.
+
+Durante a cascata M4 → M12, a branch encerrada deve ser comparada com `main`, confirmada sem conteúdo exclusivo e registrada na lista acumulada de exclusão manual conforme D-036. A exclusão física diferida não bloqueia o avanço.
 
 Nenhum marco pode ser considerado concluído apenas para permitir avanço.
 
@@ -89,7 +91,7 @@ A execução deve interromper quando houver pelo menos uma condição que depend
 4. mudança material em scoring, priorização ou interpretação oficial;
 5. política ou autorização corporativa necessária;
 6. credencial, segredo ou acesso externo indispensável e indisponível;
-7. ação externa obrigatória que a ferramenta disponível não consiga executar;
+7. ação externa obrigatória que a ferramenta disponível não consiga executar, exceto exclusão física diferida de branches coberta por D-036;
 8. falha persistente de validação obrigatória após diagnóstico e tentativas razoáveis de correção;
 9. inconsistência de `main` que torne inseguro continuar;
 10. risco de operação destrutiva não previamente autorizada;
