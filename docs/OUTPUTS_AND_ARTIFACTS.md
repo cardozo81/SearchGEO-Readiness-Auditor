@@ -18,6 +18,7 @@ audits/<AUD-ID>/
 <AUD-ID>/
 ├─ audit.db
 ├─ report.html
+├─ remediation.html
 └─ artifacts/
    ├─ http/
    │  ├─ page-<PGE-ID>.response
@@ -47,7 +48,7 @@ audits/<AUD-ID>/
                └─ structured_data.json
 ```
 
-A presença de um arquivo é condicionada à existência do conteúdo correspondente. Uma falha localizada pode gerar Evidence/estado técnico sem gerar determinado artifact. O workspace deve ser tratado como unidade portátil: `report.html`, `audit.db` e `artifacts/` devem permanecer juntos quando a auditoria for copiada.
+A presença de um arquivo de evidência é condicionada à existência do conteúdo correspondente. Uma falha localizada pode gerar Evidence/estado técnico sem gerar determinado artifact. O workspace deve ser tratado como unidade portátil: `report.html`, `remediation.html`, `audit.db` e `artifacts/` devem permanecer juntos quando a auditoria for copiada.
 
 ## `audit.db`
 
@@ -67,7 +68,7 @@ SQLite embarcado é a principal persistência estruturada. Contém, conforme os 
 - observações concretas do DOM (`element_observations`);
 - vínculo determinístico Finding → ElementObservation (`finding_element_observations`).
 
-O schema é inicializado/evoluído pelos componentes de persistência da própria baseline. Não existe database server externo. As tabelas introduzidas no M14 são aditivas e não alteram a semântica dos registros históricos.
+O schema é inicializado/evoluído pelos componentes de persistência da própria baseline. Não existe database server externo. As tabelas introduzidas no M14 são aditivas e não alteram a semântica dos registros históricos. M15 não adiciona persistência de findings ou scores: seus dois HTMLs são projeções do mesmo estado persistido.
 
 ### Universo de entrada multi-URL
 
@@ -173,11 +174,11 @@ O M14 acrescenta `VISUAL_SNAPSHOT` como tipo de evidência para o screenshot. O 
 
 `SemanticAssessment` e `EntityObservation` são persistidos no SQLite sem criar arquivos semânticos paralelos obrigatórios. Quando uma saída de IA influencia uma RuleExecution, a pipeline pode criar Evidence `AI_ANALYSIS` com provenance controlada.
 
-O M14 não cria uma segunda chamada livre de IA apenas para preencher selectors, HTML observado ou referências. Esses dados devem vir de evidência real ou permanecer não determinados.
+M14/M15 não criam uma chamada livre de IA apenas para preencher selectors, HTML observado, agrupamentos ou referências. Esses dados devem vir de evidência real/regras persistidas ou permanecer não determinados.
 
 ## Scores, actionability e recomendações
 
-Scores, ScoreContributions, Remediation Groups e Recommendations são dados estruturados persistidos em SQLite. Eles são posteriormente projetados no HTML.
+Scores, ScoreContributions, Remediation Groups e Recommendations são dados estruturados persistidos em SQLite. Eles são posteriormente projetados nos HTMLs.
 
 Actionability é uma projeção independente do scoring. Um resultado pode ser classificado como ação necessária, revisão recomendada, melhoria opcional, nenhuma ação ou ação não determinada sem alterar pesos, score ou coverage.
 
@@ -189,9 +190,42 @@ Gravado na raiz do workspace:
 <AUD-ID>/report.html
 ```
 
-A partir do M14 o template é `REPORT-GEO-003` e pode referenciar screenshots locais sob `artifacts/visual/`. O HTML continua sem CDN, fonte remota, backend ou internet obrigatória para leitura; para manter as imagens, copie o workspace inteiro e não apenas o arquivo isolado.
+A partir do M14 o contrato principal é `REPORT-GEO-003`. M15 preserva esse contrato e melhora sua experiência de leitura:
 
-**`report.html` não é fonte primária dos dados.**
+- navegação por path de página;
+- menu lateral em desktop e navegação compacta em viewport estreita;
+- refinamento tipográfico dos grids de score;
+- guia das dez dimensões de `SCORE-GEO-001`;
+- interpretação de Score, Coverage, Confidence, Consolidation e Actionability;
+- link relativo para `remediation.html`.
+
+O HTML pode referenciar screenshots locais sob `artifacts/visual/`. Não depende de CDN, fonte remota, backend ou internet para abrir. Links externos existentes no conteúdo são referências técnicas clicáveis e não dependências de runtime.
+
+## `remediation.html`
+
+M15 gera, no mesmo nível:
+
+```text
+<AUD-ID>/remediation.html
+```
+
+Contrato de apresentação:
+
+```text
+REMEDIATION-GEO-001
+```
+
+Essa visão reorganiza os mesmos findings por problema/regra e separa:
+
+- problemas globais do domínio;
+- problemas associados a páginas;
+- recorrência do mesmo problema em várias páginas;
+- ocorrências por device;
+- selectors e prioridades quando disponíveis.
+
+O arquivo não recalcula Business Rules nem Score. Ele oferece um ângulo transversal para identificar rapidamente o que é global, recorrente e pontual. Cada path de página pode apontar de volta para o anchor correspondente em `report.html`.
+
+**Nenhum dos dois HTMLs é fonte primária dos dados.**
 
 Se houver divergência durante diagnóstico técnico, use:
 
@@ -200,11 +234,11 @@ Se houver divergência durante diagnóstico técnico, use:
 3. Evidence/RuleExecution persistidas;
 4. ElementObservation e vínculos persistidos;
 5. metadata versionada;
-6. somente então o HTML como projeção de apresentação.
+6. somente então os HTMLs como projeções de apresentação.
 
 ## Logs
 
-A implementação atual usa `logging.basicConfig` no processo, com nível configurável. **Não existe writer que materialize `audit.log` dentro do workspace na Stable Local Baseline/M14.**
+A implementação atual usa `logging.basicConfig` no processo, com nível configurável. **Não existe writer que materialize `audit.log` dentro do workspace na Stable Local Baseline/M15.**
 
 Se uma specification/arquitetura de referência mencionar `audit.log`, trate isso como objetivo não materializado, não como arquivo que o operador deve esperar encontrar.
 
@@ -243,4 +277,5 @@ Score
 | Evidence | provenance estruturada das observações |
 | ElementObservation | evidência concreta de elemento DOM quando disponível |
 | RuleExecution | resultado versionado da regra |
-| `report.html` | projeção humana do estado persistido |
+| `report.html` | projeção humana orientada a página |
+| `remediation.html` | projeção humana transversal orientada a problema/regra |
