@@ -27,6 +27,7 @@ from searchgeo.prioritization import (
     PriorityEngine,
 )
 from searchgeo.recommendation_persistence import RecommendationPersistence
+from searchgeo.remediation import recipe_for
 
 
 _NOW = datetime(2026, 9, 2, 17, 30, tzinfo=timezone.utc)
@@ -109,11 +110,43 @@ class M10PrioritizationTests(unittest.TestCase):
         self.assertEqual(recommendation.device, FindingDevice.BOTH)
         self.assertEqual(recommendation.remediation_group_id, group.group_id)
 
+    def test_canonical_recipe_is_actionable_and_does_not_invent_preferred_url(self) -> None:
+        finding = _finding(
+            "CANONICAL",
+            rule_id="BR-GEO-013",
+            page_id="P1",
+            device=FindingDevice.BOTH,
+            severity=Severity.MEDIUM,
+            category="INDEXABILITY",
+        )
+        result = PriorityEngine().prioritize(
+            audit_id="AUD-1", total_pages=1, findings=(finding,)
+        )
+        recommendation = result.recommendations[0]
+        recipe = recipe_for("BR-GEO-013")
+
+        self.assertEqual(recommendation.title, "Corrigir declaração canonical")
+        self.assertIn("URL preferencial", recommendation.description)
+        self.assertEqual(recipe.element, '<link rel="canonical">')
+        self.assertEqual(recipe.location, "<head>")
+        self.assertEqual(recipe.action, "ADD_OR_CORRECT")
+        self.assertIn("URL-PREFERENCIAL", recipe.example or "")
+        self.assertIn("Não assuma", recipe.human_decision or "")
+        self.assertGreaterEqual(len(recipe.acceptance), 4)
+        self.assertGreaterEqual(len(recipe.validation), 2)
+
     def test_execute_m10_persists_reopenable_group_and_recommendation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             workspace = AuditWorkspace.create(Path(directory), "AUD-1")
             with AuditPersistence(workspace) as persistence:
-                persistence.audits.add(Audit(audit_id="AUD-1", project_name="Fixture", auditor_version="0.1", ruleset_version="1"))
+                persistence.audits.add(
+                    Audit(
+                        audit_id="AUD-1",
+                        project_name="Fixture",
+                        auditor_version="0.1",
+                        ruleset_version="1",
+                    )
+                )
                 evidence = Evidence(
                     evidence_id="EVD-1",
                     audit_id="AUD-1",
