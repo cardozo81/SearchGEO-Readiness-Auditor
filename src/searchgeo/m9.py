@@ -1,0 +1,123 @@
+"""M9 — Scoring + Reliability and BR-GEO-054 reproducibility."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from searchgeo.domain import EvidenceType, RuleExecution, RuleResult, new_id, utc_now
+from searchgeo.evidence import EvidenceManager
+from searchgeo.persistence import AuditPersistence, AuditWorkspace
+from searchgeo.scoring import ScoringEngine, ScoringResult
+from searchgeo.scoring_persistence import ScoringPersistence
+
+
+@dataclass(frozen=True, slots=True)
+class M9ExecutionResult:
+    score_ids: tuple[str, ...]
+    contribution_ids: tuple[str, ...]
+    overall_score_ids: tuple[str, ...]
+    integrity_rule_execution_id: str
+
+
+def execute_m9(
+    *,
+    audit_id: str,
+    rule_execution_ids: tuple[str, ...],
+    persistence: AuditPersistence,
+    workspace: AuditWorkspace,
+) -> M9ExecutionResult:
+    executions: list[RuleExecution] = []
+    for execution_id in dict.fromkeys(rule_execution_ids):
+        execution = persistence.rule_executions.get(execution_id)
+        if execution is None:
+            raise ValueError(f"RuleExecution is not re-openable for scoring: {execution_id}")
+        if execution.audit_id != audit_id:
+            raise ValueError(f"RuleExecution belongs to another audit: {execution_id}")
+        executions.append(execution)
+
+    engine = ScoringEngine()
+    calculated = engine.score(audit_id=audit_id, executions=executions)
+    score_ids: list[str] = []
+    contribution_ids: list[str] = []
+    with ScoringPersistence(workspace) as scoring:
+        for score in calculated.scores:
+            scoring.add_score(score)
+            score_ids.append(score.score_id)
+        for score in calculated.overall_by_device.values():
+            scoring.add_score(score)
+        for contribution in calculated.contributions:
+            scoring.add_contribution(contribution)
+            contribution_ids.append(contribution.contribution_id)
+
+        integrity = _reproducibility_check(
+            audit_id=audit_id,
+            executions=tuple(executions),
+            original=calculated,
+            scoring=scoring,
+        )
+
+    manager = EvidenceManager(persistence)
+    evidence = manager.record(
+        audit_id=audit_id,
+        page_id=None,
+        snapshot_id=None,
+        device=None,
+        evidence_type=EvidenceType.COMPARISON,
+        source="scoring:BR-GEO-054",
+        observed_value=integrity,
+    )
+    integrity_execution = RuleExecution(
+        rule_execution_id=new_id("REX"), audit_id=audit_id, rule_id="BR-GEO-054", rule_version="1",
+        page_id=None, snapshot_id=None, device=None,
+        result=RuleResult.PASS if integrity["reproducible"] else RuleResult.FAIL,
+        observed_value=integrity,
+        expected_condition="scores are reconstructible from RuleExecutions, rule versions and SCORE-GEO-001 without website/AI re-execution",
+        evidence_ids=(evidence.evidence_id,), executed_at=utc_now(), error=None,
+    )
+    persistence.rule_executions.add(integrity_execution)
+
+    return M9ExecutionResult(
+        score_ids=tuple(score_ids),
+        contribution_ids=tuple(contribution_ids),
+        overall_score_ids=tuple(score.score_id for score in calculated.overall_by_device.values()),
+        integrity_rule_execution_id=integrity_execution.rule_execution_id,
+    )
+
+
+def _reproducibility_check(
+    *,
+    audit_id: str,
+    executions: tuple[RuleExecution, ...],
+    original: ScoringResult,
+    scoring: ScoringPersistence,
+) -> dict[str, object]:
+    recalculated = ScoringEngine().score(audit_id=audit_id, executions=executions)
+    expected = {
+        (score.dimension, score.device.value): (
+            score.value, score.coverage, score.confidence.value,
+            score.consolidation_status.value, score.scoring_version,
+        )
+        for score in (*original.scores, *original.overall_by_device.values())
+    }
+    actual = {
+        (score.dimension, score.device.value): (
+            score.value, score.coverage, score.confidence.value,
+            score.consolidation_status.value, score.scoring_version,
+        )
+        for score in (*recalculated.scores, *recalculated.overall_by_device.values())
+    }
+    persisted_ok = all(scoring.get_score(score.score_id) is not None for score in (*original.scores, *original.overall_by_device.values()))
+    contribution_refs_ok = all(
+        scoring.list_contributions(score.score_id) == tuple(
+            contribution for contribution in original.contributions if contribution.score_id == score.score_id
+        )
+        for score in original.scores
+    )
+    return {
+        "reproducible": expected == actual and persisted_ok and contribution_refs_ok,
+        "scoring_version": "SCORE-GEO-001",
+        "score_count": len(expected),
+        "persisted_scores_reopenable": persisted_ok,
+        "contributions_reopenable": contribution_refs_ok,
+        "recalculation_equal": expected == actual,
+    }
