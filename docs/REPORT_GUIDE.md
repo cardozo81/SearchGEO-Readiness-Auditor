@@ -1,6 +1,6 @@
 # Guia do Relatório
 
-O `report.html` é um relatório HTML5 estático e autocontido, gerado a partir do estado persistido da auditoria. Ele é uma **projeção para leitura humana**; a fonte primária continua sendo `audit.db` + artifacts.
+O `report.html` é um relatório HTML5 estático, responsivo, imprimível e autocontido, gerado exclusivamente a partir do estado persistido da auditoria. Ele é uma **projeção para leitura humana**; a fonte primária continua sendo `audit.db` + artifacts.
 
 ## Como abrir
 
@@ -10,29 +10,87 @@ No Windows:
 Start-Process .\audits\AUD-...\report.html
 ```
 
-Não é necessário web server nem acesso à internet para abrir o arquivo gerado.
+Não é necessário web server, CDN, fonte remota ou acesso à internet para abrir o arquivo gerado.
 
-## Resumo
+# Como ler o resultado em poucos segundos
 
-O topo identifica projeto, auditoria, quantidade de páginas, findings e recomendações e inclui o disclaimer de finalidade.
+O topo do relatório responde primeiro ao estado de readiness. A ordem executiva é:
 
-A ferramenta mede **Search/GEO Readiness**. O resultado não garante:
+1. Compatibilidade GEO geral por dispositivo;
+2. Cobertura e confiabilidade;
+3. principais oportunidades;
+4. score Desktop;
+5. score Mobile;
+6. plano de correção;
+7. correções detalhadas;
+8. análises semânticas;
+9. crawl e limitações;
+10. metodologia e glossário.
 
-- ranking;
-- tráfego orgânico;
-- citação por um sistema generativo;
-- inclusão em respostas de IA;
-- visibilidade ou presença em mecanismo generativo.
+A ferramenta mede **Search/GEO Readiness**. O resultado não garante ranking, tráfego, citação por sistemas generativos, inclusão em respostas de IA ou visibilidade externa.
+
+## Três conceitos que não devem ser confundidos
+
+### Compatibilidade GEO
+
+Responde: **quão preparado está o site?**
+
+É o `OVERALL_READINESS` do dispositivo quando o score está efetivamente `CONSOLIDATED`.
+
+### Cobertura da análise
+
+Responde: **quanto do universo aplicável foi efetivamente avaliado?**
+
+Coverage baixa reduz a capacidade de concluir, mas **não significa que o website tenha qualidade baixa**.
+
+### Confiabilidade
+
+Responde: **quanto podemos confiar na conclusão apresentada?**
+
+Considera coverage, evidência, erros de execução e capacidade analítica disponível.
+
+## NÃO DETERMINADO
+
+Quando não existe base suficiente para consolidar `OVERALL_READINESS`, o relatório mostra explicitamente:
+
+```text
+COMPATIBILIDADE GEO
+NÃO DETERMINADA
+```
+
+Isso significa **informação insuficiente para uma conclusão geral**. Não significa nota zero, `FAIL` ou baixa qualidade do website.
+
+O relatório nunca apresenta Coverage, por exemplo `27%`, como se fosse a nota GEO.
+
+## Classificação visual de scores válidos
+
+| Score válido | Classificação | Semântica visual |
+|---:|---|---|
+| 90–100 | Excelente | sucesso / verde |
+| 75–89 | Alta | sucesso / verde |
+| 60–74 | Moderada | atenção / amarelo |
+| 40–59 | Baixa | problema / laranja |
+| 0–39 | Crítica | crítico / vermelho |
+| sem score consolidado | Não Determinada | informação insuficiente / cinza |
+
+As cores são sempre acompanhadas por texto. Informação metodológica utiliza azul.
 
 ## Desktop e Mobile
 
-Desktop e Mobile são contextos independentes desde o rendering até o scoring. O relatório não deve ser lido como um único score indiferenciado.
+Desktop e Mobile permanecem independentes desde rendering até scoring. Não existe média artificial entre dispositivos.
 
-Uma diferença entre dispositivos não é automaticamente um defeito. `BR-GEO-052` classifica a diferença e só produz finding quando a implementação a considera materialmente problemática e evidence-backed.
+É possível, por exemplo, haver:
 
-## Scorecards e 10 dimensões
+```text
+Desktop: 82 / Alta / Consolidado
+Mobile: NÃO DETERMINADA
+```
 
-A baseline usa:
+Isso não autoriza inferir uma nota combinada.
+
+# Scorecard
+
+A baseline utiliza dez dimensões:
 
 1. Acessibilidade Técnica;
 2. Capacidade de Indexação;
@@ -45,155 +103,229 @@ A baseline usa:
 9. Evidências e Confiabilidade;
 10. Cobertura de Intenções.
 
-Cada dispositivo possui score por dimensão e, quando todas as condições forem satisfeitas, `Overall Readiness`.
+Cada linha mostra separadamente:
 
-## Overall
+- score ou `NÃO DETERMINADO`;
+- classificação textual;
+- Coverage;
+- Confidence;
+- Consolidation Status.
 
-`Overall` só recebe valor quando as 10 dimensões necessárias possuem valor e não estão `NOT_CONSOLIDATED`. A implementação calcula a média simples das 10 dimensões.
+`UNKNOWN`, `ERROR` e `NOT_APPLICABLE` não são convertidos em `FAIL`.
 
-Se uma dimensão necessária não puder ser consolidada, o Overall permanece sem valor consolidado. Isso evita transformar ausência de observação em uma nota artificialmente baixa.
+# Principais oportunidades
 
-## Coverage
+A seção **Principais oportunidades de melhoria** é derivada somente de findings realmente persistidos e priorizados.
 
-Coverage representa quanto do peso aplicável foi efetivamente avaliado por resultados de qualidade (`PASS`, `WARNING`, `FAIL`).
+Uma dimensão apenas `UNKNOWN` não gera problema fictício.
 
-- `UNKNOWN` não entra como falha;
-- `ERROR` não entra como falha;
-- `NOT_APPLICABLE` é removido do universo aplicável;
-- baixa Coverage limita a confiança/consolidação.
+A tabela resume:
 
-Coverage é sobre **capacidade de avaliar**, não sobre qualidade do website.
+- prioridade;
+- área GEO;
+- resultado conhecido para o dispositivo aplicável;
+- problema principal.
 
-## Confidence
+# Actionable remediation
 
-Na implementação atual:
+A evolução `REPORT-GEO-002` transforma o fluxo em:
 
-- `HIGH`: Coverage >= 90%, evidências completas e nenhum ERROR;
-- `MEDIUM`: Coverage >= 80% e nenhum ERROR;
-- `LOW`: demais casos com alguma Coverage;
-- `UNAVAILABLE`: Coverage zero.
+```text
+Evidence
+  -> RuleExecution
+  -> Finding
+  -> Priority
+  -> Remediation Recipe
+  -> Recommendation
+  -> Actionable Report
+```
 
-Não confundir Confidence do score com confiança de uma inferência semântica individual.
+## Remediation Recipe
 
-## Consolidation Status
+Uma recipe determinística por `rule_id` pode informar:
 
-- `CONSOLIDATED`: Coverage >= 80% com Confidence HIGH ou MEDIUM;
-- `PARTIAL`: existe informação útil, mas o gate de consolidação completa não foi atingido;
-- `NOT_CONSOLIDATED`: Coverage < 50% ou Confidence indisponível.
+- alvo técnico;
+- elemento HTML;
+- localização estrutural;
+- tipo de ação;
+- descrição da correção;
+- exemplo técnico, quando seguro;
+- critérios de aceite;
+- como revalidar;
+- decisão humana obrigatória, quando aplicável.
 
-## Resultados das regras
+Recipes não alteram score nem severity. Elas explicam como tratar um finding já evidence-backed.
 
-| Resultado | Interpretação |
-|---|---|
-| `PASS` | condição esperada comprovada no escopo avaliado |
-| `FAIL` | problema comprovado conforme regra e evidência |
-| `WARNING` | condição de atenção/materialidade limitada, conforme regra |
-| `UNKNOWN` | evidência/capacidade insuficiente para concluir |
-| `NOT_APPLICABLE` | regra não se aplica ou foi bloqueada por dependência |
-| `ERROR` | erro na execução da análise; não é FAIL do site |
+Regras sem recipe específica usam fallback claramente identificado.
 
-## Findings
+## Exemplo: canonical ausente
 
-Finding é um problema/alerta publicado pela pipeline e deve estar ligado a:
+Para `BR-GEO-013`, o relatório pode indicar:
 
-- `rule_id`;
-- `RuleExecution`;
-- uma ou mais `Evidence`;
-- página/dispositivo quando aplicável;
-- severity;
-- observed value;
-- expected condition.
+```html
+<link rel="canonical">
+```
 
-A política geral é não criar finding para simples ausência de capacidade de análise. `UNKNOWN` e `ERROR` não devem ser transformados mecanicamente em problema do site.
+Local esperado:
 
-## Evidence
+```text
+<head>
+```
 
-Evidence registra o que foi observado e de onde veio. Pode referenciar:
+Se a canonical estiver ausente, o relatório explica que a equipe precisa definir qual URL é realmente preferencial antes de preencher o `href`.
 
-- resposta/headers HTTP;
-- robots/sitemap;
-- DOM/HTML/meta/canonical/headings/links;
-- Dados Estruturados;
-- conteúdo principal;
-- análise semântica aceita;
-- comparação Desktop/Mobile;
-- artifact persistido.
+Um exemplo estrutural pode ser mostrado como:
 
-Use o ID e o `artifact_reference` para rastrear um finding até a fonte técnica.
+```html
+<head>
+  ...
+  <link rel="canonical" href="https://URL-PREFERENCIAL.example/...">
+</head>
+```
 
-## Severity
+O placeholder **não é uma canonical inferida pelo auditor**.
 
-Severidade do finding:
+Critérios típicos incluem:
 
-- `CRITICAL`;
-- `HIGH`;
-- `MEDIUM`;
-- `LOW`;
-- `INFO`.
+- no máximo uma canonical efetiva quando aplicável;
+- URL absoluta e tecnicamente válida;
+- ausência de conflito;
+- destino coerente com a URL preferencial aprovada;
+- revalidação pelas regras relacionadas.
 
-Severity expressa gravidade do problema identificado; não é a mesma coisa que Priority.
+## HTML observado versus exemplo recomendado
 
-## Impact, Effort e Priority
+Esses conceitos são deliberadamente separados.
 
-A priorização M10 combina quatro componentes:
+Quando a evidência do finding não persiste o trecho HTML original, o relatório mostra:
+
+```text
+Trecho HTML original não persistido para esta evidência.
+```
+
+Depois, quando seguro, apresenta uma **Estrutura recomendada (exemplo)**.
+
+O relatório não reconstrói nem fabrica HTML como se tivesse sido capturado.
+
+# Recomendações semânticas e de conteúdo
+
+Quando M7 possui resultados persistidos, o relatório reutiliza:
+
+- `reasoning_summary`;
+- `evidence_ids`;
+- entidades;
+- intenção primária;
+- intenções secundárias;
+- assessments de estrutura semântica;
+- answerability;
+- citation readiness;
+- evidence/trust;
+- intent coverage.
+
+Não existe segunda chamada livre de IA para “embelezar” o texto do relatório.
+
+Exemplos semânticos são estruturais e não podem inventar:
+
+- claims;
+- preços;
+- coberturas comerciais;
+- datas;
+- autor;
+- fontes;
+- condições de produto;
+- fatos não sustentados.
+
+Quando uma correção depende de decisão editorial, jurídica ou de negócio, o relatório a identifica como decisão humana.
+
+# Uso de IA
+
+## FULL
+
+Provider semântico disponível e respostas válidas para o universo aplicável. Isso não implica Coverage 100% obrigatoriamente.
+
+## DEGRADED
+
+Parte da análise semântica ficou indisponível ou foi rejeitada. Saídas inválidas, schema incompatível ou evidence IDs inventados não viram defeito do website.
+
+## NO_AI
+
+A auditoria continua com regras determinísticas e heurísticas seguras. Regras semantic-only podem ficar `UNKNOWN`.
+
+**NO_AI não reduz o score de qualidade atribuído ao website.** Pode reduzir Coverage, Confidence, Consolidation e impedir `OVERALL_READINESS`.
+
+# Cobertura do Crawl
+
+A seção **Cobertura do Crawl** é reconstruída do estado persistido, sem depender do objeto M2 em memória.
+
+Ela apresenta, quando disponível:
+
+- URLs descobertas;
+- URLs auditadas;
+- `max_pages`;
+- se o limite foi atingido;
+- fontes de descoberta por seed, sitemap, links internos e redirects;
+- estado de `robots.txt`;
+- sitemaps declarados;
+- estado dos recursos de sitemap;
+- redirects observados;
+- diagnóstico de possível limitação de descoberta.
+
+Quando `MAX_PAGES_REACHED:discovered=N;audited=M` está persistido, os números são reutilizados diretamente.
+
+Quando o limite não foi atingido, todas as URLs candidatas elegíveis foram selecionadas pelo M2, portanto o número de páginas persistidas representa o universo descoberto daquela execução.
+
+# Evidence e rastreabilidade
+
+Cada correção detalhada preserva os IDs de evidência do finding. O desenvolvedor deve conseguir partir do report e rastrear:
+
+```text
+Página
+-> dispositivo
+-> rule_id
+-> finding
+-> observed value
+-> evidence_id
+-> remediation
+-> aceite
+-> revalidação
+```
+
+Evidence pode referenciar HTTP, headers, robots, sitemap, HTML/DOM, canonical, headings, links, Dados Estruturados, conteúdo principal, análise semântica ou comparação Desktop/Mobile.
+
+# Priority
+
+A priorização continua usando `PRIORITY-GEO-001`:
 
 - Severity — 45%;
 - Impact — 30%;
 - Confidence — 15%;
-- Ease — 10% (derivada de Effort).
+- Ease — 10%.
 
 Classes:
 
-- `P0`: reservado a caso crítico/blocker técnico material;
+- `P0`: blocker crítico material;
 - `P1`: prioridade muito alta;
 - `P2`: alta;
 - `P3`: média;
 - `P4`: baixa;
 - `INFO`: informacional.
 
-Priority não altera o score de qualidade calculado pelo M9.
+Priority não altera score de qualidade.
 
-## Remediation Groups
+# Limitações de segurança das sugestões
 
-Findings são consolidados por regra + causa determinística. Um Remediation Group pode reunir várias páginas/dispositivos afetados e receber uma única recomendação operacional.
+O relatório não deve recomendar mudanças apenas para aumentar score. Em particular:
 
-O objetivo é evitar uma lista repetitiva de correções iguais.
+- não escolhe canonical arbitrariamente;
+- não remove `noindex` sem confirmar intenção;
+- não cria structured data incompatível com conteúdo visível;
+- não inventa autor;
+- não inventa data de atualização;
+- não inventa fonte;
+- não inventa informação comercial;
+- não recomenda conteúdo enganoso para sistemas de IA.
 
-## Recommendations
-
-As recomendações da baseline são geradas por templates determinísticos conforme categoria/root cause. Elas incluem impacto, esforço, confiança e prioridade, e apontam para o Remediation Group correspondente.
-
-São orientação de remediação, não garantia de resultado externo após a implementação.
-
-## FULL, DEGRADED e NO_AI
-
-### FULL
-
-Provider semântico disponível e respostas válidas para o universo aplicável. Isso não significa Coverage 100% obrigatoriamente: outras limitações técnicas ainda podem existir.
-
-### DEGRADED
-
-O provider foi selecionado, mas alguma análise semântica ficou indisponível/inválida em parte do universo. Saídas inválidas, schema incorreto ou evidence IDs inventados são descartados.
-
-### NO_AI
-
-IA não configurada. O auditor continua com análise determinística/heurística. Regras semantic-only podem ficar `UNKNOWN`.
-
-**NO_AI não significa baixa qualidade do site.**
-
-## Limitações
-
-A seção de reliability/limitações pode incluir, entre outros:
-
-- `MAX_PAGES_REACHED:...`;
-- rules em `UNKNOWN`/`ERROR` refletidas no score;
-- ausência de IA;
-- dimensões não consolidadas;
-- falhas técnicas localizadas.
-
-Leia limitações antes de interpretar qualquer score isoladamente.
-
-## Glossário essencial
+# Glossário essencial
 
 - **RAW**: resposta HTTP preservada antes de rendering JavaScript.
 - **RENDERED**: DOM/HTML após execução no Chromium.
@@ -202,3 +334,4 @@ Leia limitações antes de interpretar qualquer score isoladamente.
 - **Coverage**: proporção do universo aplicável efetivamente avaliado.
 - **Confidence**: confiança operacional do score a partir de Coverage/evidência/erros.
 - **Consolidation**: estado que determina se o score possui base suficiente para uso agregado.
+- **Remediation Recipe**: receita determinística e rastreável associada à regra para orientar correção e aceite.
