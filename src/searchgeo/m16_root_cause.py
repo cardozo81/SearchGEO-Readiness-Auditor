@@ -145,7 +145,8 @@ _EXACT_TAGS: dict[str, tuple[str, ...]] = {
 _SEMANTIC_CONTEXT_RULES = frozenset(
     f"BR-GEO-{number:03d}" for number in (*range(31, 34), *range(38, 50))
 )
-_GLOBAL_RESOURCE_RULES = frozenset({"BR-GEO-005", "BR-GEO-017", "BR-GEO-018"})
+_PAGE_RESOURCE_RULES = frozenset({"BR-GEO-005"})
+_GLOBAL_RESOURCE_RULES = frozenset({"BR-GEO-017", "BR-GEO-018"})
 
 
 class M16Persistence:
@@ -415,6 +416,8 @@ def _candidate_matches(rule_id: str, row: sqlite3.Row) -> bool:
 
 
 def _scope_status(rule_id: str, elements: tuple[AffectedElement, ...]) -> tuple[str, str, str]:
+    if rule_id in _PAGE_RESOURCE_RULES:
+        return "PAGE_RESOURCE", "NOT_APPLICABLE", "HIGH"
     if rule_id in _GLOBAL_RESOURCE_RULES:
         return "DOMAIN_RESOURCE", "NOT_APPLICABLE", "HIGH"
     if not elements:
