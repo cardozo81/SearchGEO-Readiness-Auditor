@@ -41,13 +41,13 @@ Implementation Plan:
 APPROVED
 
 Código:
-NOT STARTED
+M0 COMPLETED
 
 ## 4. Próximo marco
 
-`M0 — Bootstrap`
+`M1 — Audit + Persistence`
 
-Não avance automaticamente para M1.
+Não avance automaticamente para M2.
 
 ## 5. Restrições principais
 
@@ -60,7 +60,7 @@ Não avance automaticamente para M1.
 - SQLite embarcado + filesystem;
 - sem database server;
 - sem Docker obrigatório;
-- sem GitHub neste momento;
+- Git/GitHub utilizados para versionamento do desenvolvimento, sem dependência de runtime;
 - Desktop/Mobile independentes;
 - RAW + RENDERED;
 - Playwright + Chromium;
@@ -108,14 +108,14 @@ Somente para homologação corporativa:
 - SQLite;
 - EDR/políticas.
 
-Não bloqueiam M0 local.
+Não bloqueiam M1 local.
 
-## 9. M0
+## 9. M0 — CONCLUÍDO
 
-M0 deve somente:
+M0 entregou:
 
-- criar estrutura mínima;
-- definir package;
+- estrutura mínima;
+- package Python;
 - configuração;
 - logging;
 - CLI;
@@ -123,11 +123,6 @@ M0 deve somente:
 - audit <target>;
 - validação básica.
 
-Não criar módulos futuros vazios apenas porque aparecem em TECHNICAL_ARCHITECTURE.
+Não foram criados módulos futuros vazios apenas porque aparecem em TECHNICAL_ARCHITECTURE.
 
-Ao concluir:
-
-1. executar verificações mínimas;
-2. comparar com critérios do M0;
-3. informar arquivos alterados;
-4. parar.
+O próximo marco permitido é M1, conforme `09_IMPLEMENTATION_PLAN.md`.

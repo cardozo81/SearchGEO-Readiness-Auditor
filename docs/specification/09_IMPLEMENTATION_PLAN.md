@@ -193,7 +193,9 @@ Critérios:
 - limitações explícitas;
 - testes críticos.
 
-Somente depois do M12 avaliar Git/GitHub.
+Git/GitHub já são utilizados a partir do M0 para controle de versão e repositório de desenvolvimento.
+
+A adoção antecipada de Git/GitHub é uma decisão de processo de desenvolvimento e não torna GitHub dependência de execução do produto.
 
 ## Regra operacional
 

@@ -38,8 +38,8 @@ Fase inicial:
 - sem arquitetura distribuída;
 - sem multiusuário;
 - sem CI/CD obrigatório;
-- sem GitHub durante desenvolvimento exploratório;
-- GitHub somente após baseline local estável;
+- Git/GitHub utilizados como controle de versão e repositório de desenvolvimento a partir do M0;
+- GitHub não é dependência obrigatória para execução do produto;
 - testes mínimos orientados a risco.
 
 ## 3. Objetivos mínimos da auditoria
@@ -225,7 +225,7 @@ Desktop e Mobile terão scores separados.
 - multiusuário;
 - autenticação corporativa;
 - CI/CD;
-- GitHub durante fase exploratória.
+- dependência obrigatória de GitHub para execução do produto.
 
 Benchmark de concorrentes fica para V1.
 

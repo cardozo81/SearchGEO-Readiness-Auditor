@@ -14,7 +14,9 @@ Relatório oficial será HTML estruturado e profissional.
 Testes mínimos orientados a risco.
 
 ### D-004
-GitHub somente após baseline local estável.
+Decisão original: GitHub somente após baseline local estável.
+
+Status: **SUPERSEDED por D-032**.
 
 ### D-005
 Uma máquina e um operador humano no MVP.
@@ -90,6 +92,11 @@ Relatório destinado ao usuário será prioritariamente em português.
 
 ### D-031
 Termos técnicos oficiais podem permanecer em inglês quando tradução reduzir precisão; glossário/contexto são obrigatórios.
+
+### D-032
+Git/GitHub são adotados a partir do M0 como controle de versão e repositório de desenvolvimento.
+
+Essa adoção não altera o requisito de execução local e não torna GitHub dependência de runtime do produto.
 
 ## PENDING ENVIRONMENT VALIDATION
 
