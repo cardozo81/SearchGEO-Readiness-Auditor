@@ -15,7 +15,7 @@ Os parâmetros funcionais de auditoria são atualmente expostos pela CLI, não p
 | max_pages | `--max-pages` | `100` | deve ser maior que zero |
 | audits root | `--audits-root` | `audits` | diretório pai dos workspaces |
 | AI provider | `--ai-provider` | `none` | `none` ou `openai` |
-| AI model | `--ai-model` | nenhum | obrigatório para selecionar OpenAI, salvo env var |
+| AI model | `--ai-model` | nenhum | com OpenAI, use preferencialmente `gpt-5.6-terra`, `gpt-5.6-sol` ou `gpt-5.6-luna` |
 
 ### Target
 
@@ -90,7 +90,7 @@ Se um path for selecionado explicitamente e o arquivo não existir, a CLI encerr
 |---|---|---:|
 | `SEARCHGEO_CONFIG` | path do TOML | Não |
 | `SEARCHGEO_LOG_LEVEL` | override do `log_level` | Não |
-| `SEARCHGEO_OPENAI_MODEL` | model para OpenAI | somente se `--ai-provider openai` e `--ai-model` omitido |
+| `SEARCHGEO_OPENAI_MODEL` | model ID da OpenAI | somente se `--ai-provider openai` e `--ai-model` omitido |
 | `OPENAI_API_KEY` | credencial do OpenAIProvider | somente para chamada OpenAI efetiva |
 | `PLAYWRIGHT_CHROMIUM_EXECUTABLE` | executável Chromium explícito | Não |
 
@@ -98,13 +98,51 @@ Se um path for selecionado explicitamente e o arquivo não existir, a CLI encerr
 
 ## OpenAIProvider
 
-Seleção:
+### Modelo recomendado
+
+Para a Stable Local Baseline, a configuração operacional recomendada é:
 
 ```powershell
 $env:OPENAI_API_KEY = "<chave>"
-$env:SEARCHGEO_OPENAI_MODEL = "<modelo>"
+$env:SEARCHGEO_OPENAI_MODEL = "gpt-5.6-terra"
 searchgeo audit https://example.com --ai-provider openai
 ```
+
+Valores recomendados documentados:
+
+| Model ID | Quando usar |
+|---|---|
+| `gpt-5.6-terra` | default recomendado: equilíbrio entre qualidade e custo |
+| `gpt-5.6-sol` | máxima qualidade analítica |
+| `gpt-5.6-luna` | menor custo / maior volume |
+
+O valor precisa ser um **model ID da API**, não um nome de plano ChatGPT nem uma categoria genérica.
+
+Não use nesse campo modelos de imagem, realtime, áudio, transcrição, TTS, embeddings ou moderação.
+
+O código atual não contém uma allowlist rígida: outras strings podem ser enviadas à API. Isso **não significa compatibilidade homologada**. Para evitar conflitos, use um dos três model IDs acima, salvo teste explícito com outro modelo.
+
+O model escolhido precisa suportar o contrato técnico usado pelo provider:
+
+- OpenAI Responses API (`/v1/responses`);
+- texto;
+- Structured Outputs;
+- `text.format = json_schema`;
+- `strict = true`.
+
+Consulte [AI_GUIDE.md](AI_GUIDE.md) para detalhes, modelos a evitar e procedimento de validação.
+
+### Precedência de configuração
+
+A flag tem precedência sobre a variável de ambiente:
+
+```powershell
+searchgeo audit https://example.com `
+  --ai-provider openai `
+  --ai-model "gpt-5.6-sol"
+```
+
+Nesse caso, `gpt-5.6-sol` é usado mesmo que `SEARCHGEO_OPENAI_MODEL` esteja definido com outro valor.
 
 O adapter real possui, internamente:
 
