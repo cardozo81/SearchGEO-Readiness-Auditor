@@ -9,6 +9,7 @@ import sqlite3
 from searchgeo.m14_persistence import M14Persistence
 from searchgeo.m14_reporting import TEMPLATE_VERSION, new_m14_report_record
 from searchgeo.m15_reporting import M15ReportBuilder, M15RemediationReportBuilder, write_remediation_report
+from searchgeo.m15_style_overrides import SCORE_LAYOUT_CSS
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
 from searchgeo import reporting as reporting_module
 from searchgeo.reporting import ReportPersistence, write_report
@@ -30,6 +31,7 @@ class _PersistedInputAwareReportBuilder(M15ReportBuilder):
         with M14Persistence(workspace) as m14:
             self._input_summary = m14.get_input_summary(audit_id)
         html = super().build(audit_id=audit_id, workspace=workspace)
+        html = html.replace("</style>", f"{SCORE_LAYOUT_CSS}</style>", 1)
 
         # An empty audit has no page context to which external best-practice
         # references can be applied. Keep labels but remove external hrefs in
