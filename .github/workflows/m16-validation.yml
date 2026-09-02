@@ -1,0 +1,22 @@
+name: M16 temporary validation
+
+on:
+  push:
+    branches:
+      - m16-root-cause-element-remediation
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: Install project
+        run: python -m pip install -e .
+      - name: Run deterministic suite
+        run: python -m unittest discover -s tests -v
