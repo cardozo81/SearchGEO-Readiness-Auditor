@@ -43,6 +43,14 @@ class AuditInputUrl:
 
 
 @dataclass(frozen=True, slots=True)
+class AuditInputSummary:
+    audit_id: str
+    input_mode: str
+    supplied_count: int
+    normalized_unique_count: int
+
+
+@dataclass(frozen=True, slots=True)
 class ElementObservation:
     element_observation_id: str
     audit_id: str
@@ -93,6 +101,13 @@ class M14Persistence:
                     UNIQUE (audit_id, normalized_url)
                 );
 
+                CREATE TABLE IF NOT EXISTS audit_input_summary (
+                    audit_id TEXT PRIMARY KEY REFERENCES audits(audit_id) ON DELETE CASCADE,
+                    input_mode TEXT NOT NULL,
+                    supplied_count INTEGER NOT NULL CHECK (supplied_count > 0),
+                    normalized_unique_count INTEGER NOT NULL CHECK (normalized_unique_count > 0)
+                );
+
                 CREATE TABLE IF NOT EXISTS element_observations (
                     element_observation_id TEXT PRIMARY KEY,
                     audit_id TEXT NOT NULL REFERENCES audits(audit_id) ON DELETE CASCADE,
@@ -125,10 +140,11 @@ class M14Persistence:
             )
 
     def replace_input_urls(self, audit_id: str, urls: tuple[tuple[str, str], ...]) -> None:
-        """Replace the ordered explicit input set for an audit.
+        """Replace the ordered normalized/deduplicated input universe.
 
-        Each tuple is ``(input_url, normalized_url)``.  The caller is responsible
-        for normalization/deduplication before persistence.
+        Each tuple is ``(input_url, normalized_url)``.  The raw supplied count is
+        intentionally persisted separately by :meth:`set_input_summary` so the
+        report can distinguish operator input count from the audited unique set.
         """
 
         audit = self._connection.execute(
@@ -143,6 +159,45 @@ class M14Persistence:
                     "INSERT INTO audit_input_urls VALUES (?, ?, ?, ?)",
                     (audit_id, position, input_url, normalized_url),
                 )
+
+    def set_input_summary(
+        self,
+        audit_id: str,
+        *,
+        input_mode: str,
+        supplied_count: int,
+        normalized_unique_count: int,
+    ) -> None:
+        if supplied_count <= 0 or normalized_unique_count <= 0:
+            raise ValueError("URL input counts must be greater than zero")
+        if normalized_unique_count > supplied_count:
+            raise ValueError("normalized_unique_count cannot exceed supplied_count")
+        with self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO audit_input_summary
+                    (audit_id, input_mode, supplied_count, normalized_unique_count)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(audit_id) DO UPDATE SET
+                    input_mode = excluded.input_mode,
+                    supplied_count = excluded.supplied_count,
+                    normalized_unique_count = excluded.normalized_unique_count
+                """,
+                (audit_id, input_mode, supplied_count, normalized_unique_count),
+            )
+
+    def get_input_summary(self, audit_id: str) -> AuditInputSummary | None:
+        row = self._connection.execute(
+            "SELECT * FROM audit_input_summary WHERE audit_id = ?", (audit_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return AuditInputSummary(
+            audit_id=row["audit_id"],
+            input_mode=row["input_mode"],
+            supplied_count=row["supplied_count"],
+            normalized_unique_count=row["normalized_unique_count"],
+        )
 
     def list_input_urls(self, audit_id: str) -> tuple[AuditInputUrl, ...]:
         rows = self._connection.execute(
