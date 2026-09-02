@@ -1,4 +1,4 @@
-"""M11/M14/M15 — Static HTML Report orchestration."""
+"""M11/M14/M15/M16 — Static HTML Report orchestration."""
 
 from __future__ import annotations
 
@@ -8,15 +8,16 @@ import sqlite3
 
 from searchgeo.m14_persistence import M14Persistence
 from searchgeo.m14_reporting import TEMPLATE_VERSION, _metric, new_m14_report_record
-from searchgeo.m15_reporting import M15ReportBuilder, M15RemediationReportBuilder, write_remediation_report
+from searchgeo.m15_reporting import write_remediation_report
 from searchgeo.m15_style_overrides import SCORE_LAYOUT_CSS
+from searchgeo.m16_reporting import M16RemediationReportBuilder, M16ReportBuilder
+from searchgeo.m16_root_cause import materialize_root_causes
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
 from searchgeo import reporting as reporting_module
 from searchgeo.reporting import ReportPersistence, write_report
 
-# REPORT-GEO-003 remains the page-oriented report contract. M15 changes its UX
-# and adds REMEDIATION-GEO-001 as a second derived projection without changing
-# SCORE-GEO-001 or persisted finding semantics.
+# REPORT-GEO-003 remains the page-oriented report contract. M16 enriches its
+# diagnosis and the REMEDIATION-GEO-001 projection without changing SCORE-GEO-001.
 reporting_module.TEMPLATE_VERSION = TEMPLATE_VERSION
 
 
@@ -31,10 +32,11 @@ def _ai_usage_status(semantic: list[sqlite3.Row]) -> str:
     return "NÃO"
 
 
-class _PersistedInputAwareReportBuilder(M15ReportBuilder):
+class _PersistedInputAwareReportBuilder(M16ReportBuilder):
     """Use raw operator input counts while rendering the deduplicated URL set."""
 
     def __init__(self, workspace: AuditWorkspace) -> None:
+        super().__init__()
         self._workspace = workspace
         self._input_summary = None
 
@@ -85,9 +87,6 @@ class _PersistedInputAwareReportBuilder(M15ReportBuilder):
             semantic=semantic,
         )
 
-        # M14's original projection treated DETERMINISTIC/UNAVAILABLE as if an
-        # external AI response had been used. Replace only that metric while
-        # preserving the rest of the stable renderer.
         providers = sorted({str(row["provider"]) for row in semantic if row["provider"]})
         legacy_ai_used = any(provider.casefold() not in {"none", "fallback", ""} for provider in providers)
         return html.replace(
@@ -115,13 +114,17 @@ def execute_m11(
     if audit is None:
         raise ValueError(f"audit not found: {audit_id}")
 
+    # M16 is a reproducible projection from already persisted findings/evidence.
+    # Materialize once so both HTML views consume the same root-cause record.
+    materialize_root_causes(audit_id=audit_id, workspace=workspace)
+
     html = _PersistedInputAwareReportBuilder(workspace).build(
         audit_id=audit_id,
         workspace=workspace,
     )
     path = write_report(workspace=workspace, html=html)
 
-    remediation_html = M15RemediationReportBuilder().build(
+    remediation_html = M16RemediationReportBuilder().build(
         audit_id=audit_id,
         workspace=workspace,
     )
