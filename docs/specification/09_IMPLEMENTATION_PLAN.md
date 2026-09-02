@@ -1,6 +1,6 @@
 # IMPLEMENTATION_PLAN.md
 
-**Status:** APPROVED — extended through M15
+**Status:** APPROVED — extended through M16
 
 ## M0 — Bootstrap
 
@@ -267,6 +267,48 @@ Critérios de conclusão:
 9. suíte determinística permanece verde;
 10. diff final não contém workflow temporário nem secrets.
 
+## M16 — Root Cause + Element-Level Remediation
+
+Objetivo: transformar cada finding em diagnóstico técnico por ocorrência, informando a causa raiz, onde ela foi observada e como corrigi-la sem fabricar precisão.
+
+Implementar:
+
+- materialização aditiva `root_cause_analyses`, uma análise por `finding_id`;
+- `cause_type`, `cause_summary`, evidências-base, observado versus esperado;
+- classificação do escopo como elemento exato, conjunto/região contextual ou recurso/documento;
+- reaproveitamento do vínculo Finding → `ElementObservation` quando determinístico;
+- listagem de múltiplos headings quando a hierarquia é propriedade do conjunto;
+- localização de `BR-GEO-034..037` nos blocos `script[type="application/ld+json"]` observados;
+- uso de `<main>` apenas como região contextual para regras semânticas quando não houver localização mais precisa evidence-backed;
+- selector, tag/id/classes e `outer_html` somente quando persistidos/prováveis;
+- mudança exata derivada da `RemediationRecipe`;
+- exemplo pós-correção, critérios de aceite, revalidação e decisão humana quando aplicável;
+- bloco de causa raiz em cada finding do `report.html`;
+- diagnóstico por ocorrência dentro de cada grupo do `remediation.html`;
+- guia operacional específico e testes de regressão.
+
+Restrições:
+
+- não inventar selector, elemento, HTML observado, causa técnica ou conteúdo;
+- `<main>` contextual não deve ser apresentado como elemento defeituoso por si só;
+- regras globais/HTTP/robots/sitemap não recebem selector DOM artificial;
+- diagnóstico M16 não altera Business Rules, severity, actionability, prioridade, Score, Coverage, Confidence ou Consolidation;
+- `diagnostic_confidence` mede apenas precisão de localização/causa e não participa de `SCORE-GEO-001`;
+- não introduzir chamada adicional de IA para redigir causa raiz.
+
+Critérios de conclusão:
+
+1. finding com elemento único mostra selector/HTML observado quando persistidos;
+2. finding de conjunto não recebe elemento único arbitrário;
+3. headings podem listar múltiplos nós;
+4. dados estruturados apontam para script JSON-LD, inclusive como conjunto quando houver vários blocos;
+5. regra semântica pode usar região contextual sem atribuir defeito à tag contêiner;
+6. recurso global mostra selector `NÃO APLICÁVEL`;
+7. observado, esperado, causa, mudança, aceite e revalidação são rastreáveis;
+8. ambos os relatórios projetam a mesma análise materializada;
+9. suíte determinística permanece verde;
+10. diff final não contém workflow temporário nem secrets.
+
 ## Stable Local Baseline
 
 Critérios:
@@ -280,6 +322,7 @@ Critérios:
 - evidence;
 - rules;
 - findings;
+- causa raiz e localização técnica evidence-backed;
 - IA opcional;
 - coverage/confidence;
 - scoring;
@@ -289,7 +332,7 @@ Critérios:
 - limitações explícitas;
 - testes críticos.
 
-Após M15, a baseline de reporting possui duas projeções complementares do mesmo estado persistido.
+Após M16, a baseline de reporting possui duas projeções complementares do mesmo estado persistido e uma camada aditiva de causa raiz/remediação por ocorrência.
 
 Git/GitHub já são utilizados a partir do M0 para controle de versão e repositório de desenvolvimento. A adoção antecipada de Git/GitHub é uma decisão de processo de desenvolvimento e não torna GitHub dependência de execução do produto.
 
