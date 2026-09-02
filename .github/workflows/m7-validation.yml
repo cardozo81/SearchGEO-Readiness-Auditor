@@ -18,4 +18,4 @@ jobs:
       - name: Syntax check
         run: python -m compileall -q src tests
       - name: M7 tests
-        run: python -m unittest discover -s tests -p 'test_m7_semantic_provider.py' -v
+        run: python -m unittest discover -s tests -p 'test_m7*.py' -v
