@@ -50,9 +50,20 @@ def execute_m10(
             repository.add_recommendation(recommendation)
             recommendation_ids.append(recommendation.recommendation_id)
 
-        if tuple(repository.list_groups(audit_id)) != prioritized.groups:
+        persisted_groups = {group.group_id: group for group in repository.list_groups(audit_id)}
+        expected_groups = {group.group_id: group for group in prioritized.groups}
+        if persisted_groups != expected_groups:
             raise RuntimeError("persisted remediation groups are not reproducible")
-        if tuple(repository.list_recommendations(audit_id)) != prioritized.recommendations:
+
+        persisted_recommendations = {
+            recommendation.recommendation_id: recommendation
+            for recommendation in repository.list_recommendations(audit_id)
+        }
+        expected_recommendations = {
+            recommendation.recommendation_id: recommendation
+            for recommendation in prioritized.recommendations
+        }
+        if persisted_recommendations != expected_recommendations:
             raise RuntimeError("persisted recommendations are not reproducible")
 
     return M10ExecutionResult(
