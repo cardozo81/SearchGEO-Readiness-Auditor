@@ -1,6 +1,6 @@
 # FUNCTIONAL_REQUIREMENTS.md
 
-**Status:** APPROVED
+**Status:** APPROVED — extended by M13 Actionable GEO Report
 
 ## Requisitos Funcionais
 
@@ -160,6 +160,48 @@ Preservar termos técnicos quando tradução prejudicar precisão.
 ### FR-GEO-052
 Produzir relatório profissional com resumo, scorecard, findings, evidence, prioridades, recomendações, limitações e detalhes técnicos.
 
+### FR-GEO-053
+Exibir `COMPATIBILIDADE GEO: NÃO DETERMINADA` quando `OVERALL_READINESS` não possuir valor consolidado; nunca substituir o score por Coverage.
+
+### FR-GEO-054
+Exibir e explicar separadamente Compatibilidade GEO, Coverage e Confidence.
+
+### FR-GEO-055
+Aplicar classificação textual e semântica visual a scores válidos: 90–100 Excelente, 75–89 Alta, 60–74 Moderada, 40–59 Baixa, 0–39 Crítica; estado sem resultado válido permanece Não Determinado.
+
+### FR-GEO-056
+Produzir seção de principais oportunidades derivada somente de findings e prioridades persistidos, sem transformar UNKNOWN em problema.
+
+### FR-GEO-057
+Associar findings aplicáveis a `RemediationRecipe` determinística por `rule_id`, contendo alvo, ação, descrição, aceite e validação e, quando seguro, elemento/localização/exemplo.
+
+### FR-GEO-058
+Distinguir no relatório HTML efetivamente observado de exemplo recomendado. Se o trecho original não estiver persistido na Evidence, exibir explicitamente `Trecho HTML original não persistido para esta evidência.`
+
+### FR-GEO-059
+Para canonical ausente/conflitante, fornecer remediação acionável sem inventar URL preferencial. Quando a URL preferencial não for determinável pelas evidências, exigir decisão humana antes de preencher `href`.
+
+### FR-GEO-060
+Reutilizar SemanticAssessment, reasoning_summary, entidades, intents e evidence_ids persistidos para enriquecer remediação sem executar segunda chamada livre de IA.
+
+### FR-GEO-061
+Preservar segurança factual das recomendações: não inventar autor, fonte, freshness, claim, preço, cobertura comercial, structured data ou outra informação ausente das evidências.
+
+### FR-GEO-062
+Gerar diagnóstico de crawl reabrível a partir do estado persistido, incluindo URLs descobertas/auditadas, max_pages, limite atingido, fontes de descoberta, robots, sitemaps e redirects quando disponíveis.
+
+### FR-GEO-063
+Manter scorecard Desktop e Mobile independentes, exibindo por dimensão score, classificação, Coverage, Confidence e Consolidation.
+
+### FR-GEO-064
+Ordenar o relatório com resultado executivo antes de metodologia, seguido de oportunidades, scorecards e plano de correção.
+
+### FR-GEO-065
+Identificar explicitamente recipes de fallback quando ainda não houver recipe específica para uma regra.
+
+### FR-GEO-066
+Preservar IDs de Evidence e rastreabilidade no fluxo `evidence → finding → priority → remediation → report`.
+
 ## Requisitos Não Funcionais
 
 ### NFR-GEO-001
@@ -191,3 +233,9 @@ Dados permanecem locais, exceto conteúdo explicitamente enviado a provider conf
 
 ### NFR-GEO-010
 Resultado com cobertura/confiabilidade insuficiente não pode ser apresentado como conclusivo.
+
+### NFR-GEO-011
+O relatório acionável deve permanecer autocontido, responsivo, imprimível e sem dependências externas obrigatórias.
+
+### NFR-GEO-012
+RemediationRecipe e apresentação do relatório devem ser determinísticas e reproduzíveis a partir do estado persistido e da versão do código/ruleset.
