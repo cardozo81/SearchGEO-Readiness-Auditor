@@ -15,7 +15,8 @@ from searchgeo import __version__
 from searchgeo.audit_runner import run_audit
 from searchgeo.config import load_config
 from searchgeo.logging_config import configure_logging
-from searchgeo.semantic import NoneProvider, OpenAIProvider
+from searchgeo.openai_provider import OpenAIProvider
+from searchgeo.semantic import NoneProvider
 
 _LOGGER = logging.getLogger(__name__)
 _DOMAIN_LABEL = re.compile(r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)$")
