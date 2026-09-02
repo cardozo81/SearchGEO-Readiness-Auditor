@@ -139,7 +139,12 @@ _EXACT_TAGS: dict[str, tuple[str, ...]] = {
     "BR-GEO-037": ("script",),
 }
 
-_SEMANTIC_CONTEXT_RULES = frozenset(f"BR-GEO-{number:03d}" for number in range(31, 50))
+# Structured-data rules have concrete script nodes and must be resolved through
+# _EXACT_TAGS before falling back to semantic content context. Context-only rules
+# are entity/answerability/citation/evidence/intent semantics.
+_SEMANTIC_CONTEXT_RULES = frozenset(
+    f"BR-GEO-{number:03d}" for number in (*range(31, 34), *range(38, 50))
+)
 _GLOBAL_RESOURCE_RULES = frozenset({"BR-GEO-005", "BR-GEO-017", "BR-GEO-018"})
 
 
@@ -292,7 +297,11 @@ def derive_root_cause(
 ) -> RootCauseAnalysis:
     rule_id = str(finding["rule_id"])
     recipe = recipe_for(rule_id)
-    observed = _json_value(finding["execution_observed_value"] if "execution_observed_value" in finding.keys() else finding["observed_value"])
+    observed = _json_value(
+        finding["execution_observed_value"]
+        if "execution_observed_value" in finding.keys()
+        else finding["observed_value"]
+    )
     expected = (
         finding["execution_expected_condition"]
         if "execution_expected_condition" in finding.keys() and finding["execution_expected_condition"]
@@ -364,16 +373,6 @@ def _affected_elements(connection: sqlite3.Connection, finding: sqlite3.Row) -> 
         )
         return tuple(_element(row, "SET_MEMBER") for row in rows)
 
-    if rule_id in _SEMANTIC_CONTEXT_RULES:
-        rows = _query_rows(
-            connection,
-            """SELECT * FROM element_observations
-               WHERE snapshot_id=? AND tag_name='main'
-               ORDER BY element_observation_id LIMIT 4""",
-            (snapshot_id,),
-        )
-        return tuple(_element(row, "CONTEXT_REGION") for row in rows)
-
     tags = _EXACT_TAGS.get(rule_id)
     if tags:
         placeholders = ",".join("?" for _ in tags)
@@ -387,6 +386,17 @@ def _affected_elements(connection: sqlite3.Connection, finding: sqlite3.Row) -> 
             return (_element(rows[0], "EXACT"),)
         if len(rows) > 1:
             return tuple(_element(row, "SET_MEMBER") for row in rows)
+
+    if rule_id in _SEMANTIC_CONTEXT_RULES:
+        rows = _query_rows(
+            connection,
+            """SELECT * FROM element_observations
+               WHERE snapshot_id=? AND tag_name='main'
+               ORDER BY element_observation_id LIMIT 4""",
+            (snapshot_id,),
+        )
+        return tuple(_element(row, "CONTEXT_REGION") for row in rows)
+
     return ()
 
 
