@@ -1,4 +1,4 @@
-"""M11/M14 — Static HTML Report orchestration."""
+"""M11/M14/M15 — Static HTML Report orchestration."""
 
 from __future__ import annotations
 
@@ -6,20 +6,20 @@ from dataclasses import dataclass
 import sqlite3
 
 from searchgeo.m14_persistence import M14Persistence
-from searchgeo.m14_reporting import M14ReportBuilder, TEMPLATE_VERSION, new_m14_report_record
+from searchgeo.m14_reporting import TEMPLATE_VERSION, new_m14_report_record
+from searchgeo.m15_reporting import M15ReportBuilder, M15RemediationReportBuilder, write_remediation_report
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
 from searchgeo import reporting as reporting_module
 from searchgeo.reporting import ReportPersistence, write_report
 
-# REPORT-GEO-003 is the active report contract once M11 is orchestrated through
-# M14.  Keep the legacy reporting module's exported constant aligned so callers
-# that import TEMPLATE_VERSION from searchgeo.reporting observe the active
-# contract without duplicating the large stable M13 renderer.
+# REPORT-GEO-003 remains the page-oriented report contract. M15 changes its UX
+# and adds REMEDIATION-GEO-001 as a second derived projection without changing
+# SCORE-GEO-001 or persisted finding semantics.
 reporting_module.TEMPLATE_VERSION = TEMPLATE_VERSION
 
 
-class _PersistedInputAwareReportBuilder(M14ReportBuilder):
-    """Use raw operator input counts while M14 renders the deduplicated URL set."""
+class _PersistedInputAwareReportBuilder(M15ReportBuilder):
+    """Use raw operator input counts while rendering the deduplicated URL set."""
 
     def __init__(self, workspace: AuditWorkspace) -> None:
         self._workspace = workspace
@@ -59,6 +59,7 @@ class M11ExecutionResult:
     report_id: str
     file_path: str
     template_version: str
+    remediation_file_path: str = "remediation.html"
 
 
 def execute_m11(
@@ -76,6 +77,13 @@ def execute_m11(
         workspace=workspace,
     )
     path = write_report(workspace=workspace, html=html)
+
+    remediation_html = M15RemediationReportBuilder().build(
+        audit_id=audit_id,
+        workspace=workspace,
+    )
+    remediation_path = write_remediation_report(workspace=workspace, html=remediation_html)
+
     record = new_m14_report_record(
         audit_id=audit_id,
         auditor_version=audit.auditor_version,
@@ -91,4 +99,5 @@ def execute_m11(
         report_id=record.report_id,
         file_path=record.file_path,
         template_version=record.template_version,
+        remediation_file_path=remediation_path.name,
     )
