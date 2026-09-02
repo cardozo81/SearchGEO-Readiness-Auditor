@@ -1,6 +1,6 @@
 # IMPLEMENTATION_PLAN.md
 
-**Status:** APPROVED — extended with M13
+**Status:** APPROVED — extended through M15
 
 ## M0 — Bootstrap
 
@@ -32,9 +32,7 @@ Implementar:
 - audit.db;
 - estrutura filesystem.
 
-Critério:
-
-criar, persistir, encerrar, reabrir e recuperar Audit.
+Critério: criar, persistir, encerrar, reabrir e recuperar Audit.
 
 ## M2 — Discovery + HTTP
 
@@ -90,9 +88,7 @@ Implementar:
 
 Principalmente BR-GEO-001..018.
 
-Checkpoint:
-
-Technical Auditor Alpha funcional sem IA.
+Checkpoint: Technical Auditor Alpha funcional sem IA.
 
 ## M6 — JavaScript / SPA
 
@@ -174,9 +170,7 @@ Testar minimamente:
 
 ## M13 — Actionable GEO Remediation Report
 
-Objetivo:
-
-Evoluir a Stable Local Baseline de `GEO scoring/reporting` para `GEO scoring + evidence-backed actionable remediation`, sem alterar arbitrariamente o scoring aprovado.
+Objetivo: evoluir a Stable Local Baseline de `GEO scoring/reporting` para `GEO scoring + evidence-backed actionable remediation`, sem alterar arbitrariamente o scoring aprovado.
 
 Implementar:
 
@@ -208,28 +202,80 @@ Restrições:
 - não inventar HTML observado, canonical, noindex policy, structured data, autor, fonte, data ou fatos;
 - relatório continua estático, autocontido, responsivo e sem dependência externa obrigatória.
 
+## M14 — Multi-URL + Visual/DOM Evidence + Actionability
+
+Objetivo: permitir auditoria explícita de várias URLs do mesmo origin em um único `audit_id` e melhorar a rastreabilidade visual/técnica das correções.
+
+Implementar:
+
+- `URL_SET` explícito por múltiplos targets e `--urls-file`;
+- normalização/deduplicação determinística;
+- aquisição global única de `robots.txt`/sitemaps;
+- screenshots Desktop/Mobile;
+- `ElementObservation` e vínculo Finding → elemento quando determinístico;
+- actionability independente de RuleResult/scoring;
+- referências técnicas versionadas;
+- `REPORT-GEO-003`;
+- distinção obrigatória entre zero calculado e ausência de cálculo.
+
+Restrições:
+
+- preservar `SCORE-GEO-001`;
+- não expandir silenciosamente URL_SET por links/sitemap;
+- não inventar selector, HTML observado ou referência técnica;
+- recursos de domínio não são findings duplicados por página.
+
+## M15 — Error-Centric Report + Report UX
+
+Objetivo: melhorar navegação, legibilidade e priorização humana sem alterar dados persistidos, scoring ou findings.
+
+Implementar:
+
+- `report.html` preservado como visão principal orientada a página;
+- menu lateral fixo em desktop com paths/query das URLs auditadas;
+- navegação compacta em viewport estreita;
+- tipografia e grid de Score GEO reequilibrados;
+- guia das dez dimensões oficiais de `SCORE-GEO-001`;
+- seção final explicando Score, Coverage, Confidence, Consolidation e Actionability;
+- `remediation.html` no mesmo nível do `report.html`;
+- contrato `REMEDIATION-GEO-001`;
+- agrupamento transversal por escopo (`GLOBAL`/`PAGE`), `rule_id` e actionability;
+- lista das páginas/paths afetados e ocorrências Desktop/Mobile;
+- links relativos entre `report.html` e `remediation.html`;
+- CLI informando o path dos dois relatórios;
+- documentação operacional com exemplos genéricos de múltiplas URLs diretas e `--urls-file`.
+
+Restrições:
+
+- preservar `REPORT-GEO-003` para a projeção principal;
+- preservar `SCORE-GEO-001`, Coverage, Confidence, Consolidation e actionability;
+- `remediation.html` não recalcula regras, findings ou prioridades;
+- não promover repetição em páginas a finding global;
+- não introduzir nova chamada de IA;
+- problemas do OpenAIProvider permanecem fora do escopo deste marco.
+
 Critérios de conclusão:
 
-1. `evidence → finding → priority → remediation → report` está rastreável;
-2. resultado geral consolidado recebe score/classificação correta;
-3. resultado não consolidado aparece como `NÃO DETERMINADA`;
-4. score, Coverage e Confidence não são visualmente confundidos;
-5. canonical ausente possui recipe acionável sem URL preferencial fabricada;
-6. exemplo recomendado não é apresentado como HTML observado;
-7. diagnóstico de crawl explica limite/fontes/robots/sitemaps quando persistidos;
-8. Desktop e Mobile permanecem independentes;
-9. NO_AI é limitação de cobertura, não finding do site;
-10. report continua self-contained e scoring continua reproduzível.
+1. ambos os HTMLs são gerados no mesmo workspace;
+2. problema repetido em duas páginas aparece em um grupo transversal com duas ocorrências/páginas;
+3. finding global permanece global;
+4. sidebar usa paths sem repetir domínio e trunca somente visualmente;
+5. layout do score não quebra tokens curtos de forma agressiva;
+6. guia das dez dimensões e interpretação final estão presentes;
+7. CLI exibe `report.html` e `remediation.html`;
+8. exemplos de execução documental não usam domínio corporativo de smoke;
+9. suíte determinística permanece verde;
+10. diff final não contém workflow temporário nem secrets.
 
 ## Stable Local Baseline
 
 Critérios:
 
-- recebe domínio;
-- descobre URLs;
+- recebe domínio ou URL_SET explícito;
+- descobre/processa URLs conforme o modo de entrada;
 - respeita max_pages;
 - Desktop/Mobile;
-- RAW/rendered;
+- RAW/rendered/visual;
 - SPA/non-SPA;
 - evidence;
 - rules;
@@ -238,15 +284,14 @@ Critérios:
 - coverage/confidence;
 - scoring;
 - prioritization;
-- report HTML pt-BR;
+- `report.html` orientado a página;
+- `remediation.html` orientado a problema;
 - limitações explícitas;
 - testes críticos.
 
-Após M13, a baseline de reporting também exige remediation acionável evidence-backed.
+Após M15, a baseline de reporting possui duas projeções complementares do mesmo estado persistido.
 
-Git/GitHub já são utilizados a partir do M0 para controle de versão e repositório de desenvolvimento.
-
-A adoção antecipada de Git/GitHub é uma decisão de processo de desenvolvimento e não torna GitHub dependência de execução do produto.
+Git/GitHub já são utilizados a partir do M0 para controle de versão e repositório de desenvolvimento. A adoção antecipada de Git/GitHub é uma decisão de processo de desenvolvimento e não torna GitHub dependência de execução do produto.
 
 ## Regra operacional
 
@@ -263,7 +308,7 @@ Cada marco deve ser tratado como unidade independente e somente pode ser conside
 
 Quando todos esses gates forem satisfeitos, o avanço automático ao marco seguinte é autorizado conforme D-034, sem necessidade de nova aprovação humana.
 
-Durante a cascata M4 → M12, a exclusão física das branches não bloqueia o avanço quando os controles de D-036 forem satisfeitos. Para M13, o pedido de implementação aprovado mantém a mesma regra de limpeza manual: a branch não deve ser excluída pela automação quando o humano tiver solicitado exclusão manual.
+A exclusão física das branches não bloqueia o avanço quando os controles de D-036 forem satisfeitos. Quando o humano solicitar exclusão manual, a automação não deve excluir a branch.
 
 A lista acumulada de branches encerradas deve ser apresentada ao humano ao final para exclusão manual.
 
