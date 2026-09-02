@@ -4,9 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from searchgeo.m14_reporting import M14ReportBuilder, new_m14_report_record
+from searchgeo.m14_reporting import M14ReportBuilder, TEMPLATE_VERSION, new_m14_report_record
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
+from searchgeo import reporting as reporting_module
 from searchgeo.reporting import ReportPersistence, write_report
+
+# REPORT-GEO-003 is the active report contract once M11 is orchestrated through
+# M14.  Keep the legacy reporting module's exported constant aligned so callers
+# that import TEMPLATE_VERSION from searchgeo.reporting observe the active
+# contract without duplicating the large stable M13 renderer.
+reporting_module.TEMPLATE_VERSION = TEMPLATE_VERSION
 
 
 @dataclass(frozen=True, slots=True)
