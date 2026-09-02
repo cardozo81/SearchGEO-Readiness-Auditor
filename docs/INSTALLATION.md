@@ -6,12 +6,14 @@ Este guia descreve a instalação da **Stable Local Baseline** realmente impleme
 
 O fluxo operacional de referência é Windows + PowerShell. A suíte M12 também foi validada em GitHub Actions com CPython 3.13.15 e Chromium, mas isso não transforma outros sistemas em targets formais de distribuição.
 
+Consulte também [COMPATIBILITY.md](COMPATIBILITY.md) para a matriz completa de compatibilidade.
+
 ## Requisitos
 
 | Componente | Obrigatório | Contrato atual |
 |---|---:|---|
 | CPython | Sim | `>=3.13,<3.14` |
-| pip | Sim | instalação do package |
+| pip | Sim | instalação do package; pode ser restaurado via `ensurepip` |
 | Playwright | Sim | `>=1.57,<2`, dependência do package |
 | Chromium | Sim para rendering real | instalado/gerenciado pelo Playwright ou path explícito |
 | SQLite | Sim | módulo embarcado do Python; não exige servidor |
@@ -22,15 +24,76 @@ O fluxo operacional de referência é Windows + PowerShell. A suíte M12 também
 | Database server | Não | SQLite é local/embarcado |
 | Web server | Não | CLI + HTML estático |
 
-## 1. Confirmar Python
+# Instalar dependências ausentes no Windows
+
+Esta seção deve ser usada quando uma máquina nova **não possuir as dependências necessárias**.
+
+## 1. Verificar o que já existe
+
+No PowerShell:
+
+```powershell
+winget --version
+py --version
+python --version
+python -m pip --version
+```
+
+Se `py`/`python` não existirem, instale Python 3.13 conforme a próxima seção.
+
+## 2. Instalar Python 3.13 quando não existir
+
+Em Windows suportado, a forma recomendada é instalar o **Python Install Manager** via WinGet e depois instalar runtime 3.13.
+
+```powershell
+winget install 9NQ7512CXL7T -e --accept-package-agreements --accept-source-agreements
+py install 3.13
+```
+
+Valide:
 
 ```powershell
 py -3.13 --version
 ```
 
-Use Python 3.13. A declaração do package rejeita Python 3.12 e Python 3.14+.
+O projeto exige Python `>=3.13,<3.14`; não use 3.14 para esta baseline.
 
-## 2. Criar virtual environment
+### Se `winget` não estiver disponível
+
+Verifique se o Windows App Installer está presente:
+
+```powershell
+Get-AppxPackage Microsoft.DesktopAppInstaller
+```
+
+Se estiver ausente/corrompido, abra a página do Python Install Manager na Microsoft Store por comando:
+
+```powershell
+Start-Process "ms-windows-store://pdp/?ProductId=9NQ7512CXL7T"
+```
+
+Após instalar o manager, execute:
+
+```powershell
+py install 3.13
+```
+
+## 3. Restaurar/instalar `pip` quando necessário
+
+Uma instalação normal do Python 3.13 já inclui suporte a `pip`. Se `pip` estiver indisponível:
+
+```powershell
+py -3.13 -m ensurepip --upgrade
+py -3.13 -m pip install --upgrade pip
+```
+
+Valide:
+
+```powershell
+py -3.13 -m pip --version
+```
+
+## 4. Criar ambiente virtual
 
 Na raiz do repositório:
 
@@ -40,48 +103,100 @@ py -3.13 -m venv .venv
 python --version
 ```
 
-Se a política do PowerShell impedir ativação, é possível invocar diretamente `.\.venv\Scripts\python.exe` e `.\.venv\Scripts\searchgeo.exe`.
+Se a política do PowerShell impedir ativação, use os executáveis diretamente:
 
-## 3. Instalar o package
+```powershell
+.\.venv\Scripts\python.exe --version
+```
 
-Para desenvolvimento/handoff local:
+## 5. Instalar as dependências Python do projeto
+
+Com a venv ativa:
 
 ```powershell
 python -m pip install --upgrade pip
 python -m pip install -e .
 ```
 
-O `pyproject.toml` registra o comando:
+Isso instala o package e a dependência externa declarada:
 
 ```text
-searchgeo = searchgeo.cli:main
+playwright>=1.57,<2
 ```
 
-Verifique:
+Valide:
 
 ```powershell
+python -m pip show searchgeo-readiness-auditor
+python -m pip show playwright
 searchgeo --version
 ```
 
-## 4. Instalar Chromium
+## 6. Instalar Chromium quando não existir
+
+O Chromium usado pelo Playwright **não é instalado apenas com `pip install`**. Execute:
 
 ```powershell
 python -m playwright install chromium
 ```
 
-O renderer inicia Chromium headless. Por padrão usa o browser gerenciado pelo Playwright.
+Esse é o comando obrigatório para provisionar o browser gerenciado pelo Playwright.
 
-### Chromium explicitamente instalado
-
-Se houver necessidade operacional de usar outro executável Chromium compatível:
+Se a organização já possui Chromium/Chrome homologado e quiser usá-lo explicitamente:
 
 ```powershell
 $env:PLAYWRIGHT_CHROMIUM_EXECUTABLE = "C:\caminho\para\chrome.exe"
 ```
 
-Essa variável é lida pelo `BrowserRenderer`. Não confundir com uma opção CLI: não existe flag `--chromium-path` na baseline atual.
+A compatibilidade desse executável alternativo deve ser confirmada no smoke test humano.
 
-## 5. Teste mínimo da instalação
+## 7. SQLite
+
+Não há pacote de sistema para instalar. A baseline usa `sqlite3` da biblioteca padrão do Python.
+
+Valide:
+
+```powershell
+python -c "import sqlite3; print(sqlite3.sqlite_version)"
+```
+
+Se esse comando falhar em um Python padrão 3.13, a instalação do Python está incompleta/corrompida; reinstale o runtime.
+
+## 8. OpenAI — somente se IA for desejada
+
+Não existe dependência Python `openai` obrigatória. O adapter usa HTTP da biblioteca padrão.
+
+Para habilitar IA:
+
+```powershell
+$env:OPENAI_API_KEY = "<chave>"
+$env:SEARCHGEO_OPENAI_MODEL = "<modelo>"
+searchgeo audit https://example.com --ai-provider openai
+```
+
+Ou:
+
+```powershell
+$env:OPENAI_API_KEY = "<chave>"
+searchgeo audit https://example.com --ai-provider openai --ai-model "<modelo>"
+```
+
+Consulte [AI_GUIDE.md](AI_GUIDE.md) antes de habilitar IA, especialmente a seção de dados enviados externamente.
+
+# Instalação normal — ambiente já provisionado
+
+Se Python 3.13 já estiver instalado:
+
+```powershell
+py -3.13 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e .
+python -m playwright install chromium
+searchgeo --version
+```
+
+## Teste mínimo da instalação
 
 ```powershell
 searchgeo --version
@@ -113,20 +228,9 @@ python -m compileall -q src tests
 python -m unittest discover -s tests -v
 ```
 
-### Opcional: OpenAI
-
-Não há package Python `openai` obrigatório. O adapter implementado chama a Responses API por HTTP e requer apenas:
-
-```powershell
-$env:OPENAI_API_KEY = "<chave>"
-$env:SEARCHGEO_OPENAI_MODEL = "<modelo>"
-```
-
-A auditoria funciona sem esses valores usando `NoneProvider`/`NO_AI`.
-
 ## O que não existe nesta baseline
 
-- instalador MSI/EXE;
+- instalador MSI/EXE do SearchGEO Auditor;
 - binário portátil sem Python;
 - imagem Docker oficial;
 - database server;
