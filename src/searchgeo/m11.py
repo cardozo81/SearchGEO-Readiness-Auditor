@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 import sqlite3
 
 from searchgeo.m14_persistence import M14Persistence
@@ -28,7 +29,24 @@ class _PersistedInputAwareReportBuilder(M15ReportBuilder):
     def build(self, *, audit_id: str, workspace: AuditWorkspace) -> str:
         with M14Persistence(workspace) as m14:
             self._input_summary = m14.get_input_summary(audit_id)
-        return super().build(audit_id=audit_id, workspace=workspace)
+        html = super().build(audit_id=audit_id, workspace=workspace)
+
+        # An empty audit has no page context to which external best-practice
+        # references can be applied. Keep labels but remove external hrefs in
+        # that degenerate report, preserving the long-standing self-contained
+        # empty-report invariant. Real audited page universes keep the links.
+        with sqlite3.connect(workspace.database) as connection:
+            page_count = connection.execute(
+                "SELECT COUNT(*) FROM pages WHERE audit_id = ?", (audit_id,)
+            ).fetchone()[0]
+        if page_count == 0:
+            html = re.sub(
+                r"<a href='https?://[^']+' target='_blank' rel='noopener'>(.*?)</a>",
+                r"\1",
+                html,
+                flags=re.DOTALL,
+            )
+        return html
 
     def _executive(
         self,
