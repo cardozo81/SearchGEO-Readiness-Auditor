@@ -125,7 +125,9 @@ class M12StableBaselineTests(unittest.TestCase):
                 self.assertEqual(audit.status, AuditStatus.COMPLETED)
                 self.assertEqual(audit.completion_status, CompletionStatus.COMPLETE_WITH_LIMITATIONS)
                 self.assertEqual(audit.audit_mode, AuditMode.NO_AI)
-                self.assertTrue(any("max_pages" in limitation for limitation in audit.limitations))
+                self.assertTrue(
+                    any(limitation.startswith("MAX_PAGES_REACHED:") for limitation in audit.limitations)
+                )
 
             connection = sqlite3.connect(result.audit_root / "audit.db")
             connection.row_factory = sqlite3.Row
