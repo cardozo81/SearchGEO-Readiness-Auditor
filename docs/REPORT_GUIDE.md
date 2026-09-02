@@ -1,6 +1,8 @@
 # Guia do Relatório
 
-O `report.html` é um relatório HTML5 estático, responsivo, imprimível e autocontido, gerado exclusivamente a partir do estado persistido da auditoria. Ele é uma **projeção para leitura humana**; a fonte primária continua sendo `audit.db` + artifacts.
+O `report.html` é um relatório HTML5 estático, responsivo e imprimível, gerado exclusivamente a partir do estado persistido da auditoria. Ele é uma **projeção para leitura humana**; a fonte primária continua sendo `audit.db` + artifacts.
+
+A partir de M14/`REPORT-GEO-003`, screenshots são assets locais referenciados por paths relativos. Portanto, o relatório não depende da internet, mas a unidade portátil passa a ser o **workspace completo do audit** (ou ZIP), e não necessariamente o arquivo HTML isolado.
 
 ## Como abrir
 
@@ -10,26 +12,40 @@ No Windows:
 Start-Process .\audits\AUD-...\report.html
 ```
 
-Não é necessário web server, CDN, fonte remota ou acesso à internet para abrir o arquivo gerado.
+Não é necessário web server, CDN, fonte remota ou acesso à internet.
 
 # Como ler o resultado em poucos segundos
 
-O topo do relatório responde primeiro ao estado de readiness. A ordem executiva é:
+O relatório M14 apresenta com destaque:
 
-1. Compatibilidade GEO geral por dispositivo;
-2. Cobertura e confiabilidade;
-3. principais oportunidades;
-4. score Desktop;
-5. score Mobile;
-6. plano de correção;
-7. correções detalhadas;
-8. análises semânticas;
-9. crawl e limitações;
-10. metodologia e glossário.
+1. projeto, `audit_id`, domínio, modo de entrada, URLs fornecidas/auditadas, data/hora, IA/modelo e limitações;
+2. Compatibilidade GEO, Coverage, Confidence e Consolidation sem misturá-los;
+3. estado explícito do score: calculado, inclusive zero real, ou não calculado;
+4. inventário clicável das URLs auditadas;
+5. recursos do domínio (`robots.txt` e sitemap(s));
+6. legenda textual de resultado/actionability;
+7. principais ações/revisões e melhorias não bloqueantes;
+8. score Desktop e Mobile quando metodologicamente disponível;
+9. páginas individualizadas, com URL em destaque, screenshots, findings e evidência DOM;
+10. plano de correção, análise semântica, crawl/coverage, limitações, metodologia e glossário.
 
 A ferramenta mede **Search/GEO Readiness**. O resultado não garante ranking, tráfego, citação por sistemas generativos, inclusão em respostas de IA ou visibilidade externa.
 
-## Três conceitos que não devem ser confundidos
+## Identificação de domínio e URL_SET
+
+Em auditoria multi-URL, todas as páginas pertencem ao mesmo `audit_id`.
+
+O cabeçalho informa:
+
+- quantidade bruta de URLs fornecidas pelo operador;
+- modo `URL_SET` quando a entrada foi explícita;
+- quantidade efetivamente auditada.
+
+O inventário representa o conjunto normalizado/deduplicado. Cada URL aponta para sua seção de página.
+
+`robots.txt` e sitemap(s) aparecem como recursos de domínio, não duplicados artificialmente em cada página.
+
+# Três conceitos que não devem ser confundidos
 
 ### Compatibilidade GEO
 
@@ -49,18 +65,38 @@ Responde: **quanto podemos confiar na conclusão apresentada?**
 
 Considera coverage, evidência, erros de execução e capacidade analítica disponível.
 
-## NÃO DETERMINADO
+## Zero calculado versus NÃO DETERMINADO
 
-Quando não existe base suficiente para consolidar `OVERALL_READINESS`, o relatório mostra explicitamente:
+Um score efetivamente calculado como zero é mostrado como:
+
+```text
+Score: 0.0
+Estado: CALCULADO
+```
+
+Quando não há base suficiente:
+
+```text
+Score: NÃO DETERMINADO
+Estado: NÃO CALCULADO
+```
+
+E Coverage permanece independente:
+
+```text
+Coverage: 0%
+```
+
+`None`/ausência nunca usa `0` como fallback visual. `Coverage: 0%` nunca é apresentado como `Score GEO: 0`.
+
+Quando não existe base suficiente para consolidar `OVERALL_READINESS`, o relatório também usa linguagem equivalente a:
 
 ```text
 COMPATIBILIDADE GEO
 NÃO DETERMINADA
 ```
 
-Isso significa **informação insuficiente para uma conclusão geral**. Não significa nota zero, `FAIL` ou baixa qualidade do website.
-
-O relatório nunca apresenta Coverage, por exemplo `27%`, como se fosse a nota GEO.
+Isso significa **informação insuficiente para uma conclusão geral**. Não significa `FAIL` ou baixa qualidade do website.
 
 ## Classificação visual de scores válidos
 
@@ -113,29 +149,121 @@ Cada linha mostra separadamente:
 
 `UNKNOWN`, `ERROR` e `NOT_APPLICABLE` não são convertidos em `FAIL`.
 
-# Principais oportunidades
+# Actionability: resultado técnico não é ordem de mudança
 
-A seção **Principais oportunidades de melhoria** é derivada somente de findings realmente persistidos e priorizados.
+M14 adiciona uma classificação independente do `RuleResult`:
+
+| Actionability | Texto do relatório | Interpretação |
+|---|---|---|
+| `REQUIRED_FIX` | **AÇÃO NECESSÁRIA** | problema evidence-backed cuja regra justifica correção |
+| `REVIEW_RECOMMENDED` | **REVISÃO RECOMENDADA** | exige decisão humana/contextual antes de alterar o site |
+| `OPTIONAL_IMPROVEMENT` | **MELHORIA OPCIONAL** | não bloqueante; não é defeito automático |
+| `NO_ACTION` | **NENHUMA AÇÃO NECESSÁRIA** | passou ou não se aplica |
+| `INSUFFICIENT_EVIDENCE` | **AÇÃO NO SITE NÃO DETERMINADA** | auditor não possui evidência suficiente para ordenar mudança |
+
+A regra visual simples é sempre textual:
+
+```text
+PROBLEMA → deve ser corrigido quando actionability = AÇÃO NECESSÁRIA
+ALERTA → revisar; pode ou não exigir alteração
+MELHORIA OPCIONAL → boa prática não bloqueante
+NÃO DETERMINADO → evidência insuficiente
+NÃO APLICÁVEL → nenhuma ação necessária
+APROVADO → nenhuma ação necessária
+```
+
+Actionability não altera score, severity, weight, Coverage, Confidence ou Consolidation.
+
+# Evidência por página
+
+Cada seção de página destaca a URL antes dos detalhes.
+
+Para Desktop e Mobile, quando persistido, o relatório mostra:
+
+- requested URL;
+- final URL;
+- HTTP status;
+- estado do snapshot;
+- dimensões da viewport;
+- timestamp;
+- screenshot PNG local.
+
+A captura visual é complementar. Existem três planos distintos:
+
+```text
+RAW HTTP
+→ verdade recebida do servidor
+
+Rendered DOM
+→ estado técnico após JavaScript
+
+Visual Snapshot
+→ estado visual observado pelo Chromium
+```
+
+Screenshot nunca substitui RAW ou DOM renderizado.
+
+## Screenshot e bounding box
+
+Quando um finding possui um `ElementObservation` único, selector reproduzível, elemento visível e bounding box válida, o relatório pode destacar a área correspondente no screenshot da viewport.
+
+Findings não visuais — por exemplo canonical, meta robots, HTTP headers, `robots.txt`, sitemap ou JSON-LD invisível — não precisam de recorte/destaque visual específico.
+
+Se não houver screenshot válido, o relatório mostra indisponibilidade; ele não fabrica uma imagem.
+
+# ElementObservation e selector
+
+Quando tecnicamente determinável, o finding pode apresentar:
+
+- selector CSS observado;
+- tag;
+- id/classes relevantes;
+- `outer_html` bounded/sanitizado;
+- text excerpt;
+- bounding box;
+- artifact reference;
+- snapshot/device de origem.
+
+O auditor não escolhe um elemento arbitrário só para preencher o campo.
+
+Quando a regra se aplica ao documento/conjunto de nós ou existem vários candidatos igualmente válidos:
+
+```text
+Seletor: NÃO DETERMINADO
+Motivo: finding associado ao documento/conjunto de conteúdo ou nenhum único nó DOM pôde ser atribuído com segurança.
+```
+
+Isso é preferível a precisão inventada.
+
+# Principais oportunidades e melhorias opcionais
+
+A seção de ações é derivada somente de findings persistidos e classificados.
 
 Uma dimensão apenas `UNKNOWN` não gera problema fictício.
 
-A tabela resume:
+M14 separa **Melhorias recomendadas — não bloqueantes** de defeitos. Ausência de uma capacidade opcional não é convertida automaticamente em `FAIL` nem reduz score apenas por não se aplicar.
 
-- prioridade;
-- área GEO;
-- resultado conhecido para o dispositivo aplicável;
-- problema principal.
+Exemplos potenciais dependem das regras/evidências existentes: estrutura semântica, dados estruturados realmente aplicáveis, autoria/responsabilidade quando pertinente, freshness quando pertinente, citation readiness, intent coverage, respostas explícitas e clareza de entidades.
+
+O relatório não inventa conteúdo, autor, datas, claims, fontes ou tipos Schema.org para preencher uma oportunidade.
 
 # Actionable remediation
 
-A evolução `REPORT-GEO-002` transforma o fluxo em:
+`REPORT-GEO-003` mantém o fluxo M13 e o amplia:
 
 ```text
-Evidence
+Audit
+  -> Domain resources
+  -> Page
+  -> PageSnapshot
+  -> ElementObservation (quando aplicável)
+  -> Evidence
   -> RuleExecution
   -> Finding
+  -> Actionability
   -> Priority
   -> Remediation Recipe
+  -> RuleReference
   -> Recommendation
   -> Actionable Report
 ```
@@ -185,27 +313,76 @@ Um exemplo estrutural pode ser mostrado como:
 
 O placeholder **não é uma canonical inferida pelo auditor**.
 
-Critérios típicos incluem:
-
-- no máximo uma canonical efetiva quando aplicável;
-- URL absoluta e tecnicamente válida;
-- ausência de conflito;
-- destino coerente com a URL preferencial aprovada;
-- revalidação pelas regras relacionadas.
-
 ## HTML observado versus exemplo recomendado
 
-Esses conceitos são deliberadamente separados.
+Esses conceitos permanecem deliberadamente separados.
 
-Quando a evidência do finding não persiste o trecho HTML original, o relatório mostra:
+Quando o trecho original não foi persistido:
 
 ```text
 Trecho HTML original não persistido para esta evidência.
 ```
 
-Depois, quando seguro, apresenta uma **Estrutura recomendada (exemplo)**.
+Quando há `ElementObservation`/evidência concreta, o relatório pode mostrar o HTML **efetivamente observado** escapado como código.
+
+Depois, quando seguro, apresenta uma **Estrutura recomendada — exemplo**.
 
 O relatório não reconstrói nem fabrica HTML como se tivesse sido capturado.
+
+# Fontes técnicas e heurísticas
+
+M14 relaciona regras a referências técnicas versionadas quando existe fonte primária diretamente aplicável.
+
+Prioridade:
+
+- RFC/IETF;
+- WHATWG;
+- Google Search Central / documentação oficial de crawling;
+- Schema.org quando aplicável;
+- documentação oficial OpenAI para crawlers;
+- documentação oficial da tecnologia analisada.
+
+Quando uma regra é heurística ou não possui fonte normativa externa específica, o relatório informa explicitamente, por exemplo:
+
+```text
+Base: HEURISTIC
+Fonte externa normativa: não aplicável / não identificada
+Referência interna: BR-GEO-XXX
+```
+
+Uma fonte não é inventada para “fortalecer” a recomendação.
+
+# robots.txt
+
+A seção de domínio informa, quando persistido:
+
+- URL consultada;
+- estado;
+- HTTP;
+- interpretabilidade;
+- sitemap(s) declarado(s);
+- política observada para crawlers baseline;
+- findings/actionability relacionados.
+
+`OAI-SearchBot` e `GPTBot` são exibidos separadamente.
+
+Ausência válida de `robots.txt` não é automaticamente defeito.
+
+# Sitemaps
+
+O relatório mostra:
+
+- localizado ou `Sitemap: NÃO LOCALIZADO`;
+- origem da descoberta (`ROBOTS_TXT`, caminho convencional ou sitemap index suportado);
+- URL;
+- HTTP;
+- interpretabilidade;
+- quantidade de URLs quando conhecida;
+- URLs auditadas presentes/ausentes;
+- parsing error;
+- rastreabilidade de redirects/network via evidência HTTP persistida.
+
+A baseline `BR-GEO-003` não transforma ausência de sitemap, isoladamente, em `FAIL` ou penalidade de score. Uma eventual sugestão pode ser classificada como melhoria opcional.
 
 # Recomendações semânticas e de conteúdo
 
@@ -233,9 +410,11 @@ Exemplos semânticos são estruturais e não podem inventar:
 - autor;
 - fontes;
 - condições de produto;
-- fatos não sustentados.
+- fatos não sustentados;
+- selector;
+- HTML observado.
 
-Quando uma correção depende de decisão editorial, jurídica ou de negócio, o relatório a identifica como decisão humana.
+Quando uma correção depende de decisão editorial, jurídica ou de negócio, o relatório identifica isso como revisão/decisão humana.
 
 # Uso de IA
 
@@ -253,44 +432,42 @@ A auditoria continua com regras determinísticas e heurísticas seguras. Regras 
 
 **NO_AI não reduz o score de qualidade atribuído ao website.** Pode reduzir Coverage, Confidence, Consolidation e impedir `OVERALL_READINESS`.
 
-# Cobertura do Crawl
+# Cobertura do Crawl e URL_SET
 
-A seção **Cobertura do Crawl** é reconstruída do estado persistido, sem depender do objeto M2 em memória.
+A seção de cobertura é reconstruída do estado persistido, sem depender do objeto M2 em memória.
 
-Ela apresenta, quando disponível:
+No modo clássico, pode apresentar:
 
 - URLs descobertas;
 - URLs auditadas;
 - `max_pages`;
 - se o limite foi atingido;
-- fontes de descoberta por seed, sitemap, links internos e redirects;
-- estado de `robots.txt`;
-- sitemaps declarados;
-- estado dos recursos de sitemap;
-- redirects observados;
-- diagnóstico de possível limitação de descoberta.
+- fontes de descoberta por seed, sitemap, links internos e redirects.
 
-Quando `MAX_PAGES_REACHED:discovered=N;audited=M` está persistido, os números são reutilizados diretamente.
+No modo `URL_SET`, o inventário explícito é o universo de páginas. O auditor também persiste a quantidade bruta fornecida e o número de URLs únicas após normalização/deduplicação.
 
-Quando o limite não foi atingido, todas as URLs candidatas elegíveis foram selecionadas pelo M2, portanto o número de páginas persistidas representa o universo descoberto daquela execução.
+Recursos de domínio continuam separados desse universo de páginas.
 
 # Evidence e rastreabilidade
 
-Cada correção detalhada preserva os IDs de evidência do finding. O desenvolvedor deve conseguir partir do report e rastrear:
+Cada correção detalhada preserva IDs de evidência. O desenvolvedor deve conseguir partir do report e rastrear:
 
 ```text
-Página
--> dispositivo
--> rule_id
--> finding
--> observed value
--> evidence_id
--> remediation
--> aceite
--> revalidação
+Audit
+-> domínio
+-> página
+-> dispositivo/PageSnapshot
+-> ElementObservation (quando aplicável)
+-> rule_id / RuleExecution
+-> Finding
+-> Actionability
+-> Priority
+-> Remediation Recipe
+-> RuleReference
+-> aceite / revalidação
 ```
 
-Evidence pode referenciar HTTP, headers, robots, sitemap, HTML/DOM, canonical, headings, links, Dados Estruturados, conteúdo principal, análise semântica ou comparação Desktop/Mobile.
+Evidence pode referenciar HTTP, headers, robots, sitemap, HTML/DOM, screenshot visual, canonical, headings, links, Dados Estruturados, conteúdo principal, análise semântica ou comparação Desktop/Mobile.
 
 # Priority
 
@@ -312,6 +489,22 @@ Classes:
 
 Priority não altera score de qualidade.
 
+# Layout e portabilidade
+
+O HTML deve tolerar URLs, selectors, JSON, HTML, IDs e model names longos sem expandir horizontalmente a página.
+
+O contrato M14 usa, conforme componente:
+
+- `min-width: 0`;
+- `overflow-wrap: anywhere`;
+- `word-break` quando apropriado;
+- `overflow-x: auto` para `pre/code`;
+- `clamp()` para tipografia responsiva;
+- grids que colapsam em viewport estreita;
+- `max-width: 100%` em screenshots.
+
+O ZIP/workspace deve conter todos os assets locais necessários ao report.
+
 # Limitações de segurança das sugestões
 
 O relatório não deve recomendar mudanças apenas para aumentar score. Em particular:
@@ -323,15 +516,20 @@ O relatório não deve recomendar mudanças apenas para aumentar score. Em parti
 - não inventa data de atualização;
 - não inventa fonte;
 - não inventa informação comercial;
+- não inventa selector ou HTML observado;
 - não recomenda conteúdo enganoso para sistemas de IA.
 
 # Glossário essencial
 
 - **RAW**: resposta HTTP preservada antes de rendering JavaScript.
 - **RENDERED**: DOM/HTML após execução no Chromium.
+- **Visual Snapshot**: screenshot PNG da viewport observada no Chromium; evidência complementar.
+- **ElementObservation**: nó DOM concreto persistido com selector/HTML/bounding box quando tecnicamente determinável.
+- **Actionability**: classificação independente do resultado bruto que informa se uma mudança no site é requerida, revisável, opcional, desnecessária ou indeterminada.
 - **Evidence First**: conclusão precisa apontar para observação rastreável.
 - **Readiness**: condição técnica/semântica para acesso, compreensão e reutilização; não resultado de ranking.
 - **Coverage**: proporção do universo aplicável efetivamente avaliado.
 - **Confidence**: confiança operacional do score a partir de Coverage/evidência/erros.
 - **Consolidation**: estado que determina se o score possui base suficiente para uso agregado.
 - **Remediation Recipe**: receita determinística e rastreável associada à regra para orientar correção e aceite.
+- **RuleReference**: projeção de fonte técnica oficial aplicável ou identificação explícita de regra interna/heurística.

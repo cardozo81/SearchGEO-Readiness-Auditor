@@ -1,6 +1,6 @@
 # Configuração
 
-Este documento lista somente configuração suportada pela Stable Local Baseline.
+Este documento lista somente configuração suportada pela Stable Local Baseline, incluindo M14.
 
 ## Parâmetros de auditoria
 
@@ -8,16 +8,17 @@ Os parâmetros funcionais de auditoria são atualmente expostos pela CLI, não p
 
 | Parâmetro | CLI | Default | Observação |
 |---|---|---|---|
-| target | argumento posicional | — | domínio ou URL HTTP(S) |
+| target(s) | argumentos posicionais | — | um domínio/URL mantém modo clássico; dois ou mais valores criam `URL_SET` explícito |
+| URLs file | `--urls-file` | nenhum | arquivo UTF-8 com uma URL/domínio por linha; ativa `URL_SET` explícito |
 | project | `--project` | hostname/target normalizado | nome humano persistido no Audit |
 | language | `--language` | `pt-BR` | contexto primário de conteúdo/reporting |
 | market | `--market` | `BR` | contexto de mercado |
-| max_pages | `--max-pages` | `100` | deve ser maior que zero |
+| max_pages | `--max-pages` | `100` | deve ser maior que zero e cobrir todo conjunto explícito após deduplicação |
 | audits root | `--audits-root` | `audits` | diretório pai dos workspaces |
 | AI provider | `--ai-provider` | `none` | `none` ou `openai` |
 | AI model | `--ai-model` | nenhum | com OpenAI, use preferencialmente `gpt-5.6-terra`, `gpt-5.6-sol` ou `gpt-5.6-luna` |
 
-### Target
+### Target e URL_SET
 
 A CLI valida:
 
@@ -29,21 +30,51 @@ A CLI valida:
 
 A normalização efetiva ocorre antes da criação do `AuditTarget`.
 
+Para várias URLs posicionais:
+
+```powershell
+searchgeo audit `
+  "https://example.com/" `
+  "https://example.com/produto-a" `
+  "https://example.com/produto-b" `
+  --max-pages 3
+```
+
+Para arquivo:
+
+```powershell
+searchgeo audit --urls-file .\urls.txt --max-pages 3
+```
+
+Regras operacionais M14:
+
+- entradas explícitas são normalizadas e deduplicadas;
+- todas devem pertencer ao mesmo normalized origin;
+- origin incompatível é rejeitado antes da aquisição;
+- `--urls-file` permanece `URL_SET` mesmo que reste uma única URL única;
+- um `URL_SET` cria um único `audit_id`;
+- `max_pages` não pode ser menor que o número de URLs únicas explícitas;
+- o relatório preserva separadamente quantidade bruta fornecida, universo único normalizado e quantidade efetivamente auditada.
+
+O arquivo aceita linhas em branco e comentários cujo primeiro caractere não branco seja `#`.
+
 ### Project
 
-Se `--project` for omitido, o `AuditRunner` usa o hostname do target normalizado; se isso não estiver disponível, usa o próprio target.
+Se `--project` for omitido, o `AuditRunner` usa o hostname do primeiro target normalizado; se isso não estiver disponível, usa o próprio target.
 
 ### max_pages
 
 Default: `100`.
 
-Quando o universo descoberto excede o budget, a auditoria persiste limitação no formato:
+No modo clássico de discovery, quando o universo descoberto excede o budget, a auditoria persiste limitação no formato:
 
 ```text
 MAX_PAGES_REACHED:discovered=<N>;audited=<N>
 ```
 
 Isso informa cobertura limitada; não representa automaticamente defeito do site.
+
+Em `URL_SET`, o auditor rejeita a execução se `max_pages` for menor que a quantidade de URLs únicas. Nenhuma URL explicitamente fornecida é silenciosamente descartada.
 
 ## Configuração de aplicação/logging
 
@@ -66,7 +97,7 @@ INFO
 DEBUG
 ```
 
-O TOML **não configura target, project, language, market, max_pages, provider ou model** nesta baseline.
+O TOML **não configura target(s), URLs file, project, language, market, max_pages, provider ou model** nesta baseline.
 
 ### Selecionar outro arquivo
 
@@ -155,7 +186,9 @@ O adapter real possui, internamente:
 
 Endpoint, timeout e versões são parâmetros do objeto `OpenAIProvider`, mas **não são flags da CLI da Stable Local Baseline**. Não os documente operacionalmente como configuráveis por usuário final via CLI.
 
-## Rendering
+M14 não adiciona outra chamada livre ao LLM para produzir recomendações. A actionability, receita técnica e referências são determinísticas/projetadas de estado persistido; o output semântico M7 continua sendo reutilizado.
+
+## Rendering e evidência visual
 
 O `BrowserRenderer` usa:
 
@@ -166,7 +199,15 @@ O `BrowserRenderer` usa:
 - Desktop 1440×900, DPR 1.0;
 - Mobile 412×915, DPR 2.625, `is_mobile` e touch ativados.
 
-Esses valores são implementação atual e não possuem flags CLI.
+M14 também tenta capturar, para cada snapshot renderizado:
+
+- PNG da viewport;
+- metadados do viewport e perfil;
+- observações DOM de elementos tecnicamente relevantes;
+- selector CSS somente quando reproduzível;
+- bounding box somente quando o elemento é visível e possui caixa válida.
+
+Esses valores são implementação atual e não possuem flags CLI. RAW HTTP e rendered HTML continuam persistidos separadamente; screenshot não substitui nenhum deles.
 
 ## Paths
 
@@ -184,6 +225,14 @@ searchgeo audit https://example.com --audits-root D:\SearchGEO\audits
 
 O nome `<AUD-ID>` é gerado internamente; não existe opção para escolher ID manualmente.
 
+Screenshots M14 são armazenados sob:
+
+```text
+artifacts/visual/<page_id>/<device>/<snapshot_id>.png
+```
+
+O relatório usa referência relativa ao workspace para manter a pasta/ZIP portátil e não incorpora imagens remotas.
+
 ## Configurações previstas versus expostas
 
 A specification define um modelo de configuração mais amplo para evolução do produto. Na Stable Local Baseline, somente os argumentos/variáveis descritos neste documento estão operacionalmente expostos. Não existem, por exemplo, flags para:
@@ -196,6 +245,9 @@ A specification define um modelo de configuração mais amplo para evolução do
 - endpoint OpenAI;
 - prompt customizado;
 - diretório individual de artifacts;
-- formato de relatório diferente de HTML.
+- formato de relatório diferente de HTML;
+- desabilitar screenshots isoladamente;
+- alterar bounds de `ElementObservation`;
+- forçar geração de selector quando não determinável.
 
 Esses itens são **fora da interface operacional atual**, mesmo quando houver parâmetros internos em classes de baixo nível.

@@ -1,7 +1,8 @@
-"""M12 end-to-end audit orchestration for the stable local baseline."""
+"""End-to-end audit orchestration for the stable local baseline."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,8 @@ from searchgeo.m8 import execute_m8
 from searchgeo.m9 import execute_m9
 from searchgeo.m10 import execute_m10
 from searchgeo.m11 import execute_m11
+from searchgeo.m14_linking import link_findings_to_elements
+from searchgeo.m14_persistence import M14Persistence
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
 from searchgeo.pre_scoring_rules import execute_pre_scoring_rules
 from searchgeo.semantic import NoneProvider, SemanticAnalysisProvider
@@ -46,7 +49,7 @@ class AuditRunResult:
 
 
 def run_audit(
-    target: str,
+    target: str | Sequence[str],
     *,
     audits_root: str | Path = "audits",
     project_name: str | None = None,
@@ -58,22 +61,50 @@ def run_audit(
     renderer: Any | None = None,
     lazy_probe: Any | None = None,
 ) -> AuditRunResult:
-    """Execute the approved M1–M11 pipeline and leave a reopenable local audit workspace.
+    """Execute the approved pipeline and leave a reopenable local audit workspace.
 
-    Optional engine/renderer/probe/provider injection exists for deterministic critical
-    tests. Production callers omit them and use the real local adapters.
+    ``target`` may be one URL/domain or an explicit sequence of URLs.  A
+    sequence always means URL_SET, even when normalization/deduplication leaves
+    a single unique URL.  This prevents an explicit set from silently falling
+    back to the ordinary crawl-expansion behavior of single-target mode.
     """
 
-    normalized_target = normalize_url(target)
+    explicit_url_set = not isinstance(target, str)
+    raw_targets, normalized_targets = _normalize_targets(target)
     if max_pages <= 0:
         raise ValueError("max_pages must be greater than zero")
+    if len(normalized_targets) > max_pages:
+        raise ValueError(
+            f"explicit URL set contains {len(normalized_targets)} unique URLs but --max-pages is {max_pages}; "
+            "increase --max-pages so no supplied URL is silently omitted"
+        )
+
+    origin = normalized_origin(normalized_targets[0])
+    for normalized in normalized_targets[1:]:
+        candidate_origin = normalized_origin(normalized)
+        if candidate_origin != origin:
+            raise ValueError(
+                "all URLs in one audit must belong to the same normalized origin; "
+                f"expected {origin}, got {candidate_origin}"
+            )
+
+    normalized_target = normalized_targets[0]
     project = (project_name or urlsplit(normalized_target).hostname or normalized_target).strip()
     if not project:
         raise ValueError("project_name must not be empty")
 
     audit_id = new_id("AUD")
     workspace = AuditWorkspace.create(Path(audits_root), audit_id)
-    target_type = _target_type(normalized_target)
+    target_type = TargetType.URL_SET if explicit_url_set else _target_type(normalized_target)
+    capabilities = [
+        "filesystem",
+        "sqlite",
+        "desktop_mobile",
+        "visual_snapshot",
+        "dom_element_observation",
+    ]
+    if target_type is TargetType.URL_SET:
+        capabilities.append("url_set")
     audit = Audit(
         audit_id=audit_id,
         project_name=project,
@@ -81,7 +112,7 @@ def run_audit(
         primary_language=language,
         market=market,
         max_pages=max_pages,
-        capabilities=("filesystem", "sqlite", "desktop_mobile"),
+        capabilities=tuple(capabilities),
         created_at=utc_now(),
         started_at=utc_now(),
         auditor_version=__version__,
@@ -91,13 +122,32 @@ def run_audit(
         target_id=new_id("TGT"),
         audit_id=audit_id,
         input_url=normalized_target,
-        normalized_origin=normalized_origin(normalized_target),
+        normalized_origin=origin,
         target_type=target_type,
     )
 
     with AuditPersistence(workspace) as persistence:
         persistence.audits.add(audit)
         persistence.targets.add(audit_target)
+        with M14Persistence(workspace) as m14:
+            # Persist the deduplicated input universe plus separate raw/unique
+            # counts so the report can state exactly what the operator supplied.
+            normalized_per_raw = _normalized_per_raw(raw_targets)
+            input_pairs: list[tuple[str, str]] = []
+            seen: set[str] = set()
+            for raw, normalized in zip(raw_targets, normalized_per_raw, strict=True):
+                if normalized in seen:
+                    continue
+                seen.add(normalized)
+                input_pairs.append((raw, normalized))
+            m14.replace_input_urls(audit_id, tuple(input_pairs))
+            m14.set_input_summary(
+                audit_id,
+                input_mode=target_type.value,
+                supplied_count=len(raw_targets),
+                normalized_unique_count=len(normalized_targets),
+            )
+
         try:
             m2 = execute_m2(
                 audit,
@@ -105,6 +155,7 @@ def run_audit(
                 persistence,
                 workspace,
                 engine=discovery_engine,
+                explicit_urls=(normalized_targets if target_type is TargetType.URL_SET else None),
             )
             m3 = execute_m3(m2, persistence, workspace, renderer=renderer)
             m4 = execute_m4(m3, persistence, workspace)
@@ -187,6 +238,11 @@ def run_audit(
                 persistence=persistence,
                 workspace=workspace,
             )
+            link_findings_to_elements(
+                finding_ids=all_finding_ids,
+                persistence=persistence,
+                workspace=workspace,
+            )
 
             _set_status(persistence, audit_id, AuditStatus.REPORTING)
             m11 = execute_m11(
@@ -226,6 +282,24 @@ def _set_status(persistence: AuditPersistence, audit_id: str, status: AuditStatu
     if audit is None:
         raise RuntimeError(f"audit not found while setting status: {audit_id}")
     persistence.audits.update(replace(audit, status=status))
+
+
+def _normalize_targets(target: str | Sequence[str]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    if isinstance(target, str):
+        raw = (target,)
+    else:
+        raw = tuple(target)
+    if not raw:
+        raise ValueError("at least one target URL is required")
+    if any(not isinstance(value, str) for value in raw):
+        raise ValueError("every target must be a string URL or domain")
+    normalized_per_raw = _normalized_per_raw(raw)
+    normalized = tuple(dict.fromkeys(normalized_per_raw))
+    return raw, normalized
+
+
+def _normalized_per_raw(raw: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(normalize_url(value) for value in raw)
 
 
 def _target_type(normalized_target: str) -> TargetType:

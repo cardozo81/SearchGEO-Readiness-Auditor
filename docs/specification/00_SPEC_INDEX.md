@@ -1,6 +1,6 @@
 # SearchGEO Readiness Auditor — Specification Index
 
-**Status:** APPROVED BASELINE  
+**Status:** APPROVED BASELINE + M14 EVOLUTION  
 **Baseline:** MVP Functional Specification  
 **Idioma normativo:** Português, preservando identificadores e termos técnicos quando necessário.
 
@@ -28,6 +28,7 @@ Os documentos presentes neste diretório prevalecem sobre interpretações infor
 12. `09_IMPLEMENTATION_PLAN.md`
 13. `11_REPORTING_LANGUAGE_GLOSSARY.md`
 14. `13_MODEL_ROUTING_POLICY.md`
+15. `14_MULTI_URL_VISUAL_EVIDENCE_REMEDIATION.md`
 
 ## 3. Precedência documental
 
@@ -39,7 +40,8 @@ Em caso de conflito:
 4. modelos normativos de domínio, regras, workflows, scoring e priorização;
 5. arquitetura técnica;
 6. plano de implementação;
-7. AI handoff e política operacional de modelos.
+7. AI handoff e política operacional de modelos;
+8. especificações de evolução de marco, quando não conflitarem com os itens anteriores.
 
 Nenhuma decisão funcional deve ser alterada silenciosamente durante implementação.
 
@@ -79,7 +81,7 @@ Define a arquitetura local, modular e sem serviços obrigatórios.
 
 ### `09_IMPLEMENTATION_PLAN.md`
 
-Define M0 a M12.
+Define M0 a M14.
 
 ### `10_DECISIONS.md`
 
@@ -96,6 +98,10 @@ Instrui qualquer IA que passe a trabalhar no projeto.
 ### `13_MODEL_ROUTING_POLICY.md`
 
 Define qual classe de IA/modelo deve ser usada de acordo com esforço e criticidade.
+
+### `14_MULTI_URL_VISUAL_EVIDENCE_REMEDIATION.md`
+
+Define a evolução M14: auditoria explícita multi-URL em um único `audit_id`, recursos de domínio, screenshots, `ElementObservation`, actionability, referências técnicas e a distinção obrigatória entre zero calculado e ausência de cálculo.
 
 ## 5. Regra de mudança
 

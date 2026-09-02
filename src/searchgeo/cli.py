@@ -79,7 +79,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command", required=True)
     audit_parser = subparsers.add_parser("audit", help="execute a local SearchGEO readiness audit")
-    audit_parser.add_argument("target", help="domain or HTTP(S) URL to audit")
+    audit_parser.add_argument(
+        "target",
+        nargs="*",
+        help="one or more domains/HTTP(S) URLs to audit in the same audit_id",
+    )
+    audit_parser.add_argument(
+        "--urls-file",
+        help="UTF-8 text file with one domain/HTTP(S) URL per line; blank lines and # comments are ignored",
+    )
     audit_parser.add_argument("--project", help="human-readable project name")
     audit_parser.add_argument("--language", default="pt-BR", help="primary content/reporting language context")
     audit_parser.add_argument("--market", default="BR", help="market context")
@@ -100,6 +108,24 @@ def _semantic_provider(args: argparse.Namespace):
     return OpenAIProvider(model=model)
 
 
+def _audit_targets(args: argparse.Namespace) -> tuple[str, ...]:
+    values = list(args.target)
+    if args.urls_file:
+        path = Path(args.urls_file)
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            raise ValueError(f"cannot read --urls-file {path}: {exc}") from exc
+        values.extend(
+            line.strip()
+            for line in lines
+            if line.strip() and not line.lstrip().startswith("#")
+        )
+    if not values:
+        raise ValueError("provide at least one target URL/domain or --urls-file")
+    return tuple(validate_target(value) for value in values)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -112,12 +138,21 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "audit":
         try:
-            target = validate_target(args.target)
+            targets = _audit_targets(args)
             if args.max_pages <= 0:
                 raise ValueError("--max-pages must be greater than zero")
             provider = _semantic_provider(args)
+            # A urls file is an explicit URL_SET by definition, even when it
+            # contains one URL after comments/blank lines are removed.  Direct
+            # CLI input remains backward compatible: one positional target is
+            # the classic single-target mode; multiple positionals are URL_SET.
+            audit_target: str | tuple[str, ...] = (
+                targets
+                if args.urls_file or len(targets) > 1
+                else targets[0]
+            )
             result = run_audit(
-                target,
+                audit_target,
                 audits_root=Path(args.audits_root),
                 project_name=args.project,
                 language=args.language,

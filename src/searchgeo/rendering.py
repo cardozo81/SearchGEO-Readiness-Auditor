@@ -74,6 +74,19 @@ _PROFILES = {
 
 
 @dataclass(frozen=True, slots=True)
+class RenderedElementObservation:
+    """One concrete DOM node observed in the live Chromium document."""
+
+    selector: str | None
+    tag_name: str
+    element_id: str | None
+    classes: tuple[str, ...]
+    outer_html: str | None
+    text_excerpt: str | None
+    bounding_box: dict[str, float] | None
+
+
+@dataclass(frozen=True, slots=True)
 class BrowserRenderResult:
     requested_url: str
     final_url: str | None
@@ -82,6 +95,8 @@ class BrowserRenderResult:
     rendered_html: str | None
     browser_metadata: dict[str, Any]
     error_kind: RenderErrorKind | None = None
+    screenshot_png: bytes | None = None
+    element_observations: tuple[RenderedElementObservation, ...] = ()
 
     @property
     def succeeded(self) -> bool:
@@ -169,14 +184,42 @@ class BrowserRenderer:
                 settle_outcome = "BOUNDED_TIMEOUT"
 
             rendered_html = page.content()
+            screenshot_png: bytes | None = None
+            screenshot_state = "NOT_CAPTURED"
+            try:
+                screenshot_png = page.screenshot(type="png", full_page=False)
+                screenshot_state = "CAPTURED"
+            except PlaywrightError:
+                screenshot_state = "CAPTURE_FAILED"
+
+            observations: tuple[RenderedElementObservation, ...] = ()
+            observation_state = "NOT_CAPTURED"
+            try:
+                observations = self._capture_element_observations(page)
+                observation_state = "CAPTURED"
+            except (PlaywrightError, TypeError, ValueError):
+                observation_state = "CAPTURE_FAILED"
+
             headers = response.headers if response is not None else {}
+            metadata = self._metadata(profile, settle_outcome=settle_outcome)
+            metadata["visual_snapshot"] = {
+                "state": screenshot_state,
+                "viewport_width": profile.viewport_width,
+                "viewport_height": profile.viewport_height,
+            }
+            metadata["dom_observations"] = {
+                "state": observation_state,
+                "count": len(observations),
+            }
             return BrowserRenderResult(
                 requested_url=url,
                 final_url=page.url,
                 http_status=response.status if response is not None else None,
                 content_type=headers.get("content-type"),
                 rendered_html=rendered_html,
-                browser_metadata=self._metadata(profile, settle_outcome=settle_outcome),
+                browser_metadata=metadata,
+                screenshot_png=screenshot_png,
+                element_observations=observations,
             )
         except PlaywrightTimeoutError:
             return self._failure_result(url, profile, RenderErrorKind.NAVIGATION_TIMEOUT)
@@ -195,6 +238,113 @@ class BrowserRenderer:
                     context.close()
                 except PlaywrightError:
                     pass
+
+    @staticmethod
+    def _capture_element_observations(page: Any) -> tuple[RenderedElementObservation, ...]:
+        raw = page.evaluate(
+            r"""
+            () => {
+              const selectorFor = (el) => {
+                if (!(el instanceof Element)) return null;
+                if (el.id) {
+                  const byId = `#${CSS.escape(el.id)}`;
+                  try {
+                    if (document.querySelectorAll(byId).length === 1) return byId;
+                  } catch (_) {}
+                }
+
+                const parts = [];
+                let node = el;
+                while (node && node instanceof Element) {
+                  let part = node.tagName.toLowerCase();
+                  const classes = Array.from(node.classList || [])
+                    .filter((item) => item && item.length <= 80)
+                    .slice(0, 3);
+                  if (classes.length) {
+                    part += '.' + classes.map((item) => CSS.escape(item)).join('.');
+                  }
+
+                  const parent = node.parentElement;
+                  if (parent) {
+                    const sameTag = Array.from(parent.children)
+                      .filter((item) => item.tagName === node.tagName);
+                    if (sameTag.length > 1) {
+                      part += `:nth-of-type(${sameTag.indexOf(node) + 1})`;
+                    }
+                  }
+                  parts.unshift(part);
+                  const candidate = parts.join(' > ');
+                  try {
+                    if (candidate && document.querySelectorAll(candidate).length === 1) {
+                      return candidate;
+                    }
+                  } catch (_) {}
+                  if (!parent || node === document.documentElement) break;
+                  node = parent;
+                }
+                return null;
+              };
+
+              const candidates = new Set(document.querySelectorAll(
+                'title,meta[name="robots" i],link[rel~="canonical" i],main,[role="main"],h1,h2,h3,h4,h5,h6,script[type="application/ld+json"]'
+              ));
+
+              return Array.from(candidates).slice(0, 250).map((el) => {
+                const rect = el.getBoundingClientRect();
+                const style = window.getComputedStyle(el);
+                const visible = rect.width > 0 && rect.height > 0 &&
+                  style.display !== 'none' && style.visibility !== 'hidden' &&
+                  Number(style.opacity || 1) !== 0 &&
+                  rect.bottom > 0 && rect.right > 0 &&
+                  rect.top < window.innerHeight && rect.left < window.innerWidth;
+                const html = typeof el.outerHTML === 'string' ? el.outerHTML : '';
+                const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+                return {
+                  selector: selectorFor(el),
+                  tag_name: el.tagName.toLowerCase(),
+                  element_id: el.id || null,
+                  classes: Array.from(el.classList || []).slice(0, 12),
+                  outer_html: html ? html.slice(0, 4096) : null,
+                  text_excerpt: text ? text.slice(0, 512) : null,
+                  bounding_box: visible ? {
+                    x: rect.x,
+                    y: rect.y,
+                    width: rect.width,
+                    height: rect.height
+                  } : null
+                };
+              });
+            }
+            """
+        )
+        if not isinstance(raw, list):
+            return ()
+        observations: list[RenderedElementObservation] = []
+        for item in raw:
+            if not isinstance(item, dict) or not isinstance(item.get("tag_name"), str):
+                continue
+            box_value = item.get("bounding_box")
+            box: dict[str, float] | None = None
+            if isinstance(box_value, dict):
+                try:
+                    box = {
+                        key: float(box_value[key])
+                        for key in ("x", "y", "width", "height")
+                    }
+                except (KeyError, TypeError, ValueError):
+                    box = None
+            observations.append(
+                RenderedElementObservation(
+                    selector=item.get("selector") if isinstance(item.get("selector"), str) else None,
+                    tag_name=item["tag_name"],
+                    element_id=item.get("element_id") if isinstance(item.get("element_id"), str) else None,
+                    classes=tuple(str(value) for value in item.get("classes", ()) if isinstance(value, str)),
+                    outer_html=item.get("outer_html") if isinstance(item.get("outer_html"), str) else None,
+                    text_excerpt=item.get("text_excerpt") if isinstance(item.get("text_excerpt"), str) else None,
+                    bounding_box=box,
+                )
+            )
+        return tuple(observations)
 
     def _metadata(self, profile: BrowserProfile, *, settle_outcome: str, error_kind: RenderErrorKind | None = None) -> dict[str, Any]:
         return {

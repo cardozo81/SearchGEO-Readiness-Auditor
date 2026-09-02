@@ -20,6 +20,7 @@ from searchgeo.domain import (
     new_id,
     utc_now,
 )
+from searchgeo.m14_discovery import discover_url_set
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
 from searchgeo.url_utils import normalize_url, normalized_origin
 
@@ -44,8 +45,14 @@ def execute_m2(
     workspace: AuditWorkspace,
     *,
     engine: DiscoveryEngine | None = None,
+    explicit_urls: tuple[str, ...] | None = None,
 ) -> M2ExecutionResult:
-    """Execute and persist only the M2 discovery/HTTP milestone for one audit."""
+    """Execute and persist M2 discovery/HTTP for one domain audit.
+
+    When ``explicit_urls`` is supplied, the page universe is exactly that
+    normalized URL set.  robots.txt and sitemap resources remain domain-scoped
+    and are acquired once for the audit.
+    """
 
     if target.audit_id != audit.audit_id:
         raise ValueError("audit target must belong to the audit")
@@ -70,7 +77,19 @@ def execute_m2(
     discovering = replace(current, status=AuditStatus.DISCOVERING)
     persistence.audits.update(discovering)
 
-    discovery = (engine or DiscoveryEngine()).discover(seed, max_pages=audit.max_pages)
+    active_engine = engine or DiscoveryEngine()
+    if explicit_urls is None:
+        discovery = active_engine.discover(seed, max_pages=audit.max_pages)
+    else:
+        custom_url_set = getattr(active_engine, "discover_url_set", None)
+        if callable(custom_url_set):
+            discovery = custom_url_set(explicit_urls, max_pages=audit.max_pages)
+        elif isinstance(active_engine, DiscoveryEngine):
+            discovery = discover_url_set(active_engine, explicit_urls, max_pages=audit.max_pages)
+        else:
+            raise ValueError(
+                "a custom discovery engine used with URL_SET must implement discover_url_set(urls, max_pages=...)"
+            )
 
     page_ids: dict[str, str] = {}
     pages: dict[str, Page] = {}
@@ -186,8 +205,22 @@ def execute_m2(
     persistence.evidence.add(robots_evidence)
     evidence_ids.append(robots_evidence.evidence_id)
 
+    conventional_sitemap = normalize_url("/sitemap.xml", base_url=f"{discovery.origin}/")
+    declared_sitemaps = set(discovery.robots.sitemap_urls)
     for sitemap in discovery.sitemaps:
-        evidence = _persist_sitemap_evidence(audit, persistence, workspace, sitemap)
+        if sitemap.url in declared_sitemaps:
+            discovery_origin = "ROBOTS_TXT"
+        elif sitemap.url == conventional_sitemap:
+            discovery_origin = "CONVENTIONAL_PATH"
+        else:
+            discovery_origin = "SITEMAP_INDEX"
+        evidence = _persist_sitemap_evidence(
+            audit,
+            persistence,
+            workspace,
+            sitemap,
+            discovery_origin=discovery_origin,
+        )
         evidence_ids.append(evidence.evidence_id)
 
     rule_execution_ids: list[str] = []
@@ -314,6 +347,8 @@ def _persist_sitemap_evidence(
     persistence: AuditPersistence,
     workspace: AuditWorkspace,
     sitemap: SitemapResult,
+    *,
+    discovery_origin: str,
 ) -> Evidence:
     digest = sha256(sitemap.url.encode("utf-8")).hexdigest()[:16]
     artifact_reference = _write_body_artifact(workspace, f"sitemap-{digest}", sitemap.acquisition.body)
@@ -327,7 +362,9 @@ def _persist_sitemap_evidence(
         source=sitemap.url,
         observed_value={
             "state": sitemap.state.value,
+            "discovery_origin": discovery_origin,
             "http": _http_observed_value(sitemap.acquisition),
+            "url_count": len(sitemap.page_urls),
             "page_urls": list(sitemap.page_urls),
             "child_sitemaps": list(sitemap.child_sitemaps),
             "error": sitemap.error,
