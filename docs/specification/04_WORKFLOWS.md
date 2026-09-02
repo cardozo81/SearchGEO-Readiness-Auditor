@@ -1,6 +1,6 @@
 # WORKFLOWS.md
 
-**Status:** APPROVED
+**Status:** APPROVED — extended by M13 Actionable GEO Report
 
 ## 1. Princípios
 
@@ -9,6 +9,7 @@
 - Desktop/Mobile isolation.
 - AI optionality.
 - Reliability disclosure.
+- Actionable remediation must remain evidence-bound.
 
 ## 2. Catálogo
 
@@ -21,8 +22,8 @@
 - WF-GEO-007 Execute Semantic Analysis
 - WF-GEO-008 Compare Desktop and Mobile
 - WF-GEO-009 Consolidate Findings and Scores
-- WF-GEO-010 Generate Recommendations
-- WF-GEO-011 Generate Static HTML Report
+- WF-GEO-010 Generate Recommendations and Remediation
+- WF-GEO-011 Generate Static Actionable HTML Report
 - WF-GEO-012 Complete Audit
 
 ## 3. WF-GEO-001
@@ -40,7 +41,8 @@ Initialize
 → Compare
 → Findings
 → Scores
-→ Recommendations
+→ Priority
+→ Remediation
 → HTML
 → Complete
 
@@ -62,7 +64,8 @@ Fontes:
 - seed;
 - robots/sitemap;
 - sitemap;
-- internal links.
+- internal links;
+- redirects elegíveis.
 
 Depois:
 
@@ -72,6 +75,8 @@ Depois:
 - apply max_pages.
 
 Se descobertas > max_pages, registrar total descoberto e total auditado.
+
+O estado necessário para explicar discovery no relatório deve ser persistido como Page, Evidence e Audit limitation; WF-GEO-011 não depende do objeto M2 em memória.
 
 ## 6. WF-GEO-004 Acquire Page Snapshot
 
@@ -129,9 +134,10 @@ Distinguir falha do site de falha do extrator.
 Evidence
 → Input Builder
 → Semantic Provider
-→ Schema validation
+→ Strict schema validation
 → Evidence validation
 → SemanticAssessment
+→ normalized RuleExecution/Finding
 
 ### NO_AI
 
@@ -147,6 +153,8 @@ Provider falhou
 → UNKNOWN quando necessário
 
 Business Rules nunca dependem diretamente de provider específico.
+
+O relatório reutiliza SemanticAssessment, reasoning_summary, entities, intents e evidence_ids já persistidos. Não existe segunda chamada livre de IA apenas para redigir recomendações.
 
 ## 10. WF-GEO-008 Desktop × Mobile
 
@@ -172,42 +180,97 @@ Finding somente para diferença material.
 - resolver consolidation;
 - validar BR-GEO-054.
 
-## 12. WF-GEO-010 Recommendations
+M13 não altera `SCORE-GEO-001`.
 
-Finding
+## 12. WF-GEO-010 Recommendations and Remediation
+
+Fluxo aprovado:
+
+```text
+Finding evidence-backed
 → Root Cause
-→ Recommendation
-→ Severity
-→ Impact
-→ Effort
-→ Confidence
+→ Remediation Group
+→ Severity / Impact / Effort / Confidence
 → Priority
+→ Remediation Recipe por rule_id
+→ Recommendation persistida
+```
 
-Sem IA, templates técnicos continuam funcionando.
+A `RemediationRecipe` deve tentar responder, quando aplicável:
 
-## 13. WF-GEO-011 HTML Report
+- alvo técnico;
+- elemento/localização;
+- ação;
+- descrição;
+- exemplo seguro;
+- critérios de aceite;
+- revalidação;
+- decisão humana necessária.
+
+Invariantes:
+
+- recipe não altera score ou priority;
+- recipe não cria evidence;
+- example não é HTML observado;
+- ausência de recipe específica usa fallback explícito;
+- canonical, noindex, structured data, autoria, freshness e fontes não podem ser inventados ou alterados sem base suficiente.
+
+Sem IA, recipes técnicas continuam funcionando.
+
+## 13. WF-GEO-011 Actionable HTML Report
 
 Saída:
 
 `report.html`
 
-Sem backend, servidor ou internet obrigatória.
+Sem backend, servidor, CDN ou internet obrigatória.
 
-Seções mínimas:
+Ordem executiva de referência:
 
-- identificação;
-- resumo executivo;
-- como interpretar;
-- confiabilidade da auditoria;
-- scorecard;
-- Desktop × Mobile;
-- blockers;
-- findings;
-- evidence;
-- recomendações;
-- limitações;
-- detalhes técnicos;
-- glossário.
+1. Compatibilidade GEO geral por dispositivo;
+2. Cobertura e confiabilidade;
+3. Principais oportunidades;
+4. Score GEO — Desktop;
+5. Score GEO — Mobile;
+6. Plano de correção priorizado;
+7. Correções técnicas detalhadas;
+8. Análise de conteúdo e semântica;
+9. Entidades e intenções;
+10. Citation Readiness / Evidence Trust;
+11. Cobertura do Crawl;
+12. Limitações;
+13. Detalhes técnicos;
+14. Metodologia/interpretação;
+15. Glossário.
+
+### Regra de compatibilidade
+
+`OVERALL_READINESS` somente é exibido como nota quando o score persistido está consolidado.
+
+Quando não for consolidável:
+
+```text
+COMPATIBILIDADE GEO: NÃO DETERMINADA
+```
+
+Coverage não pode substituir a nota.
+
+### Regra de HTML observado
+
+O report deve separar:
+
+- HTML efetivamente persistido como evidência;
+- exemplo de correção recomendado.
+
+Se o trecho original não estiver persistido na Evidence:
+
+```text
+Trecho HTML original não persistido para esta evidência.
+```
+
+### Crawl
+
+WF-GEO-011 reabre Pages, Audit limitations e Evidence de robots/sitemap/HTTP para explicar descoberta, max_pages, fontes e limitações de crawl. Não recebe `DiscoveryResult` em memória.
 
 ## 14. WF-GEO-012 Complete Audit
 
