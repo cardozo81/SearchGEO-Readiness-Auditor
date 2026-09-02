@@ -7,7 +7,7 @@ import re
 import sqlite3
 
 from searchgeo.m14_persistence import M14Persistence
-from searchgeo.m14_reporting import TEMPLATE_VERSION, new_m14_report_record
+from searchgeo.m14_reporting import TEMPLATE_VERSION, _metric, new_m14_report_record
 from searchgeo.m15_reporting import M15ReportBuilder, M15RemediationReportBuilder, write_remediation_report
 from searchgeo.m15_style_overrides import SCORE_LAYOUT_CSS
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
@@ -18,6 +18,17 @@ from searchgeo.reporting import ReportPersistence, write_report
 # and adds REMEDIATION-GEO-001 as a second derived projection without changing
 # SCORE-GEO-001 or persisted finding semantics.
 reporting_module.TEMPLATE_VERSION = TEMPLATE_VERSION
+
+
+def _ai_usage_status(semantic: list[sqlite3.Row]) -> str:
+    """Return the human state of external semantic AI for this audit report."""
+
+    providers = {str(row["provider"]).upper() for row in semantic if row["provider"]}
+    if "OPENAI" in providers:
+        return "SIM"
+    if "UNAVAILABLE" in providers:
+        return "TENTATIVA SEM SUCESSO"
+    return "NÃO"
 
 
 class _PersistedInputAwareReportBuilder(M15ReportBuilder):
@@ -64,13 +75,25 @@ class _PersistedInputAwareReportBuilder(M15ReportBuilder):
         if summary is not None:
             supplied_count = summary.supplied_count
             target_type = summary.input_mode
-        return super()._executive(
+
+        html = super()._executive(
             audit=audit,
             domain=domain,
             target_type=target_type,
             supplied_count=supplied_count,
             audited_count=audited_count,
             semantic=semantic,
+        )
+
+        # M14's original projection treated DETERMINISTIC/UNAVAILABLE as if an
+        # external AI response had been used. Replace only that metric while
+        # preserving the rest of the stable renderer.
+        providers = sorted({str(row["provider"]) for row in semantic if row["provider"]})
+        legacy_ai_used = any(provider.casefold() not in {"none", "fallback", ""} for provider in providers)
+        return html.replace(
+            _metric("Uso de IA", "SIM" if legacy_ai_used else "NÃO"),
+            _metric("Uso de IA", _ai_usage_status(semantic)),
+            1,
         )
 
 
