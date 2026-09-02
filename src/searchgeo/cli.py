@@ -143,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("--max-pages must be greater than zero")
             provider = _semantic_provider(args)
             # A urls file is an explicit URL_SET by definition, even when it
-            # contains one URL after comments/blank lines are removed.  Direct
+            # contains one URL after comments/blank lines are removed. Direct
             # CLI input remains backward compatible: one positional target is
             # the classic single-target mode; multiple positionals are URL_SET.
             audit_target: str | tuple[str, ...] = (
@@ -170,6 +170,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Problemas identificados: {result.finding_count}")
         print(f"Recomendações: {result.recommendation_count}")
         print(f"Relatório: {result.report_path}")
+        remediation_path = result.audit_root / "remediation.html"
+        if remediation_path.is_file():
+            print(f"Relatório por problemas: {remediation_path}")
         return 0
 
     parser.error(f"unsupported command: {args.command}")

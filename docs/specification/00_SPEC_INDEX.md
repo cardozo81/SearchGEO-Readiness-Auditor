@@ -1,6 +1,6 @@
 # SearchGEO Readiness Auditor — Specification Index
 
-**Status:** APPROVED BASELINE + M14 EVOLUTION  
+**Status:** APPROVED BASELINE + M14/M15 EVOLUTIONS  
 **Baseline:** MVP Functional Specification  
 **Idioma normativo:** Português, preservando identificadores e termos técnicos quando necessário.
 
@@ -29,6 +29,7 @@ Os documentos presentes neste diretório prevalecem sobre interpretações infor
 13. `11_REPORTING_LANGUAGE_GLOSSARY.md`
 14. `13_MODEL_ROUTING_POLICY.md`
 15. `14_MULTI_URL_VISUAL_EVIDENCE_REMEDIATION.md`
+16. `15_ERROR_CENTRIC_REPORT_UX.md`
 
 ## 3. Precedência documental
 
@@ -81,7 +82,7 @@ Define a arquitetura local, modular e sem serviços obrigatórios.
 
 ### `09_IMPLEMENTATION_PLAN.md`
 
-Define M0 a M14.
+Define a baseline de marcos e suas evoluções formalizadas.
 
 ### `10_DECISIONS.md`
 
@@ -102,6 +103,10 @@ Define qual classe de IA/modelo deve ser usada de acordo com esforço e criticid
 ### `14_MULTI_URL_VISUAL_EVIDENCE_REMEDIATION.md`
 
 Define a evolução M14: auditoria explícita multi-URL em um único `audit_id`, recursos de domínio, screenshots, `ElementObservation`, actionability, referências técnicas e a distinção obrigatória entre zero calculado e ausência de cálculo.
+
+### `15_ERROR_CENTRIC_REPORT_UX.md`
+
+Define a evolução M15: segundo HTML orientado a problema (`remediation.html`), separação global versus página, navegação lateral por path, refinamento tipográfico, guia das dez dimensões do Score GEO e interpretação consolidada ao fim do relatório.
 
 ## 5. Regra de mudança
 
