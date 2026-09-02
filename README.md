@@ -8,6 +8,40 @@ Auditor local de **Search/GEO Readiness** para avaliar, com rastreabilidade téc
 
 > Readiness não é promessa de ranking, tráfego, citação, presença ou visibilidade em mecanismos generativos.
 
+## Compatibilidade — leia antes de instalar
+
+| Item | Estado |
+|---|---|
+| Windows + PowerShell | target operacional de handoff |
+| CPython 3.13.x | obrigatório; `>=3.13,<3.14` |
+| Python 3.12 ou 3.14+ | incompatível pelo contrato atual do package |
+| Playwright `>=1.57,<2` | obrigatório |
+| Chromium | obrigatório para rendering real Desktop/Mobile |
+| Ubuntu `ubuntu-latest` | suíte M12 validada em CI; não é target formal de distribuição |
+| macOS | não homologado |
+| SQLite | embarcado/local; nenhum database server necessário |
+| OpenAI | opcional; a auditoria funciona sem IA |
+| Docker / web server | não requeridos e não fornecidos nesta baseline |
+
+O contrato completo, incluindo rede, filesystem, Chromium e estado de homologação, está em [Compatibilidade e Dependências](docs/COMPATIBILITY.md).
+
+## Dependências
+
+Obrigatórias:
+
+- CPython 3.13;
+- `pip`;
+- package do projeto, que declara `playwright>=1.57,<2`;
+- Chromium funcional para rendering real;
+- filesystem local gravável;
+- acesso HTTP/HTTPS ao target.
+
+Opcional:
+
+- OpenAI para análise semântica via `OpenAIProvider`.
+
+Não são obrigatórios: Docker, database server, web server, SDK Python `openai`, Git ou GitHub em runtime.
+
 ## Capacidades principais
 
 - Discovery por seed, `robots.txt`, sitemap e links internos, limitado por `max_pages`.
@@ -39,17 +73,6 @@ CLI
 ```
 
 Os dados primários ficam em `audit.db` e nos artifacts. `report.html` é uma projeção desses dados, não a fonte primária.
-
-## Requisitos
-
-- Windows como ambiente operacional de handoff atual.
-- CPython `>=3.13,<3.14`.
-- `pip`.
-- Playwright `>=1.57,<2` — instalado pelo package.
-- Chromium para Playwright: `python -m playwright install chromium`.
-- Acesso de escrita ao diretório de auditorias.
-
-Não são obrigatórios: Docker, database server, web server ou serviço de IA.
 
 ## Quick start — PowerShell
 
@@ -92,11 +115,17 @@ searchgeo audit https://example.com `
   --audits-root .\audits
 ```
 
-## IA opcional
+## Como configurar IA
 
-Sem IA, a auditoria continua e registra modo `NO_AI`; avaliações semantic-only sem dados suficientes ficam `UNKNOWN`, sem transformar ausência de IA em falha do website.
+IA é opcional. Sem IA:
 
-Para OpenAI:
+```powershell
+searchgeo audit https://example.com --ai-provider none
+```
+
+Esse é o default. A auditoria continua em `NO_AI`; avaliações semantic-only sem dados suficientes ficam `UNKNOWN`, sem transformar ausência de IA em falha do website.
+
+Para usar OpenAI:
 
 ```powershell
 $env:OPENAI_API_KEY = "<sua-chave>"
@@ -104,10 +133,26 @@ $env:SEARCHGEO_OPENAI_MODEL = "<modelo-configurado>"
 searchgeo audit https://example.com --ai-provider openai
 ```
 
-Não grave API keys no repositório, TOML ou artifacts. Veja [AI Guide](docs/AI_GUIDE.md).
+Alternativamente, forneça o model na CLI:
+
+```powershell
+$env:OPENAI_API_KEY = "<sua-chave>"
+searchgeo audit https://example.com --ai-provider openai --ai-model "<modelo-configurado>"
+```
+
+Requisitos para IA efetiva:
+
+1. `--ai-provider openai`;
+2. `OPENAI_API_KEY` definida no ambiente;
+3. model definido por `--ai-model` ou `SEARCHGEO_OPENAI_MODEL`;
+4. egress HTTPS disponível para o provider;
+5. política de dados permitindo transmitir conteúdo/evidence do site auditado ao serviço externo.
+
+Não grave API keys no repositório, TOML, artifacts ou scripts versionados. O projeto não fixa um nome de modelo; a compatibilidade do modelo configurado deve ser validada no momento da homologação. Consulte [AI Guide](docs/AI_GUIDE.md) e [Compatibilidade](docs/COMPATIBILITY.md).
 
 ## Documentação
 
+- [Compatibilidade e dependências](docs/COMPATIBILITY.md)
 - [Instalação](docs/INSTALLATION.md)
 - [Guia do usuário](docs/USER_GUIDE.md)
 - [Configuração](docs/CONFIGURATION.md)
@@ -131,3 +176,4 @@ A documentação acima explica uso e engenharia da Stable Local Baseline. A font
 - Logging é configurado no processo; a baseline atual não materializa um `audit.log` por auditoria.
 - A configuração TOML atual expõe somente `log_level`; parâmetros de auditoria são passados pela CLI.
 - IA é opcional e depende de serviço externo somente quando `OpenAIProvider` é selecionado.
+- Compatibilidade operacional final em Windows ainda depende da execução humana de `docs/SMOKE_TEST.md`.
