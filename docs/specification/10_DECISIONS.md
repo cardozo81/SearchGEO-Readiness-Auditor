@@ -117,6 +117,8 @@ Problemas técnicos ordinários e solucionáveis não constituem motivo para sol
 Nenhum marco pode ser considerado concluído apenas para permitir avanço. Todos os respectivos critérios e gates obrigatórios permanecem válidos.
 
 ### D-035
+Status: **SUPERSEDED parcialmente por D-036 quanto ao momento da exclusão física e ao caráter bloqueante da limpeza de branch durante a cascata.**
+
 Toda branch criada especificamente para implementação de um marco ou alteração de governança é temporária.
 
 Após o merge em `main`, é obrigatório:
@@ -135,9 +137,25 @@ Sincronizar a branch com `main` após o merge não substitui sua exclusão.
 
 Se a ferramenta utilizada não permitir excluir a branch remota, deve-se registrar explicitamente a limitação e informar a ação manual necessária. Enquanto a branch permanecer existente, a limpeza Git fica pendente e o ciclo Git não pode ser apresentado como completamente encerrado.
 
-A pendência de limpeza não invalida o código já integrado em `main`. Porém, quando a conclusão integral do marco ou da alteração de governança for gate para avanço em cascata, a execução deve interromper até que a exclusão obrigatória seja realizada e confirmada.
+A pendência de limpeza não invalida o código já integrado em `main`. Porém, quando a conclusão integral do marco ou da alteração de governança for gate para avanço em cascata, aplica-se D-036.
 
 Nenhuma branch de marco encerrado deve permanecer no repositório, salvo exceção futura explicitamente justificada e documentada.
+
+### D-036
+Para a execução automática sequencial M4 → M12, a exclusão física das branches remotas encerradas fica diferida para uma rotina manual única ao final da cascata.
+
+A exclusão de branch deixa de ser blocker entre marcos, desde que, após cada merge:
+
+1. `main` contenha integralmente o conteúdo aprovado;
+2. a branch seja comparada com `main`;
+3. fique comprovado que a branch não possui commits, arquivos ou alterações exclusivas pendentes;
+4. a branch seja registrada em uma lista acumulada de exclusão manual.
+
+Branches registradas nessa lista não podem ser reutilizadas para novos marcos nem receber novos commits após o encerramento correspondente.
+
+Ao final da cascata, deve ser apresentada ao humano a lista completa das branches remotas que podem e devem ser excluídas manualmente. A limpeza física continua obrigatória como housekeeping do repositório, mas sua execução diferida não bloqueia o avanço M4 → M12 nem invalida o encerramento funcional de cada marco.
+
+A mesma regra de limpeza diferida aplica-se às branches de governança criadas especificamente para viabilizar esta cascata.
 
 ## PENDING ENVIRONMENT VALIDATION
 
