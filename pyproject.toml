@@ -7,7 +7,9 @@ name = "searchgeo-readiness-auditor"
 version = "0.1.0"
 description = "Local Search/GEO readiness auditor."
 requires-python = ">=3.13,<3.14"
-dependencies = []
+dependencies = [
+    "playwright>=1.57,<2",
+]
 
 [project.scripts]
 searchgeo = "searchgeo.cli:main"

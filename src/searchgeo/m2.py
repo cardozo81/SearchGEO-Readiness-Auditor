@@ -32,6 +32,7 @@ _REDIRECT_FAILURES = {"REDIRECT_LOOP", "TOO_MANY_REDIRECTS", "INVALID_REDIRECT"}
 class M2ExecutionResult:
     discovery: DiscoveryResult
     page_ids: dict[str, str]
+    raw_artifact_refs: dict[str, str | None]
     evidence_ids: tuple[str, ...]
     rule_execution_ids: tuple[str, ...]
 
@@ -118,6 +119,7 @@ def execute_m2(
         provenance_evidence[record.target_url].append(evidence.evidence_id)
 
     http_evidence: dict[str, list[str]] = {}
+    raw_artifact_refs: dict[str, str | None] = {}
     for url, acquisition in discovery.page_acquisitions.items():
         page_id = page_ids[url]
         artifact_reference = _write_body_artifact(
@@ -125,6 +127,7 @@ def execute_m2(
             f"page-{page_id}",
             acquisition.body,
         )
+        raw_artifact_refs[url] = artifact_reference
         response_evidence = Evidence(
             evidence_id=new_id("EV-GEO"),
             audit_id=audit.audit_id,
@@ -300,6 +303,7 @@ def execute_m2(
     return M2ExecutionResult(
         discovery=discovery,
         page_ids=page_ids,
+        raw_artifact_refs=raw_artifact_refs,
         evidence_ids=tuple(evidence_ids),
         rule_execution_ids=tuple(rule_execution_ids),
     )
