@@ -199,11 +199,19 @@ A adoção antecipada de Git/GitHub é uma decisão de processo de desenvolvimen
 
 ## Regra operacional
 
-Cada marco deve ser:
+Cada marco deve ser tratado como unidade independente e somente pode ser considerado concluído após:
 
-1. implementado;
-2. validado;
-3. comparado com critérios;
-4. encerrado.
+1. implementação integral do escopo permitido;
+2. validação e testes obrigatórios;
+3. comparação com seus critérios e gates;
+4. revisão de escopo, regressões, rastreabilidade, dependências e segredos;
+5. integração integral em `main` por PR validado;
+6. confirmação pós-merge de que `main` contém o resultado aprovado;
+7. confirmação de que a branch não possui conteúdo exclusivo e execução da limpeza Git obrigatória definida em D-035;
+8. encerramento sem pendências bloqueantes.
 
-Não avançar automaticamente ao marco seguinte.
+Quando todos esses gates forem satisfeitos, o avanço automático ao marco seguinte é autorizado conforme D-034, sem necessidade de nova aprovação humana.
+
+A cascata deve interromper diante dos blockers reais definidos em D-034 ou em outra decisão normativa aplicável. Problemas técnicos ordinários e solucionáveis devem ser diagnosticados, corrigidos, revalidados e não constituem, por si só, motivo para solicitar aprovação humana.
+
+Nenhum marco pode ser declarado concluído apenas para permitir avanço, e nenhum escopo do marco seguinte deve ser antecipado materialmente antes do encerramento do marco atual, salvo infraestrutura estritamente necessária e já permitida pela especificação.

@@ -151,7 +151,10 @@ Para mudanças críticas:
 2. implementar;
 3. executar testes mínimos;
 4. revisar contra requisitos;
-5. não avançar marco automaticamente.
+5. quando a mudança fizer parte de um marco, cumprir todos os gates de branch, PR, merge, confirmação pós-merge e limpeza Git definidos na baseline;
+6. avançar ao marco seguinte automaticamente somente quando autorizado por D-034 e após o encerramento integral exigido por D-035.
+
+Blockers reais interrompem a cascata; problemas técnicos ordinários e solucionáveis devem ser corrigidos e revalidados sem solicitar nova aprovação humana.
 
 ## 7. Nota sobre esta política
 

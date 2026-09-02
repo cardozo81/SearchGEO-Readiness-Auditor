@@ -103,7 +103,41 @@ Quando um escopo ou marco implementado em branch estiver encerrado, validado e a
 
 Após o merge, deve-se confirmar que `main` contém integralmente o resultado aprovado e que a branch de trabalho não possui conteúdo exclusivo pendente.
 
-Branches de marco já integradas e sem necessidade futura identificada devem ser removidas. Quando a ferramenta utilizada não permitir a remoção, a branch deve permanecer sincronizada com `main` e a pendência de limpeza deve ser informada explicitamente.
+A regra anterior de contingência que permitia manter branch sincronizada com `main` quando a ferramenta não pudesse removê-la foi **SUPERSEDED por D-035**.
+
+### D-034
+Após um marco ser implementado, validado, comparado com seus critérios, integrado integralmente em `main` e encerrado sem pendências bloqueantes, fica autorizado o avanço automático ao marco seguinte previsto em `09_IMPLEMENTATION_PLAN.md`, sem necessidade de nova aprovação humana.
+
+Cada marco continua sendo unidade independente de implementação, validação, branch, PR, merge e encerramento.
+
+O avanço automático deve interromper somente diante de conflito normativo não solucionável pela precedência documental, impossibilidade técnica relevante, alteração material de escopo ou comportamento funcional, falha persistente de validação obrigatória, necessidade de credencial/segredo indisponível, ação externa indispensável que a ferramenta não possa executar, impacto de política corporativa ou outra decisão/ação que dependa necessariamente de humano.
+
+Problemas técnicos ordinários e solucionáveis não constituem motivo para solicitar aprovação humana. A execução deve diagnosticar, corrigir, revalidar e continuar automaticamente quando possível.
+
+Nenhum marco pode ser considerado concluído apenas para permitir avanço. Todos os respectivos critérios e gates obrigatórios permanecem válidos.
+
+### D-035
+Toda branch criada especificamente para implementação de um marco ou alteração de governança é temporária.
+
+Após o merge em `main`, é obrigatório:
+
+1. confirmar que o merge foi concluído;
+2. confirmar que `main` contém integralmente todo o conteúdo aprovado;
+3. comparar a branch com `main`;
+4. confirmar que a branch não contém commits, arquivos ou alterações exclusivas pendentes;
+5. excluir a branch remota do GitHub;
+6. quando aplicável, excluir também a branch local;
+7. somente então considerar concluída a limpeza Git do marco ou alteração de governança.
+
+Uma branch já integrada em `main` não deve permanecer existente apenas por estar sincronizada. O estado `identical / 0 ahead / 0 behind` comprova que a exclusão é segura, mas não constitui estado final aceitável.
+
+Sincronizar a branch com `main` após o merge não substitui sua exclusão.
+
+Se a ferramenta utilizada não permitir excluir a branch remota, deve-se registrar explicitamente a limitação e informar a ação manual necessária. Enquanto a branch permanecer existente, a limpeza Git fica pendente e o ciclo Git não pode ser apresentado como completamente encerrado.
+
+A pendência de limpeza não invalida o código já integrado em `main`. Porém, quando a conclusão integral do marco ou da alteração de governança for gate para avanço em cascata, a execução deve interromper até que a exclusão obrigatória seja realizada e confirmada.
+
+Nenhuma branch de marco encerrado deve permanecer no repositório, salvo exceção futura explicitamente justificada e documentada.
 
 ## PENDING ENVIRONMENT VALIDATION
 
