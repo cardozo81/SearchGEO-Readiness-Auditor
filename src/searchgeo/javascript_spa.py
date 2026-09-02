@@ -161,7 +161,21 @@ def _is_error_label(value: str) -> bool:
         "conteúdo não encontrado",
         "conteudo nao encontrado",
     }
-    return normalized in exact or normalized.startswith("404 ")
+    if normalized in exact:
+        return True
+    if normalized.startswith("404 "):
+        tail = normalized[4:].strip()
+        return tail in {
+            "not found",
+            "page not found",
+            "página não encontrada",
+            "pagina nao encontrada",
+            "conteúdo não encontrado",
+            "conteudo nao encontrado",
+            "error",
+            "erro",
+        }
+    return False
 
 
 class _NavigationParser(HTMLParser):
