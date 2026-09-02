@@ -94,22 +94,37 @@ def _require_evidence_scope(
     connection: sqlite3.Connection,
     audit_id: str,
     evidence_ids: tuple[str, ...],
+    page_id: str | None = None,
+    snapshot_id: str | None = None,
+    device: DeviceContext | None = None,
 ) -> None:
     for evidence_id in evidence_ids:
         row = connection.execute(
-            "SELECT audit_id FROM evidence WHERE evidence_id = ?",
+            "SELECT audit_id, page_id, snapshot_id, device FROM evidence WHERE evidence_id = ?",
             (evidence_id,),
         ).fetchone()
         if row is None or row["audit_id"] != audit_id:
             raise sqlite3.IntegrityError(
                 f"evidence {evidence_id} does not belong to audit {audit_id}"
             )
+        if page_id is not None and row["page_id"] != page_id:
+            raise sqlite3.IntegrityError(
+                f"evidence {evidence_id} does not belong to page {page_id}"
+            )
+        if snapshot_id is not None and row["snapshot_id"] != snapshot_id:
+            raise sqlite3.IntegrityError(
+                f"evidence {evidence_id} does not belong to snapshot {snapshot_id}"
+            )
+        if device is not None and row["device"] != device.value:
+            raise sqlite3.IntegrityError(
+                f"evidence {evidence_id} device {row['device']} does not match {device.value}"
+            )
 
 
 def _require_rule_execution_scope(connection: sqlite3.Connection, finding: Finding) -> None:
     row = connection.execute(
         """
-        SELECT audit_id, rule_id, page_id, evidence_ids
+        SELECT audit_id, rule_id, page_id, device, evidence_ids
         FROM rule_executions
         WHERE rule_execution_id = ?
         """,
@@ -123,6 +138,10 @@ def _require_rule_execution_scope(connection: sqlite3.Connection, finding: Findi
     ):
         raise sqlite3.IntegrityError(
             f"rule execution {finding.rule_execution_id} is inconsistent with finding {finding.finding_id}"
+        )
+    if finding.device in {FindingDevice.DESKTOP, FindingDevice.MOBILE} and row["device"] != finding.device.value:
+        raise sqlite3.IntegrityError(
+            f"rule execution {finding.rule_execution_id} device {row['device']} does not match finding {finding.device.value}"
         )
     execution_evidence_ids = set(_json_load(row["evidence_ids"]))
     if not set(finding.evidence_ids).issubset(execution_evidence_ids):
@@ -447,7 +466,14 @@ class RuleExecutionRepository(_Repository[RuleExecution]):
             execution.snapshot_id,
             execution.device,
         )
-        _require_evidence_scope(self._connection, execution.audit_id, execution.evidence_ids)
+        _require_evidence_scope(
+            self._connection,
+            execution.audit_id,
+            execution.evidence_ids,
+            execution.page_id,
+            execution.snapshot_id,
+            execution.device,
+        )
         self._insert(
             "INSERT INTO rule_executions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (

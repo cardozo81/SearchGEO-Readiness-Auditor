@@ -215,6 +215,18 @@ class M1PersistenceTests(unittest.TestCase):
             artifact_reference=None,
             captured_at=captured_at,
         )
+        evidence_b = Evidence(
+            evidence_id=new_id("EV-GEO"),
+            audit_id=audit.audit_id,
+            page_id=page_b.page_id,
+            snapshot_id=snapshot_b.snapshot_id,
+            device=DeviceContext.DESKTOP,
+            evidence_type=EvidenceType.HTTP_RESPONSE,
+            source="test",
+            observed_value={"status": 200},
+            artifact_reference=None,
+            captured_at=captured_at,
+        )
 
         with TemporaryDirectory() as temp_dir:
             workspace = AuditWorkspace.create(Path(temp_dir), audit.audit_id)
@@ -229,6 +241,24 @@ class M1PersistenceTests(unittest.TestCase):
                     persistence.evidence.add(mismatched_evidence)
 
                 persistence.evidence.add(evidence_a)
+                persistence.evidence.add(evidence_b)
+                cross_page_execution = RuleExecution(
+                    rule_execution_id=new_id("REX"),
+                    audit_id=audit.audit_id,
+                    rule_id="BR-GEO-004",
+                    rule_version="1",
+                    page_id=page_a.page_id,
+                    snapshot_id=snapshot_a.snapshot_id,
+                    device=DeviceContext.DESKTOP,
+                    result=RuleResult.PASS,
+                    observed_value={"preserved": True},
+                    expected_condition=None,
+                    evidence_ids=(evidence_b.evidence_id,),
+                    executed_at=captured_at,
+                )
+                with self.assertRaises(sqlite3.IntegrityError):
+                    persistence.rule_executions.add(cross_page_execution)
+
                 invalid_execution = RuleExecution(
                     rule_execution_id=new_id("REX"),
                     audit_id=audit.audit_id,
@@ -293,6 +323,25 @@ class M1PersistenceTests(unittest.TestCase):
                 )
                 with self.assertRaises(sqlite3.IntegrityError):
                     persistence.findings.add(invalid_finding)
+
+                wrong_device_finding = Finding(
+                    finding_id=new_id("FND"),
+                    audit_id=audit.audit_id,
+                    rule_id=valid_execution.rule_id,
+                    rule_execution_id=valid_execution.rule_execution_id,
+                    page_id=page_a.page_id,
+                    device=FindingDevice.MOBILE,
+                    category="AUDITOR_INTEGRITY",
+                    severity=Severity.INFO,
+                    source="test",
+                    title="Wrong device fixture",
+                    observed_value={},
+                    expected_condition=None,
+                    evidence_ids=(evidence_a.evidence_id,),
+                    status="OPEN",
+                )
+                with self.assertRaises(sqlite3.IntegrityError):
+                    persistence.findings.add(wrong_device_finding)
 
         with self.assertRaises(ValueError):
             Finding(
