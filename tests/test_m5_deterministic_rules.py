@@ -70,7 +70,7 @@ def _fixture(
     meta_robots: str | None = None,
     crawler_overrides: dict[str, bool] | None = None,
 ) -> tuple[Audit, AuditTarget, M2ExecutionResult, M3ExecutionResult, M4ExecutionResult, str]:
-    audit = Audit(audit_id=new_id("AUD"), project_name="M5 test")
+    audit = Audit(audit_id=workspace.root.name, project_name="M5 test")
     url = "https://example.test/"
     target = AuditTarget(
         target_id=new_id("TGT"),
@@ -211,22 +211,9 @@ class M5RulesTests(unittest.TestCase):
 
     def test_failed_retrievability_blocks_derivative_rules_without_cascading_failures(self) -> None:
         with TemporaryDirectory() as temp_dir:
-            workspace = AuditWorkspace.create(Path(temp_dir), new_id("AUD-TMP"))
-            # Workspace name must match audit id, so rebuild with the actual audit below.
-            workspace.root.rmdir() if False else None
-
-        with TemporaryDirectory() as temp_dir:
-            audit = Audit(audit_id=new_id("AUD"), project_name="placeholder")
-            workspace = AuditWorkspace.create(Path(temp_dir), audit.audit_id)
-            with AuditPersistence(workspace) as persistence:
-                # _fixture creates its own audit, so use a fresh correctly named workspace.
-                pass
-
-        with TemporaryDirectory() as temp_dir:
             audit_id = new_id("AUD")
             workspace = AuditWorkspace.create(Path(temp_dir), audit_id)
             with AuditPersistence(workspace) as persistence:
-                # Build fixture, then rename its audit identity is not supported; use helper workspace audit name only as storage.
                 audit, target, m2, m3, m4, snapshot_id = _fixture(
                     workspace, persistence, network_failure=True
                 )
