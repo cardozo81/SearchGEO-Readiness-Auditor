@@ -1,11 +1,12 @@
-"""M11 — Static HTML Report orchestration."""
+"""M11/M14 — Static HTML Report orchestration."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from searchgeo.m14_reporting import M14ReportBuilder, new_m14_report_record
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
-from searchgeo.reporting import ReportBuilder, ReportPersistence, new_report_record, write_report
+from searchgeo.reporting import ReportPersistence, write_report
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,9 +26,9 @@ def execute_m11(
     if audit is None:
         raise ValueError(f"audit not found: {audit_id}")
 
-    html = ReportBuilder().build(audit_id=audit_id, workspace=workspace)
+    html = M14ReportBuilder().build(audit_id=audit_id, workspace=workspace)
     path = write_report(workspace=workspace, html=html)
-    record = new_report_record(
+    record = new_m14_report_record(
         audit_id=audit_id,
         auditor_version=audit.auditor_version,
         file_path=path.name,
