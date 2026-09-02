@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "searchgeo-readiness-auditor"
+version = "0.1.0"
+description = "Local Search/GEO readiness auditor."
+requires-python = ">=3.13,<3.14"
+dependencies = []
+
+[project.scripts]
+searchgeo = "searchgeo.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
