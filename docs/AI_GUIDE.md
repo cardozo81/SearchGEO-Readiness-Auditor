@@ -13,7 +13,94 @@ Providers implementados:
 
 Não existe dependência Python `openai`: o adapter usa HTTP da biblioteca padrão.
 
-O projeto **não fixa um nome de modelo**. O operador deve fornecer um modelo aceito pelo provider/endpoint no momento da execução. Compatibilidade de modelos externos pode mudar independentemente do código do auditor; valide o modelo escolhido antes da homologação.
+## Requisito técnico do modelo OpenAI
+
+O campo `--ai-model` / `SEARCHGEO_OPENAI_MODEL` **não aceita qualquer tipo de modelo de IA de forma segura**. O `OpenAIProvider` desta baseline usa simultaneamente:
+
+1. endpoint `POST /v1/responses`;
+2. entrada e saída textual;
+3. Structured Outputs por `text.format`;
+4. `type = json_schema`;
+5. `strict = true`;
+6. o JSON Schema definido pelo próprio auditor.
+
+Portanto, o operador deve selecionar um modelo de texto compatível com **Responses API + Structured Outputs/JSON Schema estrito**.
+
+Modelos de imagem, áudio, transcrição, TTS, realtime, embeddings, moderação e outros modelos especializados **não devem ser preenchidos** em `--ai-model`.
+
+## Modelos recomendados para esta baseline
+
+Compatibilidade documental revisada em **2026-09-02** contra a documentação pública atual da OpenAI. A família GPT-5.6 é a família geral atual indicada pela OpenAI e está disponível pela Responses API.
+
+Use preferencialmente um dos valores abaixo:
+
+| Valor exato a preencher | Uso recomendado no SearchGEO | Observação operacional |
+|---|---|---|
+| `gpt-5.6-terra` | **recomendado como default operacional** | equilíbrio entre qualidade e custo para análise semântica em volume |
+| `gpt-5.6-sol` | máxima qualidade | usar quando qualidade analítica for mais importante que custo |
+| `gpt-5.6-luna` | menor custo / maior volume | usar quando custo for o principal limitador; validar qualidade no smoke test |
+
+### Recomendação padrão
+
+Para evitar dúvida na instalação inicial, configure:
+
+```powershell
+$env:SEARCHGEO_OPENAI_MODEL = "gpt-5.6-terra"
+```
+
+ou por execução:
+
+```powershell
+searchgeo audit https://example.com `
+  --ai-provider openai `
+  --ai-model "gpt-5.6-terra"
+```
+
+### Alias `gpt-5.6`
+
+A documentação atual da OpenAI publica `gpt-5.6` como alias de GPT-5.6 Sol. O auditor tecnicamente aceita esse valor como string de modelo, mas para operação e troubleshooting deste projeto prefira o ID explícito:
+
+```text
+gpt-5.6-sol
+```
+
+Isso deixa claro qual perfil foi escolhido no handoff e nos registros operacionais.
+
+## Outros modelos OpenAI
+
+O código **não possui allowlist interna de nomes de modelo**: qualquer string não vazia pode chegar ao endpoint. Isso não equivale a suporte homologado.
+
+Modelos anteriores ou alternativos podem funcionar se, na conta/região utilizada, suportarem exatamente o contrato exigido pelo auditor. Entretanto, para evitar conflito de compatibilidade, esta documentação considera **fora da configuração recomendada da Stable Local Baseline** qualquer modelo que não seja um dos três GPT-5.6 listados acima.
+
+Se houver necessidade de usar outro modelo, trate-o como configuração não homologada e valide antes do uso real:
+
+- disponibilidade do model ID na conta;
+- suporte a `/v1/responses`;
+- suporte a `text.format = json_schema`;
+- suporte a `strict = true`;
+- resposta válida para o schema do SearchGEO;
+- comportamento da auditoria em `FULL` sem `AI_PROVIDER_UNAVAILABLE`.
+
+## Valores que não devem ser usados
+
+Não preencha `SEARCHGEO_OPENAI_MODEL` / `--ai-model` com nomes de produtos ou categorias que não sejam model IDs válidos para o contrato acima.
+
+Exemplos de categorias inadequadas para este campo:
+
+- modelos `gpt-image-*`;
+- modelos `gpt-realtime-*`;
+- modelos de transcrição;
+- modelos de TTS;
+- modelos `text-embedding-*`;
+- modelos de moderação;
+- nomes de planos ChatGPT, como `Plus`, `Pro`, `Business` ou `Enterprise`;
+- nomes informais como `ChatGPT`, `GPT latest`, `OpenAI` ou `auto`.
+
+O valor deve ser um **model ID da API**, por exemplo:
+
+```text
+gpt-5.6-terra
+```
 
 ## O que a IA faz
 
@@ -76,10 +163,24 @@ em logs de homologação.
 
 ## 4. Definir o modelo
 
+### Configuração recomendada
+
+```powershell
+$env:SEARCHGEO_OPENAI_MODEL = "gpt-5.6-terra"
+```
+
+Alternativas suportadas pela orientação operacional atual:
+
+```text
+gpt-5.6-sol
+gpt-5.6-terra
+gpt-5.6-luna
+```
+
 Opção A — variável de ambiente:
 
 ```powershell
-$env:SEARCHGEO_OPENAI_MODEL = "<modelo-configurado>"
+$env:SEARCHGEO_OPENAI_MODEL = "gpt-5.6-terra"
 ```
 
 Valide:
@@ -91,7 +192,7 @@ $env:SEARCHGEO_OPENAI_MODEL
 Opção B — flag por execução:
 
 ```powershell
---ai-model "<modelo-configurado>"
+--ai-model "gpt-5.6-terra"
 ```
 
 `--ai-model` tem precedência sobre `SEARCHGEO_OPENAI_MODEL`.
@@ -109,7 +210,7 @@ Com model na CLI:
 ```powershell
 searchgeo audit https://example.com `
   --ai-provider openai `
-  --ai-model "<modelo-configurado>"
+  --ai-model "gpt-5.6-terra"
 ```
 
 Se `--ai-provider openai` for selecionado sem model em nenhuma das duas fontes, a CLI rejeita a execução antes da auditoria.
@@ -123,6 +224,14 @@ Após a execução, consulte o relatório e o Audit persistido:
 - `NO_AI`: provider não configurado/NoneProvider.
 
 `DEGRADED` e `NO_AI` podem reduzir Coverage/Confidence/Consolidation, mas não são FAIL do website.
+
+Se a execução com OpenAI resultar em `DEGRADED` ou `AI_PROVIDER_UNAVAILABLE`, confira primeiro:
+
+1. API key;
+2. model ID digitado exatamente;
+3. disponibilidade do modelo na conta/região;
+4. conectividade HTTPS;
+5. compatibilidade do modelo com Responses API e Structured Outputs estrito.
 
 ## 7. Desabilitar IA
 
