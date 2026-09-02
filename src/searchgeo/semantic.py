@@ -200,7 +200,17 @@ class OpenAIProvider:
                 prompt_version=self.prompt_version,
             )
             return ProviderCallResult(ProviderState.AVAILABLE, response=normalized)
-        except (HTTPError, URLError, TimeoutError, OSError, SemanticProviderError, SemanticSchemaError, SemanticEvidenceError, json.JSONDecodeError, UnicodeError) as exc:
+        except (
+            HTTPError,
+            URLError,
+            TimeoutError,
+            OSError,
+            SemanticProviderError,
+            SemanticSchemaError,
+            SemanticEvidenceError,
+            json.JSONDecodeError,
+            UnicodeError,
+        ) as exc:
             return ProviderCallResult(
                 ProviderState.UNAVAILABLE,
                 reason=f"AI_PROVIDER_UNAVAILABLE:{type(exc).__name__}",
@@ -222,7 +232,8 @@ class OpenAIProvider:
                     "content": [
                         {
                             "type": "input_text",
-                            "text": "JSON page evidence:\n" + json.dumps(semantic_input.provider_payload(), ensure_ascii=False),
+                            "text": "JSON page evidence:\n"
+                            + json.dumps(semantic_input.provider_payload(), ensure_ascii=False),
                         }
                     ],
                 }
@@ -247,6 +258,18 @@ def semantic_output_schema() -> dict[str, Any]:
         RuleResult.NOT_APPLICABLE.value,
     ]
     entity_values = [item.value for item in EntityType]
+    observed_value_schema = {
+        "type": "object",
+        "properties": {
+            "summary": {"type": "string"},
+            "details": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+        },
+        "required": ["summary", "details"],
+        "additionalProperties": False,
+    }
     return {
         "type": "object",
         "properties": {
@@ -258,11 +281,21 @@ def semantic_output_schema() -> dict[str, Any]:
                         "rule_id": {"type": "string", "enum": list(SEMANTIC_RULE_IDS)},
                         "result": {"type": "string", "enum": result_values},
                         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                        "evidence_ids": {"type": "array", "items": {"type": "string"}},
+                        "evidence_ids": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
                         "reasoning_summary": {"type": "string"},
-                        "observed_value": {},
+                        "observed_value": observed_value_schema,
                     },
-                    "required": ["rule_id", "result", "confidence", "evidence_ids", "reasoning_summary", "observed_value"],
+                    "required": [
+                        "rule_id",
+                        "result",
+                        "confidence",
+                        "evidence_ids",
+                        "reasoning_summary",
+                        "observed_value",
+                    ],
                     "additionalProperties": False,
                 },
             },
@@ -274,7 +307,10 @@ def semantic_output_schema() -> dict[str, Any]:
                         "name": {"type": "string"},
                         "entity_type": {"type": "string", "enum": entity_values},
                         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                        "evidence_ids": {"type": "array", "items": {"type": "string"}},
+                        "evidence_ids": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
                     },
                     "required": ["name", "entity_type", "confidence", "evidence_ids"],
                     "additionalProperties": False,
@@ -287,7 +323,12 @@ def semantic_output_schema() -> dict[str, Any]:
                 "items": {"type": "string"},
             },
         },
-        "required": ["assessments", "entities", "primary_intent", "secondary_intents"],
+        "required": [
+            "assessments",
+            "entities",
+            "primary_intent",
+            "secondary_intents",
+        ],
         "additionalProperties": False,
     }
 
@@ -313,17 +354,32 @@ def normalize_provider_payload(
     secondary = payload["secondary_intents"]
     if not isinstance(raw_assessments, list) or not isinstance(raw_entities, list):
         raise SemanticSchemaError("assessments and entities must be arrays")
-    if primary_intent is not None and (not isinstance(primary_intent, str) or not primary_intent.strip()):
+    if primary_intent is not None and (
+        not isinstance(primary_intent, str) or not primary_intent.strip()
+    ):
         raise SemanticSchemaError("primary_intent must be a non-empty string or null")
-    if not isinstance(secondary, list) or len(secondary) > 5 or any(not isinstance(item, str) or not item.strip() for item in secondary):
-        raise SemanticSchemaError("secondary_intents must contain at most five non-empty strings")
+    if (
+        not isinstance(secondary, list)
+        or len(secondary) > 5
+        or any(not isinstance(item, str) or not item.strip() for item in secondary)
+    ):
+        raise SemanticSchemaError(
+            "secondary_intents must contain at most five non-empty strings"
+        )
 
     assessments: list[SemanticRuleAssessment] = []
     seen_rules: set[str] = set()
     for raw in raw_assessments:
         if not isinstance(raw, dict):
             raise SemanticSchemaError("assessment must be an object")
-        required = {"rule_id", "result", "confidence", "evidence_ids", "reasoning_summary", "observed_value"}
+        required = {
+            "rule_id",
+            "result",
+            "confidence",
+            "evidence_ids",
+            "reasoning_summary",
+            "observed_value",
+        }
         if set(raw) != required:
             raise SemanticSchemaError("assessment has missing or unexpected fields")
         rule_id = raw["rule_id"]
@@ -338,11 +394,17 @@ def normalize_provider_payload(
             raise SemanticSchemaError("provider cannot publish ERROR as website assessment")
         confidence = _confidence(raw["confidence"])
         evidence_ids = _evidence_ids(raw["evidence_ids"], allowed_evidence_ids)
-        if result not in {RuleResult.UNKNOWN, RuleResult.NOT_APPLICABLE} and not evidence_ids:
-            raise SemanticEvidenceError(f"{rule_id} requires source evidence for {result.value}")
+        if (
+            result not in {RuleResult.UNKNOWN, RuleResult.NOT_APPLICABLE}
+            and not evidence_ids
+        ):
+            raise SemanticEvidenceError(
+                f"{rule_id} requires source evidence for {result.value}"
+            )
         summary = raw["reasoning_summary"]
         if not isinstance(summary, str):
             raise SemanticSchemaError("reasoning_summary must be a string")
+        observed_value = _observed_value(raw["observed_value"])
         assessments.append(
             SemanticRuleAssessment(
                 rule_id=rule_id,
@@ -350,13 +412,16 @@ def normalize_provider_payload(
                 confidence=confidence,
                 evidence_ids=evidence_ids,
                 reasoning_summary=summary.strip(),
-                observed_value=raw["observed_value"],
+                observed_value=observed_value,
             )
         )
 
     entities: list[EntityCandidate] = []
     for raw in raw_entities:
-        if not isinstance(raw, dict) or set(raw) != {"name", "entity_type", "confidence", "evidence_ids"}:
+        if (
+            not isinstance(raw, dict)
+            or set(raw) != {"name", "entity_type", "confidence", "evidence_ids"}
+        ):
             raise SemanticSchemaError("entity has invalid fields")
         name = raw["name"]
         if not isinstance(name, str) or not name.strip():
@@ -368,7 +433,14 @@ def normalize_provider_payload(
         evidence_ids = _evidence_ids(raw["evidence_ids"], allowed_evidence_ids)
         if not evidence_ids:
             raise SemanticEvidenceError("entity observations require source evidence")
-        entities.append(EntityCandidate(name.strip(), entity_type, _confidence(raw["confidence"]), evidence_ids))
+        entities.append(
+            EntityCandidate(
+                name.strip(),
+                entity_type,
+                _confidence(raw["confidence"]),
+                evidence_ids,
+            )
+        )
 
     return SemanticProviderResponse(
         assessments=tuple(assessments),
@@ -398,8 +470,29 @@ def _evidence_ids(value: Any, allowed: frozenset[str]) -> tuple[str, ...]:
     ids = tuple(dict.fromkeys(value))
     unknown = set(ids) - allowed
     if unknown:
-        raise SemanticEvidenceError(f"provider referenced unknown evidence_ids: {sorted(unknown)}")
+        raise SemanticEvidenceError(
+            f"provider referenced unknown evidence_ids: {sorted(unknown)}"
+        )
     return ids
+
+
+def _observed_value(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != {"summary", "details"}:
+        raise SemanticSchemaError(
+            "observed_value must contain exactly summary and details"
+        )
+    summary = value["summary"]
+    details = value["details"]
+    if not isinstance(summary, str):
+        raise SemanticSchemaError("observed_value.summary must be a string")
+    if not isinstance(details, list) or any(not isinstance(item, str) for item in details):
+        raise SemanticSchemaError(
+            "observed_value.details must be an array of strings"
+        )
+    return {
+        "summary": summary.strip(),
+        "details": [item.strip() for item in details],
+    }
 
 
 def _extract_json_payload(response: dict[str, Any]) -> Any:
@@ -411,12 +504,21 @@ def _extract_json_payload(response: dict[str, Any]) -> Any:
         if not isinstance(item, dict):
             continue
         for content in item.get("content", []):
-            if isinstance(content, dict) and content.get("type") == "output_text" and isinstance(content.get("text"), str):
+            if (
+                isinstance(content, dict)
+                and content.get("type") == "output_text"
+                and isinstance(content.get("text"), str)
+            ):
                 return json.loads(content["text"])
     raise SemanticProviderError("OpenAI response contained no output_text")
 
 
-def _http_transport(url: str, headers: dict[str, str], body: bytes, timeout: float) -> dict[str, Any]:
+def _http_transport(
+    url: str,
+    headers: dict[str, str],
+    body: bytes,
+    timeout: float,
+) -> dict[str, Any]:
     request = Request(url, data=body, headers=headers, method="POST")
     with urlopen(request, timeout=timeout) as response:
         raw = response.read()
