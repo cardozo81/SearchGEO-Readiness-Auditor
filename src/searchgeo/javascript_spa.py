@@ -181,28 +181,40 @@ def _is_error_label(value: str) -> bool:
 class _NavigationParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
+        self.stack: list[tuple[str, bool]] = []
         self.nav_depth = 0
         self.hrefs: list[str] = []
         self.non_crawlable_controls = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        tag = tag.lower()
         values = {key.lower(): value or "" for key, value in attrs}
-        if tag.lower() == "nav" or values.get("role", "").lower() == "navigation":
+        starts_navigation = tag == "nav" or values.get("role", "").lower() == "navigation"
+        self.stack.append((tag, starts_navigation))
+        if starts_navigation:
             self.nav_depth += 1
-        if tag.lower() == "a":
+        if tag == "a":
             href = values.get("href", "").strip()
             if href:
                 self.hrefs.append(href)
-            elif self.nav_depth and (values.get("onclick") or values.get("role") == "link"):
+            elif self.nav_depth and (values.get("onclick") or values.get("role", "").lower() == "link"):
                 self.non_crawlable_controls += 1
-        elif self.nav_depth and tag.lower() in {"button", "div", "span"} and (
+        elif self.nav_depth and tag in {"button", "div", "span"} and (
             values.get("onclick") or values.get("role", "").lower() == "link"
         ):
             self.non_crawlable_controls += 1
 
     def handle_endtag(self, tag: str) -> None:
-        if tag.lower() == "nav" and self.nav_depth:
-            self.nav_depth -= 1
+        tag = tag.lower()
+        for position in range(len(self.stack) - 1, -1, -1):
+            stack_tag, _ = self.stack[position]
+            if stack_tag != tag:
+                continue
+            for _, starts_navigation in self.stack[position:]:
+                if starts_navigation and self.nav_depth:
+                    self.nav_depth -= 1
+            del self.stack[position:]
+            break
 
 
 class _LazyParser(HTMLParser):
