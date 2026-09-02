@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 import json
-from pathlib import Path
 from typing import Any
 
 from searchgeo.domain import (
@@ -43,33 +42,69 @@ from searchgeo.semantic_persistence import EntityObservation, SemanticAssessment
 
 _RULE_VERSION = "1"
 
-
-_M7_DEFINITIONS = (
-    RuleDefinition("BR-GEO-028", "Page title must be present and semantically representative", "SEMANTIC_STRUCTURE", "SEMANTIC_STRUCTURE", RuleScope.SNAPSHOT, severity=Severity.HIGH, basis="STANDARD", scoring_group="SEMANTIC_TITLE"),
-    RuleDefinition("BR-GEO-029", "Main content must expose an understandable semantic hierarchy", "SEMANTIC_STRUCTURE", "SEMANTIC_STRUCTURE", RuleScope.SNAPSHOT, severity=Severity.MEDIUM, basis="HEURISTIC", scoring_group="SEMANTIC_HIERARCHY"),
-    RuleDefinition("BR-GEO-030", "Primary topic and major sections must be identifiable", "SEMANTIC_STRUCTURE", "SEMANTIC_STRUCTURE", RuleScope.SNAPSHOT, severity=Severity.MEDIUM, basis="HEURISTIC", scoring_group="SEMANTIC_TOPIC"),
-    RuleDefinition("BR-GEO-031", "Primary entity must be identifiable when applicable", "ENTITY_CLARITY", "ENTITY_CLARITY", RuleScope.SNAPSHOT, severity=Severity.MEDIUM, basis="HEURISTIC", scoring_group="ENTITY_PRIMARY"),
-    RuleDefinition("BR-GEO-032", "Important entity types and relationships must have sufficient context", "ENTITY_CLARITY", "ENTITY_CLARITY", RuleScope.SNAPSHOT, severity=Severity.MEDIUM, basis="HEURISTIC", scoring_group="ENTITY_CONTEXT"),
-    RuleDefinition("BR-GEO-033", "Material entity ambiguity must be detectable", "ENTITY_CLARITY", "ENTITY_CLARITY", RuleScope.SNAPSHOT, severity=Severity.MEDIUM, basis="HEURISTIC", scoring_group="ENTITY_AMBIGUITY"),
-    RuleDefinition("BR-GEO-034", "Structured Data must be syntactically interpretable when present", "STRUCTURED_DATA", "STRUCTURED_DATA", RuleScope.SNAPSHOT, severity=Severity.MEDIUM, basis="STANDARD", scoring_group="STRUCTURED_DATA_SYNTAX"),
-    RuleDefinition("BR-GEO-035", "Structured Data types and relevant properties must be identifiable", "STRUCTURED_DATA", "STRUCTURED_DATA", RuleScope.SNAPSHOT, severity=Severity.LOW, basis="STANDARD", scoring_group="STRUCTURED_DATA_SYNTAX"),
-    RuleDefinition("BR-GEO-036", "Structured Data must remain consistent with visible page content", "STRUCTURED_DATA", "STRUCTURED_DATA", RuleScope.SNAPSHOT, severity=Severity.MEDIUM, basis="HEURISTIC", scoring_group="STRUCTURED_DATA_CONSISTENCY"),
-    RuleDefinition("BR-GEO-037", "Structured Data entities must be consistent with observed page entities", "STRUCTURED_DATA", "ENTITY_CLARITY", RuleScope.SNAPSHOT, severity=Severity.MEDIUM, basis="HEURISTIC", scoring_group="STRUCTURED_DATA_CONSISTENCY"),
-    RuleDefinition("BR-GEO-038", "Primary user intent must be identifiable", "ANSWERABILITY", "ANSWERABILITY", RuleScope.SNAPSHOT, severity=Severity.HIGH, basis="HEURISTIC", scoring_group="PRIMARY_INTENT"),
-    RuleDefinition("BR-GEO-039", "Relevant primary questions must receive explicit answers when applicable", "ANSWERABILITY", "ANSWERABILITY", RuleScope.SNAPSHOT, severity=Severity.MEDIUM, basis="HEURISTIC", scoring_group="PRIMARY_ANSWERS"),
-    RuleDefinition("BR-GEO-040", "Answers must contain sufficient context", "ANSWERABILITY", "ANSWERABILITY", RuleScope.SNAPSHOT, severity=Severity.MEDIUM, basis="HEURISTIC", scoring_group="PRIMARY_ANSWERS"),
-    RuleDefinition("BR-GEO-041", "Material factual claims must be explicitly identifiable", "CITATION_READINESS", "CITATION_READINESS", RuleScope.SNAPSHOT, severity=Severity.LOW, basis="HEURISTIC", scoring_group="FACTUAL_CLAIMS"),
-    RuleDefinition("BR-GEO-042", "Factual statements must contain sufficient factual context", "CITATION_READINESS", "CITATION_READINESS", RuleScope.SNAPSHOT, severity=Severity.MEDIUM, basis="HEURISTIC", scoring_group="FACTUAL_CONTEXT"),
-    RuleDefinition("BR-GEO-043", "Numeric, temporal and quantitative claims must include necessary qualifiers", "CITATION_READINESS", "CITATION_READINESS", RuleScope.SNAPSHOT, severity=Severity.MEDIUM, basis="HEURISTIC", scoring_group="FACTUAL_CONTEXT"),
-    RuleDefinition("BR-GEO-044", "Important information must be understandable without excessive inference", "CITATION_READINESS", "CITATION_READINESS", RuleScope.SNAPSHOT, severity=Severity.MEDIUM, basis="HEURISTIC", scoring_group="INFERENCE_LOAD"),
-    RuleDefinition("BR-GEO-045", "Material claims should expose appropriate attribution or supporting evidence when required", "EVIDENCE_TRUST", "EVIDENCE_TRUST", RuleScope.SNAPSHOT, severity=Severity.MEDIUM, basis="HEURISTIC", scoring_group="ATTRIBUTION"),
-    RuleDefinition("BR-GEO-046", "Publisher, author or responsible entity should be identifiable when relevant", "EVIDENCE_TRUST", "EVIDENCE_TRUST", RuleScope.SNAPSHOT, severity=Severity.LOW, basis="HEURISTIC", scoring_group="RESPONSIBILITY"),
-    RuleDefinition("BR-GEO-047", "Publication and freshness signals must remain internally consistent", "EVIDENCE_TRUST", "EVIDENCE_TRUST", RuleScope.SNAPSHOT, severity=Severity.MEDIUM, basis="HEURISTIC", scoring_group="FRESHNESS"),
-    RuleDefinition("BR-GEO-048", "Primary and relevant secondary intents must be represented", "INTENT_COVERAGE", "INTENT_COVERAGE", RuleScope.SNAPSHOT, severity=Severity.MEDIUM, basis="HEURISTIC", scoring_group="INTENT_SET"),
-    RuleDefinition("BR-GEO-049", "Material intent coverage gaps must be evidence-backed", "INTENT_COVERAGE", "INTENT_COVERAGE", RuleScope.SNAPSHOT, severity=Severity.MEDIUM, basis="HEURISTIC", scoring_group="INTENT_GAPS"),
+_RULE_SPECS = (
+    (28, "Page title must be present and semantically representative", "SEMANTIC_STRUCTURE", Severity.HIGH, "SEMANTIC_TITLE"),
+    (29, "Main content must expose an understandable semantic hierarchy", "SEMANTIC_STRUCTURE", Severity.MEDIUM, "SEMANTIC_HIERARCHY"),
+    (30, "Primary topic and major sections must be identifiable", "SEMANTIC_STRUCTURE", Severity.MEDIUM, "SEMANTIC_TOPIC"),
+    (31, "Primary entity must be identifiable when applicable", "ENTITY_CLARITY", Severity.MEDIUM, "ENTITY_PRIMARY"),
+    (32, "Important entity types and relationships must have sufficient context", "ENTITY_CLARITY", Severity.MEDIUM, "ENTITY_CONTEXT"),
+    (33, "Material entity ambiguity must be detectable", "ENTITY_CLARITY", Severity.MEDIUM, "ENTITY_AMIGUITY"),
+    (34, "Structured Data must be syntactically interpretable when present", "STRUCTURED_DATA", Severity.MEDIUM, "STRUCTURED_DATA_SYNTAX"),
+    (35, "Structured Data types and relevant properties must be identifiable", "STRUCTURED_DATA", Severity.LOW, "STRUCTURED_DATA_SYNTAX"),
+    (36, "Structured Data must remain consistent with visible page content", "STRUCTURED_DATA", Severity.MEDIUM, "STRUCTURED_DATA_CONSISTENCY"),
+    (37, "Structured Data entities must be consistent with observed page entities", "STRUCTURED_DATA", Severity.MEDIUM, "STRUCTURED_DATA_CONSISTENCY"),
+    (38, "Primary user intent must be identifiable", "ANSWERABILITY", Severity.HIGH, "PRIMARY_INTENT"),
+    (39, "Relevant primary questions must receive explicit answers when applicable", "ANSWERABILITY", Severity.MEDIUM, "PRIMARY_ANSWERS"),
+    (40, "Answers must contain sufficient context", "ANSWERABILITY", Severity.MEDIUM, "PRIMARY_ANSWERS"),
+    (41, "Material factual claims must be explicitly identifiable", "CITATION_READINESS", Severity.LOW, "FACTUAL_CLAIMS"),
+    (42, "Factual statements must contain sufficient factual context", "CITATION_READINESS", Severity.MEDIUM, "FACTUAL_CONTEXT"),
+    (43, "Numeric, temporal and quantitative claims must include necessary qualifiers", "CITATION_READINESS", Severity.MEDIUM, "FACTUAL_CONTEXT"),
+    (44, "Important information must be understandable without excessive inference", "CITATION_READINESS", Severity.MEDIUM, "INFERENCE_LOAD"),
+    (45, "Material claims should expose appropriate attribution or supporting evidence when required", "EVIDENCE_TRUST", Severity.MEDIUM, "ATTRIBUTION"),
+    (46, "Publisher, author or responsible entity should be identifiable when relevant", "EVIDENCE_TRUST", Severity.LOW, "RESPONSIBILITY"),
+    (47, "Publication and freshness signals must remain internally consistent", "EVIDENCE_TRUST", Severity.MEDIUM, "FRESHNESS"),
+    (48, "Primary and relevant secondary intents must be represented", "INTENT_COVERAGE", Severity.MEDIUM, "INTENT_SET"),
+    (49, "Material intent coverage gaps must be evidence-backed", "INTENT_COVERAGE", Severity.MEDIUM, "INTENT_GAPS"),
 )
 
-_DEFINITION_BY_ID = {item.rule_id: item for item in _M7_DEFINITIONS}
+_M7_DEFINITIONS = tuple(
+    RuleDefinition(
+        f"BR-GEO-{number:03d}",
+        name,
+        category,
+        category,
+        RuleScope.SNAPSHOT,
+        severity=severity,
+        basis="STANDARD" if number in {28, 34, 35} else "HEURISTIC",
+        scoring_group=scoring_group,
+    )
+    for number, name, category, severity, scoring_group in _RULE_SPECS
+)
+
+_EXPECTED = {
+    "BR-GEO-028": "title is present and semantically representative of the page",
+    "BR-GEO-029": "main content exposes an understandable semantic hierarchy",
+    "BR-GEO-030": "primary topic and major sections are identifiable with sufficient confidence",
+    "BR-GEO-031": "primary entity is identifiable when applicable",
+    "BR-GEO-032": "important entity types and relationships have sufficient context",
+    "BR-GEO-033": "material entity ambiguity is absent or explicitly identifiable",
+    "BR-GEO-034": "Structured Data is syntactically interpretable when present",
+    "BR-GEO-035": "Structured Data types and relevant properties are identifiable",
+    "BR-GEO-036": "Structured Data remains consistent with visible page content",
+    "BR-GEO-037": "Structured Data entities remain consistent with observed page entities",
+    "BR-GEO-038": "primary user intent is identifiable with evidence",
+    "BR-GEO-039": "relevant primary questions receive explicit answers when applicable",
+    "BR-GEO-040": "answers contain sufficient context",
+    "BR-GEO-041": "material factual claims are explicitly identifiable",
+    "BR-GEO-042": "factual statements contain sufficient factual context",
+    "BR-GEO-043": "numeric, temporal and quantitative claims contain necessary qualifiers",
+    "BR-GEO-044": "important information is understandable without excessive inference",
+    "BR-GEO-045": "material claims expose appropriate attribution or support when required",
+    "BR-GEO-046": "publisher, author or responsible entity is identifiable when relevant",
+    "BR-GEO-047": "publication and freshness signals are internally consistent",
+    "BR-GEO-048": "one primary and up to five relevant secondary intents are represented",
+    "BR-GEO-049": "material intent coverage gaps are evidence-backed",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +115,25 @@ class M7ExecutionResult:
     entity_observation_ids: tuple[str, ...]
     audit_mode: AuditMode
     provider_states: dict[str, ProviderState]
+
+
+@dataclass(frozen=True, slots=True)
+class _AssessmentMetadata:
+    provider: str
+    model: str | None
+    prompt_id: str
+    prompt_version: str
+    configuration_version: str
+    reasoning_summary: str
+
+
+@dataclass(frozen=True, slots=True)
+class _Outcome:
+    evaluation: RuleEvaluation
+    confidence: float
+    source_evidence_ids: tuple[str, ...]
+    metadata: _AssessmentMetadata
+    provider_used: bool = False
 
 
 class _PriorState:
@@ -115,13 +169,20 @@ def execute_m7(
     workspace: AuditWorkspace,
     provider: SemanticAnalysisProvider | None = None,
 ) -> M7ExecutionResult:
-    """Execute provider/fallback semantic analysis for each Desktop/Mobile snapshot."""
+    """Execute provider/fallback semantic analysis independently for every snapshot."""
 
     active_provider = provider or NoneProvider()
     audit = persistence.audits.get(audit_id)
     if audit is None:
         raise ValueError(f"audit not found: {audit_id}")
-    if audit.status not in {AuditStatus.ANALYZING, AuditStatus.COMPARING, AuditStatus.SCORING, AuditStatus.RECOMMENDING, AuditStatus.REPORTING, AuditStatus.COMPLETED}:
+    if audit.status not in {
+        AuditStatus.ANALYZING,
+        AuditStatus.COMPARING,
+        AuditStatus.SCORING,
+        AuditStatus.RECOMMENDING,
+        AuditStatus.REPORTING,
+        AuditStatus.COMPLETED,
+    }:
         persistence.audits.update(replace(audit, status=AuditStatus.ANALYZING))
         audit = persistence.audits.get(audit_id) or audit
 
@@ -139,6 +200,7 @@ def execute_m7(
             page = persistence.pages.get(page_id)
             if page is None or page.audit_id != audit_id:
                 raise ValueError(f"M3 references page outside audit: {page_id}")
+
             for device, snapshot_id in per_device.items():
                 snapshot = persistence.snapshots.get(snapshot_id)
                 if snapshot is None or snapshot.page_id != page_id or snapshot.device != device:
@@ -154,18 +216,19 @@ def execute_m7(
                     evidence_manager,
                 )
                 call = _safe_provider_call(active_provider, semantic_input)
+                if call.response is not None and not _normalized_response_is_valid(
+                    call.response,
+                    semantic_input.allowed_evidence_ids,
+                ):
+                    call = ProviderCallResult(
+                        ProviderState.UNAVAILABLE,
+                        reason="AI_PROVIDER_UNAVAILABLE:INVALID_NORMALIZED_OUTPUT",
+                    )
                 provider_states[snapshot_id] = call.state
                 if call.reason and call.reason not in limitations:
                     limitations.append(call.reason)
 
                 response = call.response if call.state is ProviderState.AVAILABLE else None
-                if response is not None and not _normalized_response_is_valid(response, semantic_input.allowed_evidence_ids):
-                    call = ProviderCallResult(ProviderState.UNAVAILABLE, reason="AI_PROVIDER_UNAVAILABLE:INVALID_NORMALIZED_OUTPUT")
-                    provider_states[snapshot_id] = call.state
-                    response = None
-                    if call.reason not in limitations:
-                        limitations.append(call.reason)
-
                 if response is not None:
                     for candidate in response.entities:
                         observation = EntityObservation(
@@ -179,36 +242,29 @@ def execute_m7(
                         semantic_store.add_entity(observation)
                         entity_ids.append(observation.entity_observation_id)
 
-                assessments_by_rule = {
-                    item.rule_id: item for item in response.assessments
-                } if response is not None else {}
+                assessments_by_rule = (
+                    {item.rule_id: item for item in response.assessments}
+                    if response is not None
+                    else {}
+                )
                 structured_summary = _structured_summary(semantic_input.structured_data)
 
                 for definition in _M7_DEFINITIONS:
-                    dependency_result = _dependency_state(
+                    provider_assessment = assessments_by_rule.get(definition.rule_id)
+                    blocked = _dependency_state(
                         definition.rule_id,
                         prior,
                         page_id,
                         snapshot_id,
                     )
-                    if dependency_result is not None:
-                        evaluation = RuleEvaluation(
-                            dependency_result,
-                            {"reason": "SEMANTIC_PREREQUISITE_BLOCKED"},
-                            _expected(definition.rule_id),
-                            reason="SEMANTIC_PREREQUISITE_BLOCKED",
+                    if blocked is not None:
+                        outcome = _blocked_outcome(
+                            definition.rule_id,
+                            blocked,
+                            context_evidence_id,
                         )
-                        confidence = 0.0
-                        source_evidence_ids = (context_evidence_id,)
-                        provider_name = "FALLBACK"
-                        model = None
-                        prompt_id = "deterministic-m7"
-                        prompt_version = "1"
-                        configuration_version = "1"
-                        reasoning_summary = "Prerequisite technical/content rule blocked semantic evaluation."
                     else:
-                        provider_assessment = assessments_by_rule.get(definition.rule_id)
-                        evaluation, confidence, source_evidence_ids, metadata = _evaluate(
+                        outcome = _evaluate(
                             definition.rule_id,
                             snapshot.title,
                             structured_summary,
@@ -217,27 +273,30 @@ def execute_m7(
                             context_evidence_id,
                             response,
                         )
-                        provider_name, model, prompt_id, prompt_version, configuration_version, reasoning_summary = metadata
 
                     semantic_assessment = SemanticAssessment(
                         assessment_id=new_id("SMA"),
                         snapshot_id=snapshot_id,
                         assessment_type=definition.rule_id,
-                        result=evaluation.result,
-                        confidence=confidence,
-                        evidence_ids=source_evidence_ids,
-                        prompt_id=prompt_id,
-                        prompt_version=prompt_version,
-                        provider=provider_name,
-                        model=model,
-                        configuration_version=configuration_version,
-                        reasoning_summary=reasoning_summary,
+                        result=outcome.evaluation.result,
+                        confidence=outcome.confidence,
+                        evidence_ids=outcome.source_evidence_ids,
+                        prompt_id=outcome.metadata.prompt_id,
+                        prompt_version=outcome.metadata.prompt_version,
+                        provider=outcome.metadata.provider,
+                        model=outcome.metadata.model,
+                        configuration_version=outcome.metadata.configuration_version,
+                        reasoning_summary=outcome.metadata.reasoning_summary,
                     )
                     semantic_store.add_assessment(semantic_assessment)
                     assessment_ids.append(semantic_assessment.assessment_id)
 
-                    execution_evidence_ids = list(source_evidence_ids)
-                    if provider_assessment is not None and response is not None:
+                    execution_evidence_ids = list(outcome.source_evidence_ids)
+                    if (
+                        outcome.provider_used
+                        and provider_assessment is not None
+                        and response is not None
+                    ):
                         ai_evidence = evidence_manager.record(
                             audit_id=audit_id,
                             page_id=page_id,
@@ -263,9 +322,9 @@ def execute_m7(
                         page_id=page_id,
                         snapshot_id=snapshot_id,
                         device=device,
-                        result=evaluation.result,
-                        observed_value=evaluation.observed_value,
-                        expected_condition=evaluation.expected_condition,
+                        result=outcome.evaluation.result,
+                        observed_value=outcome.evaluation.observed_value,
+                        expected_condition=outcome.evaluation.expected_condition,
                         evidence_ids=tuple(dict.fromkeys(execution_evidence_ids)),
                         executed_at=utc_now(),
                         error=None,
@@ -280,15 +339,19 @@ def execute_m7(
     refreshed = persistence.audits.get(audit_id)
     if refreshed is None:
         raise ValueError(f"audit disappeared: {audit_id}")
-    capabilities = tuple(dict.fromkeys((*refreshed.capabilities, f"semantic_provider:{active_provider.name}")))
     persistence.audits.update(
         replace(
             refreshed,
             audit_mode=mode,
-            capabilities=capabilities,
+            capabilities=tuple(
+                dict.fromkeys(
+                    (*refreshed.capabilities, f"semantic_provider:{active_provider.name}")
+                )
+            ),
             limitations=tuple(dict.fromkeys(limitations)),
         )
     )
+
     return M7ExecutionResult(
         rule_execution_ids=tuple(execution_ids),
         finding_ids=tuple(finding_ids),
@@ -299,13 +362,22 @@ def execute_m7(
     )
 
 
-def _safe_provider_call(provider: SemanticAnalysisProvider, semantic_input: SemanticInput) -> ProviderCallResult:
+def _safe_provider_call(
+    provider: SemanticAnalysisProvider,
+    semantic_input: SemanticInput,
+) -> ProviderCallResult:
     try:
         result = provider.analyze(semantic_input)
     except Exception as exc:
-        return ProviderCallResult(ProviderState.UNAVAILABLE, reason=f"AI_PROVIDER_UNAVAILABLE:{type(exc).__name__}")
+        return ProviderCallResult(
+            ProviderState.UNAVAILABLE,
+            reason=f"AI_PROVIDER_UNAVAILABLE:{type(exc).__name__}",
+        )
     if not isinstance(result, ProviderCallResult):
-        return ProviderCallResult(ProviderState.UNAVAILABLE, reason="AI_PROVIDER_UNAVAILABLE:INVALID_PROVIDER_CONTRACT")
+        return ProviderCallResult(
+            ProviderState.UNAVAILABLE,
+            reason="AI_PROVIDER_UNAVAILABLE:INVALID_PROVIDER_CONTRACT",
+        )
     return result
 
 
@@ -335,6 +407,7 @@ def _build_semantic_input(
         },
         artifact_reference=snapshot.main_content_ref,
     )
+
     evidence_ids = list(m4_result.evidence_ids.get(snapshot.snapshot_id, ()))
     evidence_ids.append(context.evidence_id)
     evidence_inputs: list[SemanticEvidenceInput] = []
@@ -351,6 +424,7 @@ def _build_semantic_input(
                 artifact_reference=evidence.artifact_reference,
             )
         )
+
     return (
         SemanticInput(
             snapshot_id=snapshot.snapshot_id,
@@ -386,11 +460,29 @@ def _read_json(workspace: AuditWorkspace, reference: str | None) -> Any:
 
 
 def _structured_summary(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {
+            "present": False,
+            "blocks": 0,
+            "invalid_blocks": 0,
+            "types": [],
+        }
     if not isinstance(value, dict):
-        return {"present": False, "blocks": 0, "invalid_blocks": 0, "types": []}
+        return {
+            "present": True,
+            "blocks": 0,
+            "invalid_blocks": 1,
+            "types": [],
+        }
     blocks = value.get("blocks")
     if not isinstance(blocks, list):
-        return {"present": True, "blocks": 0, "invalid_blocks": 1, "types": []}
+        return {
+            "present": True,
+            "blocks": 0,
+            "invalid_blocks": 1,
+            "types": [],
+        }
+
     invalid = 0
     types: list[str] = []
     for block in blocks:
@@ -410,19 +502,51 @@ def _structured_summary(value: Any) -> dict[str, Any]:
     }
 
 
-def _dependency_state(rule_id: str, prior: _PriorState, page_id: str, snapshot_id: str) -> RuleResult | None:
-    prerequisite = prior.get("BR-GEO-009", page_id, snapshot_id)
-    if prerequisite in {RuleResult.FAIL, RuleResult.ERROR, RuleResult.NOT_APPLICABLE}:
+def _dependency_state(
+    rule_id: str,
+    prior: _PriorState,
+    page_id: str,
+    snapshot_id: str,
+) -> RuleResult | None:
+    html = prior.get("BR-GEO-009", page_id, snapshot_id)
+    if html in {RuleResult.FAIL, RuleResult.ERROR, RuleResult.NOT_APPLICABLE}:
         return RuleResult.NOT_APPLICABLE
-    if prerequisite in {None, RuleResult.UNKNOWN}:
+    if html in {None, RuleResult.UNKNOWN}:
         return RuleResult.UNKNOWN
+
     if rule_id not in {"BR-GEO-034", "BR-GEO-035"}:
-        rendered_content = prior.get("BR-GEO-020", page_id, snapshot_id)
-        if rendered_content in {RuleResult.FAIL, RuleResult.ERROR, RuleResult.NOT_APPLICABLE}:
+        rendered = prior.get("BR-GEO-020", page_id, snapshot_id)
+        if rendered in {RuleResult.FAIL, RuleResult.ERROR, RuleResult.NOT_APPLICABLE}:
             return RuleResult.NOT_APPLICABLE
-        if rendered_content in {None, RuleResult.UNKNOWN}:
+        if rendered in {None, RuleResult.UNKNOWN}:
             return RuleResult.UNKNOWN
     return None
+
+
+def _blocked_outcome(
+    rule_id: str,
+    result: RuleResult,
+    context_evidence_id: str,
+) -> _Outcome:
+    return _Outcome(
+        evaluation=RuleEvaluation(
+            result,
+            {"reason": "SEMANTIC_PREREQUISITE_BLOCKED"},
+            _EXPECTED[rule_id],
+            reason="SEMANTIC_PREREQUISITE_BLOCKED",
+        ),
+        confidence=0.0,
+        source_evidence_ids=(context_evidence_id,),
+        metadata=_AssessmentMetadata(
+            provider="FALLBACK",
+            model=None,
+            prompt_id="deterministic-m7",
+            prompt_version="1",
+            configuration_version="1",
+            reasoning_summary="Prerequisite technical/content rule blocked semantic evaluation.",
+        ),
+        provider_used=False,
+    )
 
 
 def _evaluate(
@@ -433,47 +557,61 @@ def _evaluate(
     call: ProviderCallResult,
     context_evidence_id: str,
     response: SemanticProviderResponse | None,
-) -> tuple[RuleEvaluation, float, tuple[str, ...], tuple[str, str | None, str, str, str, str]]:
-    expected = _expected(rule_id)
-    deterministic = _deterministic_evaluation(rule_id, title, structured, context_evidence_id)
+) -> _Outcome:
+    deterministic = _deterministic_outcome(
+        rule_id,
+        title,
+        structured,
+        context_evidence_id,
+    )
     if deterministic is not None:
-        evaluation, confidence, evidence_ids, summary = deterministic
-        return evaluation, confidence, evidence_ids, (
-            "DETERMINISTIC",
-            None,
-            "deterministic-m7",
-            "1",
-            "1",
-            summary,
-        )
+        return deterministic
 
     if rule_id in {"BR-GEO-036", "BR-GEO-037"} and not structured["present"]:
-        evaluation = RuleEvaluation(
-            RuleResult.NOT_APPLICABLE,
-            {"structured_data_present": False},
-            expected,
-            reason="STRUCTURED_DATA_ABSENT",
-        )
-        return evaluation, 1.0, (context_evidence_id,), (
-            "DETERMINISTIC", None, "deterministic-m7", "1", "1", "Structured Data is absent; rule is not applicable."
+        return _Outcome(
+            evaluation=RuleEvaluation(
+                RuleResult.NOT_APPLICABLE,
+                {"structured_data_present": False},
+                _EXPECTED[rule_id],
+                reason="STRUCTURED_DATA_ABSENT",
+            ),
+            confidence=1.0,
+            source_evidence_ids=(context_evidence_id,),
+            metadata=_AssessmentMetadata(
+                provider="DETERMINISTIC",
+                model=None,
+                prompt_id="deterministic-m7",
+                prompt_version="1",
+                configuration_version="1",
+                reasoning_summary="Structured Data is absent; the consistency rule is not applicable.",
+            ),
+            provider_used=False,
         )
 
     if provider_assessment is None or response is None:
-        reason = call.reason or ("AI_OUTPUT_MISSING_RULE" if call.state is ProviderState.AVAILABLE else "AI_NOT_CONFIGURED")
-        evaluation = RuleEvaluation(
-            RuleResult.UNKNOWN,
-            {"reason": reason, "provider_state": call.state.value},
-            expected,
-            reason=reason,
+        reason = call.reason or (
+            "AI_OUTPUT_MISSING_RULE"
+            if call.state is ProviderState.AVAILABLE
+            else "AI_NOT_CONFIGURED"
         )
-        provider_name = "NONE" if call.state is ProviderState.NOT_CONFIGURED else getattr(response, "provider", "UNAVAILABLE")
-        return evaluation, 0.0, (context_evidence_id,), (
-            provider_name,
-            response.model if response else None,
-            response.prompt_id if response else "semantic-fallback",
-            response.prompt_version if response else "1",
-            response.configuration_version if response else "1",
-            reason,
+        return _Outcome(
+            evaluation=RuleEvaluation(
+                RuleResult.UNKNOWN,
+                {"reason": reason, "provider_state": call.state.value},
+                _EXPECTED[rule_id],
+                reason=reason,
+            ),
+            confidence=0.0,
+            source_evidence_ids=(context_evidence_id,),
+            metadata=_AssessmentMetadata(
+                provider="NONE" if call.state is ProviderState.NOT_CONFIGURED else "UNAVAILABLE",
+                model=None,
+                prompt_id="semantic-fallback",
+                prompt_version="1",
+                configuration_version="1",
+                reasoning_summary=reason,
+            ),
+            provider_used=False,
         )
 
     observed = provider_assessment.observed_value
@@ -483,40 +621,62 @@ def _evaluate(
             "primary_intent": response.primary_intent,
             "secondary_intents": list(response.secondary_intents),
         }
-    evaluation = RuleEvaluation(
-        provider_assessment.result,
-        observed,
-        expected,
-        reason=None if provider_assessment.result not in {RuleResult.UNKNOWN} else provider_assessment.reasoning_summary,
-    )
-    return evaluation, provider_assessment.confidence, provider_assessment.evidence_ids, (
-        response.provider,
-        response.model,
-        response.prompt_id,
-        response.prompt_version,
-        response.configuration_version,
-        provider_assessment.reasoning_summary,
+    return _Outcome(
+        evaluation=RuleEvaluation(
+            provider_assessment.result,
+            observed,
+            _EXPECTED[rule_id],
+            reason=(
+                provider_assessment.reasoning_summary
+                if provider_assessment.result is RuleResult.UNKNOWN
+                else None
+            ),
+        ),
+        confidence=provider_assessment.confidence,
+        source_evidence_ids=provider_assessment.evidence_ids,
+        metadata=_AssessmentMetadata(
+            provider=response.provider,
+            model=response.model,
+            prompt_id=response.prompt_id,
+            prompt_version=response.prompt_version,
+            configuration_version=response.configuration_version,
+            reasoning_summary=provider_assessment.reasoning_summary,
+        ),
+        provider_used=True,
     )
 
 
-def _deterministic_evaluation(
+def _deterministic_outcome(
     rule_id: str,
     title: str | None,
     structured: dict[str, Any],
     context_evidence_id: str,
-) -> tuple[RuleEvaluation, float, tuple[str, ...], str] | None:
+) -> _Outcome | None:
+    metadata = _AssessmentMetadata(
+        provider="DETERMINISTIC",
+        model=None,
+        prompt_id="deterministic-m7",
+        prompt_version="1",
+        configuration_version="1",
+        reasoning_summary="",
+    )
+
     if rule_id == "BR-GEO-028" and not (title or "").strip():
-        return (
-            RuleEvaluation(
+        return _Outcome(
+            evaluation=RuleEvaluation(
                 RuleResult.FAIL,
                 {"title_present": False},
-                _expected(rule_id),
+                _EXPECTED[rule_id],
                 reason="TITLE_MISSING",
             ),
-            1.0,
-            (context_evidence_id,),
-            "Title is deterministically absent; semantic representativeness cannot compensate for absence.",
+            confidence=1.0,
+            source_evidence_ids=(context_evidence_id,),
+            metadata=replace(
+                metadata,
+                reasoning_summary="Title is deterministically absent; semantic representativeness cannot compensate for absence.",
+            ),
         )
+
     if rule_id == "BR-GEO-034":
         if not structured["present"]:
             result = RuleResult.NOT_APPLICABLE
@@ -527,12 +687,21 @@ def _deterministic_evaluation(
         else:
             result = RuleResult.PASS
             reason = None
-        return (
-            RuleEvaluation(result, structured, _expected(rule_id), reason=reason),
-            1.0,
-            (context_evidence_id,),
-            "Structured Data syntax is evaluated deterministically from preserved parsed blocks.",
+        return _Outcome(
+            evaluation=RuleEvaluation(
+                result,
+                structured,
+                _EXPECTED[rule_id],
+                reason=reason,
+            ),
+            confidence=1.0,
+            source_evidence_ids=(context_evidence_id,),
+            metadata=replace(
+                metadata,
+                reasoning_summary="Structured Data syntax is evaluated deterministically from preserved parsed blocks.",
+            ),
         )
+
     if rule_id == "BR-GEO-035":
         if not structured["present"]:
             result = RuleResult.NOT_APPLICABLE
@@ -546,16 +715,27 @@ def _deterministic_evaluation(
         else:
             result = RuleResult.WARNING
             reason = "STRUCTURED_DATA_TYPE_NOT_IDENTIFIABLE"
-        return (
-            RuleEvaluation(result, structured, _expected(rule_id), reason=reason),
-            1.0,
-            (context_evidence_id,),
-            "Structured Data types are identified deterministically from preserved @type values.",
+        return _Outcome(
+            evaluation=RuleEvaluation(
+                result,
+                structured,
+                _EXPECTED[rule_id],
+                reason=reason,
+            ),
+            confidence=1.0,
+            source_evidence_ids=(context_evidence_id,),
+            metadata=replace(
+                metadata,
+                reasoning_summary="Structured Data types are identified deterministically from preserved @type values.",
+            ),
         )
     return None
 
 
-def _normalized_response_is_valid(response: SemanticProviderResponse, allowed: frozenset[str]) -> bool:
+def _normalized_response_is_valid(
+    response: SemanticProviderResponse,
+    allowed: frozenset[str],
+) -> bool:
     if len(response.secondary_intents) > 5:
         return False
     seen: set[str] = set()
@@ -563,54 +743,42 @@ def _normalized_response_is_valid(response: SemanticProviderResponse, allowed: f
         if assessment.rule_id not in SEMANTIC_RULE_IDS or assessment.rule_id in seen:
             return False
         seen.add(assessment.rule_id)
-        if not 0 <= assessment.confidence <= 1 or set(assessment.evidence_ids) - allowed:
+        if not 0 <= assessment.confidence <= 1:
             return False
-        if assessment.result not in {RuleResult.UNKNOWN, RuleResult.NOT_APPLICABLE} and not assessment.evidence_ids:
+        if set(assessment.evidence_ids) - allowed:
+            return False
+        if (
+            assessment.result not in {RuleResult.UNKNOWN, RuleResult.NOT_APPLICABLE}
+            and not assessment.evidence_ids
+        ):
             return False
     for entity in response.entities:
-        if not 0 <= entity.confidence <= 1 or not entity.evidence_ids or set(entity.evidence_ids) - allowed:
+        if not 0 <= entity.confidence <= 1:
+            return False
+        if not entity.evidence_ids or set(entity.evidence_ids) - allowed:
             return False
     return True
 
 
 def _resolve_mode(states: tuple[ProviderState, ...]) -> AuditMode:
-    if not states or all(item is ProviderState.NOT_CONFIGURED for item in states):
+    if not states or all(state is ProviderState.NOT_CONFIGURED for state in states):
         return AuditMode.NO_AI
-    if any(item is ProviderState.UNAVAILABLE for item in states) or any(item is ProviderState.NOT_CONFIGURED for item in states):
+    if any(
+        state in {ProviderState.UNAVAILABLE, ProviderState.NOT_CONFIGURED}
+        for state in states
+    ):
         return AuditMode.DEGRADED
     return AuditMode.FULL
 
 
-def _expected(rule_id: str) -> str:
-    names = {
-        "BR-GEO-028": "title is present and semantically representative of the page",
-        "BR-GEO-029": "main content exposes an understandable semantic hierarchy",
-        "BR-GEO-030": "primary topic and major sections are identifiable with sufficient confidence",
-        "BR-GEO-031": "primary entity is identifiable when applicable",
-        "BR-GEO-032": "important entity types and relationships have sufficient context",
-        "BR-GEO-033": "material entity ambiguity is absent or explicitly identifiable",
-        "BR-GEO-034": "Structured Data is syntactically interpretable when present",
-        "BR-GEO-035": "Structured Data types and relevant properties are identifiable",
-        "BR-GEO-036": "Structured Data remains consistent with visible page content",
-        "BR-GEO-037": "Structured Data entities remain consistent with observed page entities",
-        "BR-GEO-038": "primary user intent is identifiable with evidence",
-        "BR-GEO-039": "relevant primary questions receive explicit answers when applicable",
-        "BR-GEO-040": "answers contain sufficient context",
-        "BR-GEO-041": "material factual claims are explicitly identifiable",
-        "BR-GEO-042": "factual statements contain sufficient factual context",
-        "BR-GEO-043": "numeric, temporal and quantitative claims contain necessary qualifiers",
-        "BR-GEO-044": "important information is understandable without excessive inference",
-        "BR-GEO-045": "material claims expose appropriate attribution or support when required",
-        "BR-GEO-046": "publisher, author or responsible entity is identifiable when relevant",
-        "BR-GEO-047": "publication and freshness signals are internally consistent",
-        "BR-GEO-048": "one primary and up to five relevant secondary intents are represented",
-        "BR-GEO-049": "material intent coverage gaps are evidence-backed",
-    }
-    return names[rule_id]
-
-
-def _finding(definition: RuleDefinition, execution: RuleExecution, persistence: AuditPersistence) -> Finding | None:
-    if execution.result not in {RuleResult.FAIL, RuleResult.WARNING} or not execution.evidence_ids:
+def _finding(
+    definition: RuleDefinition,
+    execution: RuleExecution,
+    persistence: AuditPersistence,
+) -> Finding | None:
+    if execution.result not in {RuleResult.FAIL, RuleResult.WARNING}:
+        return None
+    if not execution.evidence_ids:
         return None
     if execution.device is DeviceContext.DESKTOP:
         finding_device = FindingDevice.DESKTOP
@@ -618,6 +786,7 @@ def _finding(definition: RuleDefinition, execution: RuleExecution, persistence: 
         finding_device = FindingDevice.MOBILE
     else:
         return None
+
     finding = Finding(
         finding_id=new_id("FND"),
         audit_id=execution.audit_id,
