@@ -103,8 +103,13 @@ class JavascriptSpaAnalyzer:
         if http_status is None or not (200 <= http_status <= 299):
             return False
         page = self._extractor.extract(rendered_html)
-        candidates = [page.title or "", *(item.text for item in page.headings[:3])]
-        return any(_is_error_label(value) for value in candidates)
+        prominent = [page.title or "", *(item.text for item in page.headings[:3])]
+        prominent_error = any(_is_error_label(value) for value in prominent)
+        if not prominent_error:
+            return False
+        # Soft-404 is intentionally conservative: a numeric/title coincidence is
+        # insufficient. Require a corroborating error phrase in main content.
+        return _contains_error_phrase(page.main_content)
 
     def lazy_loading(
         self,
@@ -149,8 +154,12 @@ def _classify_architecture(raw: ExtractedPage, rendered: ExtractedPage) -> Archi
     return ArchitectureClassification.UNKNOWN
 
 
+def _normalize_signal(value: str) -> str:
+    return " ".join(value.casefold().replace("—", " ").replace("-", " ").split())
+
+
 def _is_error_label(value: str) -> bool:
-    normalized = " ".join(value.casefold().replace("—", " ").replace("-", " ").split())
+    normalized = _normalize_signal(value)
     exact = {
         "404",
         "404 not found",
@@ -176,6 +185,19 @@ def _is_error_label(value: str) -> bool:
             "erro",
         }
     return False
+
+
+def _contains_error_phrase(value: str) -> bool:
+    normalized = _normalize_signal(value)
+    phrases = (
+        "not found",
+        "page not found",
+        "página não encontrada",
+        "pagina nao encontrada",
+        "conteúdo não encontrado",
+        "conteudo nao encontrado",
+    )
+    return any(phrase in normalized for phrase in phrases)
 
 
 class _NavigationParser(HTMLParser):
