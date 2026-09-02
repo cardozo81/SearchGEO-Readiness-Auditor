@@ -1,6 +1,6 @@
 # IMPLEMENTATION_PLAN.md
 
-**Status:** APPROVED
+**Status:** APPROVED — extended with M13
 
 ## M0 — Bootstrap
 
@@ -172,6 +172,55 @@ Testar minimamente:
 - report;
 - regressões críticas.
 
+## M13 — Actionable GEO Remediation Report
+
+Objetivo:
+
+Evoluir a Stable Local Baseline de `GEO scoring/reporting` para `GEO scoring + evidence-backed actionable remediation`, sem alterar arbitrariamente o scoring aprovado.
+
+Implementar:
+
+- `RemediationRecipe` determinística por `rule_id` ou família de regras;
+- recomendações M10 específicas por regra sempre que houver recipe;
+- fallback explicitamente identificado;
+- `REPORT-GEO-002`;
+- resumo executivo com Compatibilidade GEO, Coverage e Confidence separados;
+- `NÃO DETERMINADA` quando Overall não for consolidável;
+- classificação textual/visual de score;
+- principais oportunidades derivadas dos dados persistidos;
+- scorecards Desktop/Mobile independentes;
+- plano de correção priorizado;
+- correções técnicas detalhadas com página, dispositivo, regra, alvo, observado, exemplo, aceite e revalidação;
+- separação explícita entre HTML observado e exemplo recomendado;
+- canonical acionável e conservadora;
+- reutilização de SemanticAssessment, reasoning_summary, entidades e intents persistidos;
+- Citation Readiness / Evidence Trust no report;
+- diagnóstico de crawl reabrível a partir de estado persistido;
+- documentação e testes mínimos de regressão.
+
+Restrições:
+
+- preservar `SCORE-GEO-001`;
+- preservar `PRIORITY-GEO-001`;
+- não converter UNKNOWN/ERROR/NOT_APPLICABLE em FAIL;
+- ausência de IA não penaliza o website;
+- não criar segunda chamada livre de IA para redação;
+- não inventar HTML observado, canonical, noindex policy, structured data, autor, fonte, data ou fatos;
+- relatório continua estático, autocontido, responsivo e sem dependência externa obrigatória.
+
+Critérios de conclusão:
+
+1. `evidence → finding → priority → remediation → report` está rastreável;
+2. resultado geral consolidado recebe score/classificação correta;
+3. resultado não consolidado aparece como `NÃO DETERMINADA`;
+4. score, Coverage e Confidence não são visualmente confundidos;
+5. canonical ausente possui recipe acionável sem URL preferencial fabricada;
+6. exemplo recomendado não é apresentado como HTML observado;
+7. diagnóstico de crawl explica limite/fontes/robots/sitemaps quando persistidos;
+8. Desktop e Mobile permanecem independentes;
+9. NO_AI é limitação de cobertura, não finding do site;
+10. report continua self-contained e scoring continua reproduzível.
+
 ## Stable Local Baseline
 
 Critérios:
@@ -193,6 +242,8 @@ Critérios:
 - limitações explícitas;
 - testes críticos.
 
+Após M13, a baseline de reporting também exige remediation acionável evidence-backed.
+
 Git/GitHub já são utilizados a partir do M0 para controle de versão e repositório de desenvolvimento.
 
 A adoção antecipada de Git/GitHub é uma decisão de processo de desenvolvimento e não torna GitHub dependência de execução do produto.
@@ -212,8 +263,10 @@ Cada marco deve ser tratado como unidade independente e somente pode ser conside
 
 Quando todos esses gates forem satisfeitos, o avanço automático ao marco seguinte é autorizado conforme D-034, sem necessidade de nova aprovação humana.
 
-Durante a cascata M4 → M12, a exclusão física das branches não bloqueia o avanço quando os controles de D-036 forem satisfeitos. A lista acumulada de branches encerradas deve ser apresentada ao humano ao final para exclusão manual.
+Durante a cascata M4 → M12, a exclusão física das branches não bloqueia o avanço quando os controles de D-036 forem satisfeitos. Para M13, o pedido de implementação aprovado mantém a mesma regra de limpeza manual: a branch não deve ser excluída pela automação quando o humano tiver solicitado exclusão manual.
 
-A cascata deve interromper diante dos blockers reais definidos em D-034 ou em outra decisão normativa aplicável. Problemas técnicos ordinários e solucionáveis devem ser diagnosticados, corrigidos, revalidados e não constituem, por si só, motivo para solicitar aprovação humana.
+A lista acumulada de branches encerradas deve ser apresentada ao humano ao final para exclusão manual.
+
+A execução deve interromper diante dos blockers reais definidos em D-034 ou em outra decisão normativa aplicável. Problemas técnicos ordinários e solucionáveis devem ser diagnosticados, corrigidos, revalidados e não constituem, por si só, motivo para solicitar aprovação humana.
 
 Nenhum marco pode ser declarado concluído apenas para permitir avanço, e nenhum escopo do marco seguinte deve ser antecipado materialmente antes do encerramento do marco atual, salvo infraestrutura estritamente necessária e já permitida pela especificação.

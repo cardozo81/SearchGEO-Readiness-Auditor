@@ -1,6 +1,6 @@
 # REPORTING_LANGUAGE_GLOSSARY.md
 
-**Status:** APPROVED
+**Status:** APPROVED — extended by M13 Actionable GEO Report
 
 ## 1. Regra editorial
 
@@ -13,7 +13,12 @@ Inglês somente quando:
 - tradução poderia reduzir precisão;
 - valor deriva diretamente de protocolo/HTML/API.
 
+O usuário deve descobrir o resultado executivo antes de metodologia detalhada.
+
 ## 2. Tradução da interface
+
+Overall Readiness
+→ Compatibilidade GEO
 
 Technical Accessibility
 → Acessibilidade Técnica
@@ -50,6 +55,9 @@ Finding
 
 Recommendation
 → Recomendação
+
+Remediation Recipe
+→ Receita de Remediação / Remediation Recipe
 
 Severity
 → Severidade
@@ -93,7 +101,58 @@ NOT_APPLICABLE
 ERROR
 → Erro de execução da análise
 
-## 3. Termos técnicos preservados
+## 3. Estado geral quando Overall não é consolidável
+
+Quando `OVERALL_READINESS` não possuir valor consolidado, o relatório deve usar explicitamente:
+
+```text
+COMPATIBILIDADE GEO
+NÃO DETERMINADA
+```
+
+Não usar somente `—` como estado principal.
+
+Não apresentar Coverage como substituto de Compatibilidade GEO.
+
+`NÃO DETERMINADA` significa informação insuficiente para conclusão geral; não equivale a zero, FAIL ou resultado crítico.
+
+## 4. Semântica visual
+
+Cores de referência:
+
+- sucesso / aprovado / resultado forte: verde (`#16803C`);
+- atenção: amarelo (`#D99A00`);
+- problema relevante: laranja (`#D65A00`);
+- erro / crítico: vermelho (`#C62828`);
+- não determinado / informação insuficiente: cinza (`#667085`);
+- informação metodológica: azul (`#2563EB`).
+
+Todo estado visual deve incluir texto. Cor isolada nunca é suficiente.
+
+Estados textuais possíveis incluem:
+
+- APROVADO;
+- ALERTA;
+- PROBLEMA;
+- CRÍTICO;
+- PARCIAL;
+- NÃO DETERMINADO;
+- NÃO CONSOLIDADO.
+
+## 5. Classificação textual de score válido
+
+| Faixa | Termo |
+|---:|---|
+| 90–100 | Excelente |
+| 75–89 | Alta |
+| 60–74 | Moderada |
+| 40–59 | Baixa |
+| 0–39 | Crítica |
+| sem resultado válido | Não Determinada |
+
+A cor do resultado geral deve respeitar também Consolidation. Um valor não consolidável não deve receber apresentação de resultado geral válido.
+
+## 6. Termos técnicos preservados
 
 Exemplos:
 
@@ -119,23 +178,23 @@ Soft 404 (página com semântica de erro sem status HTTP apropriado)
 
 Client-Side Rendering — CSR (renderização no navegador)
 
-## 4. Seção obrigatória
+## 7. Seção de interpretação
 
-Título:
+Título deve incluir:
 
 `Como interpretar este relatório`
 
-Deve explicar:
+Deve explicar separadamente:
 
-### Nota
+### Compatibilidade GEO
 
-Resultado quantitativo das regras efetivamente avaliadas.
+Quão preparado está o site segundo score consolidado.
 
 ### Cobertura da Análise
 
 Quanto do universo aplicável pôde ser efetivamente analisado.
 
-Baixa coverage não significa necessariamente baixa qualidade do site.
+Baixa Coverage não significa necessariamente baixa qualidade do site.
 
 ### Confiabilidade
 
@@ -149,9 +208,9 @@ Há cobertura e confiabilidade suficientes para apresentar o resultado como cons
 
 Parte relevante da avaliação está disponível, mas existem limitações.
 
-### Não Consolidado
+### Não Consolidado / Não Determinado
 
-Não há base suficiente para apresentar uma nota conclusiva.
+Não há base suficiente para apresentar conclusão agregada. O estado não é score zero.
 
 ### Severidade
 
@@ -165,7 +224,39 @@ Ordem recomendada de ação considerando gravidade, impacto, confiabilidade e fa
 
 São contextos independentes e podem apresentar resultados diferentes.
 
-## 5. Disclaimer de IA
+## 8. Linguagem de remediação
+
+Correções detalhadas devem preferir a sequência:
+
+```text
+Página
+Dispositivo
+Regra
+Severidade
+Prioridade
+Categoria GEO
+Alvo / elemento / local
+Problema encontrado
+Valor observado
+Correção recomendada
+Critério de aceite
+Como revalidar
+Evidências
+```
+
+Quando o trecho HTML original não estiver persistido:
+
+`Trecho HTML original não persistido para esta evidência.`
+
+Quando houver código recomendado, rotular:
+
+`Estrutura recomendada (exemplo)`
+
+Nunca rotular exemplo como HTML observado.
+
+Fallback deve ser explicitamente identificado como `FALLBACK DE REMEDIAÇÃO` ou equivalente.
+
+## 9. Disclaimer de IA
 
 Quando não houver IA:
 
@@ -173,13 +264,26 @@ Quando não houver IA:
 
 Quando IA externa for usada, o relatório deve indicar que análises semânticas utilizaram provider externo, sem revelar credenciais.
 
-## 6. Restrições
+O relatório não deve sugerir que a IA “deu a nota GEO”; score oficial continua determinístico.
 
-Nunca usar no relatório linguagem que prometa:
+## 10. Restrições
+
+Nunca usar linguagem que prometa:
 
 - ranking;
 - citação;
 - visibilidade;
 - presença em mecanismo generativo.
 
-O produto mede readiness.
+Nunca recomendar ou afirmar sem base:
+
+- canonical preferencial;
+- remoção de noindex;
+- structured data incompatível;
+- autoria;
+- data de atualização;
+- fonte;
+- claim factual;
+- informação comercial.
+
+O produto mede readiness e oferece remediação evidence-backed.

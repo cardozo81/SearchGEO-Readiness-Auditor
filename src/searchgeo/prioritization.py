@@ -7,6 +7,7 @@ from enum import StrEnum
 from typing import Iterable
 
 from searchgeo.domain import Finding, FindingDevice, Severity, new_id
+from searchgeo.remediation import recipe_for
 
 
 class Impact(StrEnum):
@@ -129,7 +130,7 @@ class PriorityEngine:
     version = "PRIORITY-GEO-001"
 
     def prioritize(self, *, audit_id: str, findings: Iterable[Finding], total_pages: int) -> PrioritizationResult:
-        finding_list = tuple(dict.fromkeys(findings)) if False else tuple(findings)
+        finding_list = tuple(findings)
         if total_pages < 0:
             raise ValueError("total_pages must not be negative")
         for finding in finding_list:
@@ -267,19 +268,22 @@ class PriorityEngine:
         return any(token in normalized for token in ("DISCOVERY", "ACCESS", "INDEX", "RENDER", "JAVASCRIPT", "SPA"))
 
     def _recommendation(self, *, audit_id: str, group: RemediationGroup, findings: list[Finding]) -> Recommendation:
-        category = findings[0].category.upper()
-        title, action = _template_for(category)
+        recipe = recipe_for(group.rule_id)
         expected = " ".join((findings[0].expected_condition or "").split())
-        description = action
+        description = recipe.description
+        if recipe.human_decision:
+            description = f"{description} Decisão necessária: {recipe.human_decision}"
         if expected:
-            description = f"{description} Critério de aceite: {expected}."
+            description = f"{description} Critério da regra: {expected}."
+        if recipe.fallback:
+            description = f"Fallback de remediação. {description}"
         return Recommendation(
             recommendation_id=new_id("REC"),
             audit_id=audit_id,
             finding_id=None,
             remediation_group_id=group.group_id,
             device=_recommendation_device(group.devices),
-            title=title,
+            title=recipe.title,
             description=description,
             impact=group.impact,
             effort=group.effort,
@@ -296,25 +300,3 @@ def _recommendation_device(devices: tuple[FindingDevice, ...]) -> FindingDevice:
     if FindingDevice.BOTH in effective or len(effective) > 1:
         return FindingDevice.BOTH
     return next(iter(effective))
-
-
-def _template_for(category: str) -> tuple[str, str]:
-    templates = (
-        (("DISCOVERY", "ACCESS", "INDEX", "ROBOTS", "SITEMAP", "CANONICAL"), "Corrigir acessibilidade e indexabilidade", "Ajustar a causa técnica observada e validar novamente acesso, diretivas e destino final."),
-        (("JAVASCRIPT", "SPA", "RENDER", "ARCHITECT"), "Corrigir comportamento de renderização", "Garantir que conteúdo e rotas essenciais permaneçam recuperáveis de forma consistente no contexto afetado."),
-        (("CONTENT", "EXTRACT"), "Melhorar extração do conteúdo principal", "Tornar o conteúdo principal e seu contexto estrutural explicitamente recuperáveis pelo auditor."),
-        (("STRUCTURED",), "Corrigir Dados Estruturados", "Ajustar marcação, tipos, propriedades e consistência com o conteúdo visível conforme o finding."),
-        (("SEMANTIC",), "Clarificar estrutura semântica", "Reorganizar título, headings e seções para tornar tópico e hierarquia explicitamente compreensíveis."),
-        (("ENTITY",), "Clarificar entidades", "Explicitar a entidade principal, tipos e relações relevantes, reduzindo ambiguidade material."),
-        (("ANSWER",), "Melhorar capacidade de resposta", "Representar a intenção principal e oferecer respostas explícitas com contexto suficiente quando aplicável."),
-        (("CITATION",), "Melhorar preparação para citação", "Explicitar claims factuais, qualificadores e contexto necessários para reutilização confiável."),
-        (("EVIDENCE", "TRUST"), "Fortalecer evidências e confiabilidade", "Explicitar autoria, atribuição, suporte e sinais de atualização quando aplicável."),
-        (("INTENT",), "Fechar lacunas de intenção", "Cobrir a intenção principal e intenções secundárias materiais suportadas pelas evidências."),
-        (("LINK",), "Corrigir navegação interna", "Garantir que destinos internos tecnicamente conhecidos sejam utilizáveis e consistentes."),
-        (("DUPLICATE",), "Reduzir duplicidade material", "Revisar páginas duplicadas ou quase duplicadas dentro do universo auditado e consolidar a intenção quando apropriado."),
-        (("DESKTOP", "MOBILE", "COMPARISON"), "Alinhar Desktop e Mobile", "Corrigir apenas as diferenças entre dispositivos classificadas como materialmente problemáticas."),
-    )
-    for tokens, title, action in templates:
-        if any(token in category for token in tokens):
-            return title, action
-    return "Corrigir finding evidence-backed", "Atender à condição esperada registrada no finding e revalidar com as mesmas evidências e regra versionada."
