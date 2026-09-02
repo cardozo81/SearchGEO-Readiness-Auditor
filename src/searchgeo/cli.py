@@ -142,7 +142,15 @@ def main(argv: list[str] | None = None) -> int:
             if args.max_pages <= 0:
                 raise ValueError("--max-pages must be greater than zero")
             provider = _semantic_provider(args)
-            audit_target: str | tuple[str, ...] = targets[0] if len(targets) == 1 else targets
+            # A urls file is an explicit URL_SET by definition, even when it
+            # contains one URL after comments/blank lines are removed.  Direct
+            # CLI input remains backward compatible: one positional target is
+            # the classic single-target mode; multiple positionals are URL_SET.
+            audit_target: str | tuple[str, ...] = (
+                targets
+                if args.urls_file or len(targets) > 1
+                else targets[0]
+            )
             result = run_audit(
                 audit_target,
                 audits_root=Path(args.audits_root),
