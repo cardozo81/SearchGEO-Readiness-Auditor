@@ -94,7 +94,7 @@ class M15ReportUxTests(unittest.TestCase):
                 ))
                 persistence.findings.add(Finding(
                     finding_id="FND-G", audit_id="AUD-M15", rule_id="BR-GEO-017",
-                    rule_execution_id="REX-G", page_id=None, device=FindingDevice.GLOBAL,
+                    rule_execution_id="REX-G", page_id=None, device=FindingDevice.BOTH,
                     category="ROBOTS", severity=Severity.MEDIUM, source="test",
                     title="Política de robots requer revisão", observed_value={"state": "OBTAINED"},
                     expected_condition="robots policy is interpretable", evidence_ids=(global_ev,), status="OPEN",
