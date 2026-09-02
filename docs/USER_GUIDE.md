@@ -34,9 +34,9 @@ searchgeo audit example.com
 
 Quando o target contém path, query ou fragment, informe `http://` ou `https://` explicitamente.
 
-## 4. Executar uma auditoria multi-URL em um único audit_id
+## 4. Executar uma auditoria multi-URL diretamente no comando
 
-M14 permite informar explicitamente várias URLs do mesmo origin. Elas são normalizadas e deduplicadas antes da aquisição e permanecem no mesmo workspace/audit_id.
+Várias URLs do mesmo normalized origin podem ser auditadas em um único `audit_id`. Elas são normalizadas e deduplicadas antes da aquisição.
 
 ```powershell
 searchgeo audit `
@@ -127,11 +127,12 @@ Páginas auditadas: N
 Problemas identificados: N
 Recomendações: N
 Relatório: audits\AUD-...\report.html
+Relatório por problemas: audits\AUD-...\remediation.html
 ```
 
-Uma auditoria com várias URLs gera **um único** `AUD-...`.
+Uma auditoria com várias URLs gera **um único** `AUD-...` e os dois HTMLs usam o mesmo estado persistido.
 
-`COMPLETE_WITH_LIMITATIONS` não significa necessariamente falha do website. Pode refletir, por exemplo, `NO_AI`, `max_pages` atingido ou avaliações não consolidadas.
+`COMPLETE_WITH_LIMITATIONS` não significa necessariamente falha do website. Pode refletir, por exemplo, `NO_AI`, provider indisponível, `max_pages` atingido ou avaliações não consolidadas.
 
 ## 9. Identificar a auditoria criada
 
@@ -148,25 +149,29 @@ O workspace não é reutilizado automaticamente. Reexecutar o comando cria nova 
 Na raiz do workspace:
 
 - `audit.db` — dados persistidos primários;
-- `report.html` — relatório estático para leitura humana;
+- `report.html` — visão principal orientada a página;
+- `remediation.html` — visão transversal orientada a regra/problema;
 - `artifacts/http/` — respostas RAW preservadas quando disponíveis;
 - `artifacts/rendered/` — HTML/DOM renderizado por página/dispositivo;
 - `artifacts/visual/` — screenshots PNG de viewport por página/dispositivo;
 - demais subdiretórios de `artifacts/` — extrações e evidências materializadas pelos marcos anteriores.
 
-Abra o relatório localmente no browser:
+Abra os relatórios localmente:
 
 ```powershell
 Start-Process .\audits\AUD-...\report.html
+Start-Process .\audits\AUD-...\remediation.html
 ```
 
-Os screenshots são referenciados por paths relativos. Para portabilidade, copie/compacte a pasta do audit inteira, não apenas `report.html`.
+Os dois HTMLs possuem links relativos entre si. Screenshots também são referenciados por paths relativos. Para portabilidade, copie/compacte a pasta do audit inteira.
 
 Consulte [OUTPUTS_AND_ARTIFACTS.md](OUTPUTS_AND_ARTIFACTS.md) para paths detalhados.
 
-## 11. Como interpretar o relatório M14
+## 11. Como interpretar `report.html`
 
-O relatório `REPORT-GEO-003` adiciona navegação orientada por domínio/página e evidência técnica concreta.
+`report.html` é a visão orientada a página. A partir do M15, em desktop ele possui menu lateral fixo com as URLs auditadas representadas por **path/query**, sem repetir o domínio. Paths longos são truncados apenas visualmente.
+
+Em viewport estreita, a navegação se torna compacta no topo para não consumir uma coluna lateral permanente.
 
 Cada finding pode mostrar, quando determinável:
 
@@ -183,7 +188,18 @@ Cada finding pode mostrar, quando determinável:
 - problema, impacto, alteração, critério de aceite e revalidação;
 - fonte técnica oficial ou indicação explícita de heurística interna.
 
-Quando não for possível associar um único elemento DOM, o relatório mostra `NÃO DETERMINADO` e explica a razão. Isso é intencional; o auditor não inventa selector.
+Quando não for possível associar um único elemento DOM, o relatório mostra `NÃO DETERMINADO` e explica a razão. O auditor não inventa selector.
+
+### Guia do Score GEO
+
+No final de `report.html`, o M15 inclui uma seção que explica as dez dimensões oficiais do Score GEO. Para cada dimensão, o relatório descreve:
+
+- o que ela mede;
+- como melhorar a condição/evidência avaliada;
+- estado Desktop/Mobile quando score estiver persistido;
+- referências técnicas oficiais quando houver uma fonte verificada aplicável.
+
+A seção final **Como interpretar** diferencia Score, Coverage, Confidence, Consolidation, Actionability e Desktop/Mobile.
 
 ### Actionability
 
@@ -209,7 +225,22 @@ Estado: NÃO CALCULADO
 
 `Coverage: 0%` é cobertura e não deve ser lida como `Score GEO: 0`.
 
-## 12. Recursos do domínio
+## 12. Como interpretar `remediation.html`
+
+`remediation.html` muda o ângulo da análise: em vez de começar pela página, começa pelo **problema/regra**.
+
+Ele separa:
+
+- **Problemas globais** — findings sem `page_id`, ligados ao domínio ou a recurso global;
+- **Problemas por página** — findings ligados a páginas concretas.
+
+Quando a mesma regra/actionability aparece em várias páginas, o relatório cria um único grupo e lista as ocorrências, permitindo distinguir rapidamente um padrão recorrente de um problema pontual.
+
+Cada grupo pode mostrar paths afetados, dispositivo, resultado, prioridade, selector, orientação de correção, critério de aceite e referências técnicas. Os paths apontam de volta para a seção correspondente em `report.html`.
+
+O agrupamento **não recalcula** score, finding, prioridade ou actionability; é somente outra projeção do mesmo `audit.db`.
+
+## 13. Recursos do domínio
 
 Em `URL_SET`, `robots.txt` e sitemap(s) são adquiridos no escopo do domínio/audit, não repetidos para cada página.
 
@@ -217,7 +248,7 @@ O relatório mostra a URL consultada, estado HTTP/interpretação, sitemaps decl
 
 Ausência válida de `robots.txt` ou sitemap não é automaticamente defeito: o resultado depende da Business Rule aplicável.
 
-## 13. Execução sem IA
+## 14. Execução sem IA
 
 É o comportamento padrão:
 
@@ -227,7 +258,7 @@ searchgeo audit https://example.com --ai-provider none
 
 A auditoria continua. Regras semantic-only que dependam de provider ficam `UNKNOWN` quando não houver base determinística suficiente. Isso reduz cobertura/consolidação aplicável, mas **não transforma ausência de IA em FAIL do site**.
 
-## 14. Execução com OpenAI
+## 15. Execução com OpenAI
 
 ```powershell
 $env:OPENAI_API_KEY = "<chave>"
@@ -243,11 +274,11 @@ searchgeo audit https://example.com --ai-provider openai --ai-model "<modelo sup
 
 Sem model, a CLI rejeita `--ai-provider openai`. Sem API key, o provider degrada para estado não configurado; a ausência de IA não é penalidade do website.
 
-M14 não adiciona uma chamada livre ao LLM para escrever recomendações. O relatório reutiliza análises persistidas e remediação determinística.
+M14/M15 não adicionam uma chamada livre ao LLM para escrever recomendações ou reorganizar o relatório. Os HTMLs reutilizam análises persistidas e remediação determinística.
 
 Consulte [AI_GUIDE.md](AI_GUIDE.md) e [CONFIGURATION.md](CONFIGURATION.md) para os modelos/variáveis suportados pela versão instalada.
 
-## 15. Sucesso, limitação e falha
+## 16. Sucesso, limitação e falha
 
 - `COMPLETE`: pipeline encerrada sem limitações que impeçam consolidação prevista.
 - `COMPLETE_WITH_LIMITATIONS`: auditoria encerrada com limitações explícitas.
@@ -256,7 +287,7 @@ Consulte [AI_GUIDE.md](AI_GUIDE.md) e [CONFIGURATION.md](CONFIGURATION.md) para 
 
 `UNKNOWN`, `ERROR` e `NOT_APPLICABLE` de uma regra não equivalem a `FAIL`.
 
-## 16. Reexecutar
+## 17. Reexecutar
 
 Corrija a causa desejada e execute o comando novamente. A baseline não possui comando de "resume" nem atualização in-place do workspace anterior.
 
@@ -264,4 +295,4 @@ Corrija a causa desejada e execute o comando novamente. A baseline não possui c
 searchgeo audit https://example.com --project "Revalidação"
 ```
 
-Compare os relatórios e, para análise técnica reproduzível, compare também os dados persistidos/artifacts de cada auditoria.
+Compare `report.html` e `remediation.html` entre auditorias e, para análise técnica reproduzível, compare também os dados persistidos/artifacts de cada workspace.
