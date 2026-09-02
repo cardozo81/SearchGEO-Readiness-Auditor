@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-from searchgeo.domain import DeviceContext, PageSnapshot, new_id, utc_now
+from searchgeo.domain import DeviceContext, Evidence, EvidenceType, PageSnapshot, new_id, utc_now
+from searchgeo.m14_persistence import ElementObservation, M14Persistence
 from searchgeo.m2 import M2ExecutionResult
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
 from searchgeo.rendering import BrowserRenderResult, BrowserRenderer, RenderErrorKind
@@ -32,6 +33,7 @@ class RenderFailure:
 class M3ExecutionResult:
     snapshot_ids: dict[str, dict[DeviceContext, str]]
     failures: tuple[RenderFailure, ...]
+    visual_artifact_refs: dict[str, dict[DeviceContext, str | None]] = field(default_factory=dict)
 
 
 def execute_m3(
@@ -46,9 +48,10 @@ def execute_m3(
     active_renderer: Renderer = renderer or BrowserRenderer()
     renderer_context = active_renderer if isinstance(active_renderer, BrowserRenderer) else nullcontext(active_renderer)
     snapshot_ids: dict[str, dict[DeviceContext, str]] = {}
+    visual_artifact_refs: dict[str, dict[DeviceContext, str | None]] = {}
     failures: list[RenderFailure] = []
 
-    with renderer_context as session_renderer:
+    with M14Persistence(workspace) as m14, renderer_context as session_renderer:
         for discovered in m2_result.discovery.pages:
             url = discovered.normalized_url
             page_id = m2_result.page_ids[url]
@@ -64,6 +67,7 @@ def execute_m3(
                 raise FileNotFoundError(f"M2 RAW artifact is not re-openable: {raw_artifact_ref}")
 
             per_device: dict[DeviceContext, str] = {}
+            per_device_visual: dict[DeviceContext, str | None] = {}
             for device in _DEVICES:
                 try:
                     render_result = session_renderer.render(url, device)
@@ -71,12 +75,20 @@ def execute_m3(
                     render_result = _unexpected_failure(url, device)
 
                 snapshot_id = new_id("SNP")
+                captured_at = utc_now()
                 rendered_artifact_ref = _write_rendered_artifact(
                     workspace,
                     page_id,
                     device,
                     snapshot_id,
                     render_result.rendered_html,
+                )
+                visual_artifact_ref = _write_visual_artifact(
+                    workspace,
+                    page_id,
+                    device,
+                    snapshot_id,
+                    render_result.screenshot_png,
                 )
                 browser_metadata = dict(render_result.browser_metadata)
                 browser_metadata["raw_http"] = {
@@ -87,6 +99,7 @@ def execute_m3(
                     "network_error": acquisition.network_error.kind.value if acquisition.network_error else None,
                 }
                 browser_metadata["render_succeeded"] = render_result.succeeded
+                browser_metadata["visual_artifact_ref"] = visual_artifact_ref
 
                 snapshot = PageSnapshot(
                     snapshot_id=snapshot_id,
@@ -94,7 +107,7 @@ def execute_m3(
                     device=device,
                     requested_url=url,
                     final_url=render_result.final_url or acquisition.final_url,
-                    captured_at=utc_now(),
+                    captured_at=captured_at,
                     http_status=(
                         render_result.http_status
                         if render_result.http_status is not None
@@ -111,6 +124,54 @@ def execute_m3(
                 )
                 persistence.snapshots.add(snapshot)
                 per_device[device] = snapshot.snapshot_id
+                per_device_visual[device] = visual_artifact_ref
+
+                if visual_artifact_ref is not None:
+                    viewport = (
+                        browser_metadata.get("profile", {}).get("viewport", {})
+                        if isinstance(browser_metadata.get("profile"), dict)
+                        else {}
+                    )
+                    persistence.evidence.add(
+                        Evidence(
+                            evidence_id=new_id("EV-GEO"),
+                            audit_id=page.audit_id,
+                            page_id=page_id,
+                            snapshot_id=snapshot_id,
+                            device=device,
+                            evidence_type=EvidenceType.VISUAL_SNAPSHOT,
+                            source="chromium:viewport",
+                            observed_value={
+                                "requested_url": url,
+                                "final_url": snapshot.final_url,
+                                "viewport": viewport,
+                                "artifact_reference": visual_artifact_ref,
+                            },
+                            artifact_reference=visual_artifact_ref,
+                            captured_at=captured_at,
+                        )
+                    )
+
+                for observed in render_result.element_observations:
+                    m14.add_element_observation(
+                        ElementObservation(
+                            element_observation_id=new_id("ELM"),
+                            audit_id=page.audit_id,
+                            page_id=page_id,
+                            snapshot_id=snapshot_id,
+                            device=device,
+                            url=snapshot.final_url or url,
+                            selector=observed.selector,
+                            tag_name=observed.tag_name,
+                            element_id=observed.element_id,
+                            classes=observed.classes,
+                            outer_html=observed.outer_html,
+                            text_excerpt=observed.text_excerpt,
+                            bounding_box=observed.bounding_box,
+                            artifact_reference=visual_artifact_ref,
+                            captured_at=captured_at,
+                        )
+                    )
 
                 if render_result.error_kind is not None:
                     failures.append(
@@ -121,8 +182,13 @@ def execute_m3(
                         )
                     )
             snapshot_ids[page_id] = per_device
+            visual_artifact_refs[page_id] = per_device_visual
 
-    return M3ExecutionResult(snapshot_ids=snapshot_ids, failures=tuple(failures))
+    return M3ExecutionResult(
+        snapshot_ids=snapshot_ids,
+        failures=tuple(failures),
+        visual_artifact_refs=visual_artifact_refs,
+    )
 
 
 def _write_rendered_artifact(
@@ -139,6 +205,24 @@ def _write_rendered_artifact(
     path = directory / f"{snapshot_id}.html"
     path.write_text(rendered_html, encoding="utf-8", newline="\n")
     return Path("artifacts", "rendered", page_id, device.value.lower(), path.name).as_posix()
+
+
+def _write_visual_artifact(
+    workspace: AuditWorkspace,
+    page_id: str,
+    device: DeviceContext,
+    snapshot_id: str,
+    screenshot_png: bytes | None,
+) -> str | None:
+    if screenshot_png is None:
+        return None
+    if not screenshot_png.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("renderer screenshot is not a PNG payload")
+    directory = workspace.artifacts / "visual" / page_id / device.value.lower()
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{snapshot_id}.png"
+    path.write_bytes(screenshot_png)
+    return Path("artifacts", "visual", page_id, device.value.lower(), path.name).as_posix()
 
 
 def _unexpected_failure(url: str, device: DeviceContext) -> BrowserRenderResult:
