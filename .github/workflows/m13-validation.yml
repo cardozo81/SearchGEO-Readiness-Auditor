@@ -1,0 +1,35 @@
+name: M13 temporary validation
+
+on:
+  push:
+    branches:
+      - m13-actionable-geo-report
+  workflow_dispatch:
+
+jobs:
+  critical-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: Install package
+        run: python -m pip install -e .
+      - name: M2 discovery and HTTP
+        run: python tests/test_m2_discovery_http.py
+      - name: M7 semantic and fallback
+        run: |
+          python tests/test_m7_content_extractability_gap.py
+          python tests/test_m7_dependency.py
+          python tests/test_m7_semantic_provider.py
+      - name: M9 scoring reproducibility
+        run: python tests/test_m9_scoring.py
+      - name: M10 prioritization and remediation
+        run: python tests/test_m10_prioritization.py
+      - name: M11 actionable reporting
+        run: python tests/test_m11_reporting.py
+      - name: M12 stable baseline regression
+        run: python tests/test_m12_stable_baseline.py
