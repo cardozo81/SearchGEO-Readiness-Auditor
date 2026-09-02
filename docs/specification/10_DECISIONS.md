@@ -98,6 +98,13 @@ Git/GitHub são adotados a partir do M0 como controle de versão e repositório 
 
 Essa adoção não altera o requisito de execução local e não torna GitHub dependência de runtime do produto.
 
+### D-033
+Quando um escopo ou marco implementado em branch estiver encerrado, validado e aprovado para integração, todo o conteúdo validado deve ser integrado em `main`.
+
+Após o merge, deve-se confirmar que `main` contém integralmente o resultado aprovado e que a branch de trabalho não possui conteúdo exclusivo pendente.
+
+Branches de marco já integradas e sem necessidade futura identificada devem ser removidas. Quando a ferramenta utilizada não permitir a remoção, a branch deve permanecer sincronizada com `main` e a pendência de limpeza deve ser informada explicitamente.
+
 ## PENDING ENVIRONMENT VALIDATION
 
 ### D-028
