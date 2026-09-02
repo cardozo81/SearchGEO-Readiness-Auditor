@@ -64,10 +64,12 @@ def run_audit(
     """Execute the approved pipeline and leave a reopenable local audit workspace.
 
     ``target`` may be one URL/domain or an explicit sequence of URLs.  A
-    sequence is normalized/deduplicated before the audit is created and all
-    unique URLs must belong to one exact normalized origin.
+    sequence always means URL_SET, even when normalization/deduplication leaves
+    a single unique URL.  This prevents an explicit set from silently falling
+    back to the ordinary crawl-expansion behavior of single-target mode.
     """
 
+    explicit_url_set = not isinstance(target, str)
     raw_targets, normalized_targets = _normalize_targets(target)
     if max_pages <= 0:
         raise ValueError("max_pages must be greater than zero")
@@ -93,7 +95,7 @@ def run_audit(
 
     audit_id = new_id("AUD")
     workspace = AuditWorkspace.create(Path(audits_root), audit_id)
-    target_type = TargetType.URL_SET if len(normalized_targets) > 1 else _target_type(normalized_target)
+    target_type = TargetType.URL_SET if explicit_url_set else _target_type(normalized_target)
     capabilities = [
         "filesystem",
         "sqlite",
@@ -128,21 +130,23 @@ def run_audit(
         persistence.audits.add(audit)
         persistence.targets.add(audit_target)
         with M14Persistence(workspace) as m14:
-            # Persist the deduplicated explicit input universe.  The original
-            # spelling for each surviving URL is retained alongside normalization.
-            input_pairs = tuple(
-                (raw, normalized)
-                for raw, normalized in zip(raw_targets, _normalized_per_raw(raw_targets), strict=True)
-                if normalized in normalized_targets
-            )
-            deduplicated_pairs: list[tuple[str, str]] = []
+            # Persist the deduplicated input universe plus separate raw/unique
+            # counts so the report can state exactly what the operator supplied.
+            normalized_per_raw = _normalized_per_raw(raw_targets)
+            input_pairs: list[tuple[str, str]] = []
             seen: set[str] = set()
-            for pair in input_pairs:
-                if pair[1] in seen:
+            for raw, normalized in zip(raw_targets, normalized_per_raw, strict=True):
+                if normalized in seen:
                     continue
-                seen.add(pair[1])
-                deduplicated_pairs.append(pair)
-            m14.replace_input_urls(audit_id, tuple(deduplicated_pairs))
+                seen.add(normalized)
+                input_pairs.append((raw, normalized))
+            m14.replace_input_urls(audit_id, tuple(input_pairs))
+            m14.set_input_summary(
+                audit_id,
+                input_mode=target_type.value,
+                supplied_count=len(raw_targets),
+                normalized_unique_count=len(normalized_targets),
+            )
 
         try:
             m2 = execute_m2(
