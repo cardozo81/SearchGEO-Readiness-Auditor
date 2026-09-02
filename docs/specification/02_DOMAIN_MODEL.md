@@ -1,6 +1,6 @@
 # DOMAIN_MODEL.md
 
-**Status:** APPROVED
+**Status:** APPROVED — extended by M13 Actionable GEO Report
 
 ## 1. Objetivo
 
@@ -27,6 +27,7 @@ Audit
 │   └── ScoreContribution
 ├── Recommendation
 │   └── RemediationGroup
+├── RemediationRecipe [catálogo determinístico por Rule]
 └── Report
 
 ## 3. Identificadores
@@ -46,6 +47,8 @@ Audit
 - SemanticAssessment: `SMA-*`
 - Report: `RPT-*`
 - RemediationGroup: `RMG-*`
+
+`RemediationRecipe` não necessita identificador de instância porque é definição determinística associada a `rule_id`, versionada pelo código/regraset aplicável.
 
 ## 4. Audit
 
@@ -418,6 +421,8 @@ Campos:
 - priority_class;
 - status.
 
+A Recommendation é persistida e continua sendo rastreável a finding/grupo. Sua descrição pode ser derivada da `RemediationRecipe` da regra.
+
 ## 19. RemediationGroup
 
 Agrupa findings relacionados à mesma causa.
@@ -437,7 +442,48 @@ Campos:
 - priority_score;
 - priority_class.
 
-## 20. Report
+## 20. RemediationRecipe
+
+Representação determinística e reproduzível da correção recomendada para uma regra ou família de regras.
+
+Campos conceituais:
+
+- rule_id;
+- title;
+- target;
+- element;
+- location;
+- action;
+- description;
+- example;
+- acceptance;
+- validation;
+- human_decision;
+- fallback.
+
+Regras:
+
+1. Recipe não altera Score, Severity, Finding ou Priority.
+2. Recipe não cria Evidence.
+3. Recipe é aplicada somente a finding já publicado/evidence-backed.
+4. Exemplo técnico é recomendação, nunca evidência observada.
+5. Quando a decisão correta depender de negócio/editorial/jurídico, `human_decision` deve explicitar a dependência.
+6. Fallback deve ser identificado como fallback.
+7. O catálogo pode permanecer em código; não é obrigatório duplicá-lo no banco porque é determinístico a partir de `rule_id` e da versão do auditor/ruleset.
+
+Exemplo conceitual para canonical:
+
+```text
+rule_id: BR-GEO-013
+target: Documento HTML
+element: link[rel="canonical"]
+location: head
+action: ADD_OR_CORRECT
+acceptance: canonical única quando aplicável, URL absoluta/válida, ausência de conflito
+human_decision: definir URL preferencial quando a evidência não permitir inferi-la
+```
+
+## 21. Report
 
 Campos:
 
@@ -452,7 +498,9 @@ Campos:
 
 O Report nunca é fonte primária dos dados.
 
-## 21. Invariantes
+O Report pode rederivar presentation-only data, como classificação visual, diagnóstico de crawl e aplicação de RemediationRecipe, desde que use somente estado persistido e regras determinísticas versionadas.
+
+## 22. Invariantes
 
 1. Todo PageSnapshot pertence a uma Page.
 2. Todo PageSnapshot possui DeviceContext.
@@ -468,3 +516,6 @@ O Report nunca é fonte primária dos dados.
 12. NOT_APPLICABLE não equivale a FAIL.
 13. Ausência de IA é limitação da auditoria.
 14. Finding sem evidência não pode ser publicado.
+15. RemediationRecipe não pode fabricar evidence, HTML observado, URL preferencial, autor, fonte, data, claim ou informação comercial.
+16. Compatibilidade GEO, Coverage e Confidence são conceitos distintos e devem permanecer visual e semanticamente separados.
+17. Se `OVERALL_READINESS` não for consolidável, o Report deve apresentar `NÃO DETERMINADA`, não substituir o valor por Coverage ou zero.
