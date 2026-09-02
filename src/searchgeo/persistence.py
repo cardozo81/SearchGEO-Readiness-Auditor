@@ -52,6 +52,85 @@ def _datetime_load(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value) if value is not None else None
 
 
+def _require_page_scope(connection: sqlite3.Connection, audit_id: str, page_id: str | None) -> None:
+    if page_id is None:
+        return
+    row = connection.execute("SELECT audit_id FROM pages WHERE page_id = ?", (page_id,)).fetchone()
+    if row is None or row["audit_id"] != audit_id:
+        raise sqlite3.IntegrityError(f"page {page_id} does not belong to audit {audit_id}")
+
+
+def _require_snapshot_scope(
+    connection: sqlite3.Connection,
+    audit_id: str,
+    page_id: str | None,
+    snapshot_id: str | None,
+    device: DeviceContext | None,
+) -> None:
+    if snapshot_id is None:
+        return
+    if page_id is None:
+        raise sqlite3.IntegrityError(f"snapshot {snapshot_id} requires a page reference")
+    row = connection.execute(
+        """
+        SELECT page_snapshots.page_id, page_snapshots.device, pages.audit_id
+        FROM page_snapshots
+        JOIN pages ON pages.page_id = page_snapshots.page_id
+        WHERE page_snapshots.snapshot_id = ?
+        """,
+        (snapshot_id,),
+    ).fetchone()
+    if row is None or row["audit_id"] != audit_id or row["page_id"] != page_id:
+        raise sqlite3.IntegrityError(
+            f"snapshot {snapshot_id} does not belong to page {page_id} in audit {audit_id}"
+        )
+    if device is not None and row["device"] != device.value:
+        raise sqlite3.IntegrityError(
+            f"snapshot {snapshot_id} device {row['device']} does not match {device.value}"
+        )
+
+
+def _require_evidence_scope(
+    connection: sqlite3.Connection,
+    audit_id: str,
+    evidence_ids: tuple[str, ...],
+) -> None:
+    for evidence_id in evidence_ids:
+        row = connection.execute(
+            "SELECT audit_id FROM evidence WHERE evidence_id = ?",
+            (evidence_id,),
+        ).fetchone()
+        if row is None or row["audit_id"] != audit_id:
+            raise sqlite3.IntegrityError(
+                f"evidence {evidence_id} does not belong to audit {audit_id}"
+            )
+
+
+def _require_rule_execution_scope(connection: sqlite3.Connection, finding: Finding) -> None:
+    row = connection.execute(
+        """
+        SELECT audit_id, rule_id, page_id, evidence_ids
+        FROM rule_executions
+        WHERE rule_execution_id = ?
+        """,
+        (finding.rule_execution_id,),
+    ).fetchone()
+    if (
+        row is None
+        or row["audit_id"] != finding.audit_id
+        or row["rule_id"] != finding.rule_id
+        or row["page_id"] != finding.page_id
+    ):
+        raise sqlite3.IntegrityError(
+            f"rule execution {finding.rule_execution_id} is inconsistent with finding {finding.finding_id}"
+        )
+    execution_evidence_ids = set(_json_load(row["evidence_ids"]))
+    if not set(finding.evidence_ids).issubset(execution_evidence_ids):
+        raise sqlite3.IntegrityError(
+            f"finding {finding.finding_id} references evidence outside its rule execution"
+        )
+
+
 class AuditWorkspace:
     """Filesystem paths owned by one audit."""
 
@@ -315,6 +394,14 @@ class PageSnapshotRepository(_Repository[PageSnapshot]):
 
 class EvidenceRepository(_Repository[Evidence]):
     def add(self, evidence: Evidence) -> None:
+        _require_page_scope(self._connection, evidence.audit_id, evidence.page_id)
+        _require_snapshot_scope(
+            self._connection,
+            evidence.audit_id,
+            evidence.page_id,
+            evidence.snapshot_id,
+            evidence.device,
+        )
         self._insert(
             "INSERT INTO evidence VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
@@ -352,6 +439,15 @@ class EvidenceRepository(_Repository[Evidence]):
 
 class RuleExecutionRepository(_Repository[RuleExecution]):
     def add(self, execution: RuleExecution) -> None:
+        _require_page_scope(self._connection, execution.audit_id, execution.page_id)
+        _require_snapshot_scope(
+            self._connection,
+            execution.audit_id,
+            execution.page_id,
+            execution.snapshot_id,
+            execution.device,
+        )
+        _require_evidence_scope(self._connection, execution.audit_id, execution.evidence_ids)
         self._insert(
             "INSERT INTO rule_executions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
@@ -395,6 +491,9 @@ class RuleExecutionRepository(_Repository[RuleExecution]):
 
 class FindingRepository(_Repository[Finding]):
     def add(self, finding: Finding) -> None:
+        _require_page_scope(self._connection, finding.audit_id, finding.page_id)
+        _require_evidence_scope(self._connection, finding.audit_id, finding.evidence_ids)
+        _require_rule_execution_scope(self._connection, finding)
         self._insert(
             "INSERT INTO findings VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (

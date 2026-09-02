@@ -232,3 +232,7 @@ class Finding:
     expected_condition: str | None
     evidence_ids: tuple[str, ...]
     status: str
+
+    def __post_init__(self) -> None:
+        if not self.evidence_ids:
+            raise ValueError("finding must reference at least one evidence")
