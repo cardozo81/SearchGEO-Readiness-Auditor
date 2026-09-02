@@ -207,10 +207,12 @@ Cada marco deve ser tratado como unidade independente e somente pode ser conside
 4. revisão de escopo, regressões, rastreabilidade, dependências e segredos;
 5. integração integral em `main` por PR validado;
 6. confirmação pós-merge de que `main` contém o resultado aprovado;
-7. confirmação de que a branch não possui conteúdo exclusivo e execução da limpeza Git obrigatória definida em D-035;
+7. confirmação de que a branch não possui conteúdo exclusivo e registro da branch para limpeza manual diferida conforme D-036;
 8. encerramento sem pendências bloqueantes.
 
 Quando todos esses gates forem satisfeitos, o avanço automático ao marco seguinte é autorizado conforme D-034, sem necessidade de nova aprovação humana.
+
+Durante a cascata M4 → M12, a exclusão física das branches não bloqueia o avanço quando os controles de D-036 forem satisfeitos. A lista acumulada de branches encerradas deve ser apresentada ao humano ao final para exclusão manual.
 
 A cascata deve interromper diante dos blockers reais definidos em D-034 ou em outra decisão normativa aplicável. Problemas técnicos ordinários e solucionáveis devem ser diagnosticados, corrigidos, revalidados e não constituem, por si só, motivo para solicitar aprovação humana.
 
