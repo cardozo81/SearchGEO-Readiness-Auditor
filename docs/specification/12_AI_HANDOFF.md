@@ -16,38 +16,30 @@ Não derive requisitos do histórico de chats quando houver definição normativ
 
 ## 3. Estado atual
 
-Especificação funcional:
-APPROVED
+A especificação funcional, Domain Model, Business Rules, Workflows, Scoring, Prioritization, Technical Architecture e Implementation Plan constituem baseline aprovada conforme seus respectivos documentos.
 
-Domain Model:
-APPROVED
+O estado real de implementação não deve ser inferido de texto histórico deste handoff.
 
-Business Rules:
-APPROVED
+Antes de qualquer novo trabalho:
 
-Workflows:
-APPROVED
+1. confirme o HEAD corrente de `main`;
+2. confirme os marcos efetivamente integrados em `main` por commits e PRs merged;
+3. confirme que não existe branch ou PR de marco anterior com conteúdo exclusivo pendente;
+4. derive o próximo marco exclusivamente de `09_IMPLEMENTATION_PLAN.md` e do estado confirmado de `main`.
 
-Scoring:
-APPROVED
+`main` é a referência operacional para determinar o que está efetivamente integrado.
 
-Prioritization:
-APPROVED
+## 4. Execução dos marcos
 
-Technical Architecture:
-APPROVED
+Os marcos e sua ordem são definidos em `09_IMPLEMENTATION_PLAN.md`.
 
-Implementation Plan:
-APPROVED
+Cada marco continua sendo unidade independente de implementação, validação, branch, PR, merge, confirmação pós-merge e limpeza Git.
 
-Código:
-M0 COMPLETED
+O avanço automático ao marco seguinte é permitido somente depois de todos os gates do marco anterior terem sido satisfeitos, conforme D-034 e D-035.
 
-## 4. Próximo marco
+Nenhum marco pode ser considerado concluído apenas para permitir avanço.
 
-`M1 — Audit + Persistence`
-
-Não avance automaticamente para M2.
+Bloqueio real interrompe a cascata antes de iniciar o marco seguinte.
 
 ## 5. Restrições principais
 
@@ -79,25 +71,35 @@ Não solicitar decisão humana para:
 
 - nomes internos de classes;
 - estrutura interna simples;
-- pequenas bibliotecas;
+- pequenas bibliotecas compatíveis;
 - refactors sem impacto funcional;
-- organização de arquivos sem alteração de contrato.
+- organização de arquivos sem alteração de contrato;
+- fixtures e ajustes de testes orientados a risco;
+- erros de programação ordinários e solucionáveis.
 
-Escolha a solução técnica mais simples compatível com a baseline.
+Escolha a solução técnica mais simples compatível com a baseline, corrija falhas solucionáveis, revalide e continue.
 
-## 7. Solicitar decisão humana somente quando houver
+## 7. Interromper somente diante de blocker real
 
-1. alteração de escopo;
-2. conflito entre requisitos aprovados;
-3. impossibilidade técnica relevante;
-4. mudança material de scoring;
-5. mudança material de prioridade;
-6. alteração na experiência/natureza do relatório;
-7. política ou restrição corporativa.
+A execução deve interromper quando houver pelo menos uma condição que dependa necessariamente de decisão ou ação humana, incluindo:
 
-## 8. Pendências humanas atuais
+1. conflito normativo real não solucionável pela precedência documental;
+2. impossibilidade técnica material após investigação;
+3. alteração necessária de escopo ou comportamento funcional aprovado;
+4. mudança material em scoring, priorização ou interpretação oficial;
+5. política ou autorização corporativa necessária;
+6. credencial, segredo ou acesso externo indispensável e indisponível;
+7. ação externa obrigatória que a ferramenta disponível não consiga executar;
+8. falha persistente de validação obrigatória após diagnóstico e tentativas razoáveis de correção;
+9. inconsistência de `main` que torne inseguro continuar;
+10. risco de operação destrutiva não previamente autorizada;
+11. qualquer decisão que a própria baseline determine explicitamente ser humana.
 
-Somente para homologação corporativa:
+Problemas técnicos ordinários e solucionáveis não constituem blocker.
+
+## 8. Pendências humanas de ambiente/corporativas
+
+Permanecem sujeitas às decisões D-028 e D-029, entre elas:
 
 - acesso técnico à OpenAI;
 - autorização corporativa de IA externa;
@@ -108,21 +110,4 @@ Somente para homologação corporativa:
 - SQLite;
 - EDR/políticas.
 
-Não bloqueiam M1 local.
-
-## 9. M0 — CONCLUÍDO
-
-M0 entregou:
-
-- estrutura mínima;
-- package Python;
-- configuração;
-- logging;
-- CLI;
-- --version;
-- audit <target>;
-- validação básica.
-
-Não foram criados módulos futuros vazios apenas porque aparecem em TECHNICAL_ARCHITECTURE.
-
-O próximo marco permitido é M1, conforme `09_IMPLEMENTATION_PLAN.md`.
+Essas pendências não bloqueiam automaticamente o desenvolvimento local. Tornam-se blocker somente quando impedirem um gate obrigatório do marco em execução.
