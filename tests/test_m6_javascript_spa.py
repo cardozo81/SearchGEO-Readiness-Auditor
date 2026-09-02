@@ -59,6 +59,13 @@ class M6JavascriptSpaTests(unittest.TestCase):
         self.assertEqual(nav.crawlable_internal_links, ("https://example.test/ok",))
         self.assertEqual(nav.non_crawlable_navigation_controls, 1)
 
+        role_nav = analyzer.navigation(
+            '<div role="navigation"><button onclick="go()">Inside</button></div><button onclick="outside()">Outside</button>',
+            base_url="https://example.test/",
+            origin="https://example.test",
+        )
+        self.assertEqual(role_nav.non_crawlable_navigation_controls, 1)
+
     def test_lazy_content_recovered_by_bounded_probe_is_not_failed(self) -> None:
         analyzer = JavascriptSpaAnalyzer()
         initial = '<html><body><main></main><img loading="lazy" data-src="hero.jpg"></body></html>'
