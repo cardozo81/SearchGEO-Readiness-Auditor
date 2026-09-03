@@ -108,6 +108,21 @@ searchgeo audit --urls-file .\urls.txt --project "Site"
 
 As variáveis abaixo não são parâmetros CLI, mas alteram a execução de `--ai-provider`.
 
+## Timeout global das chamadas de IA
+
+| Variável | Default | Efeito |
+|---|---:|---|
+| `SEARCHGEO_AI_TIMEOUT_SECONDS` | `180` | Timeout por chamada externa de IA, em segundos. Aplica-se ao provider explícito e a todos os providers elegíveis de `auto`. Deve ser número finito maior que zero. |
+
+Exemplo:
+
+```powershell
+$env:SEARCHGEO_AI_TIMEOUT_SECONDS = "240"
+searchgeo audit https://example.com --ai-provider openai
+```
+
+O timeout não cria retry automático. Uma expiração continua sendo `TIMEOUT_ERROR`; o SearchGEO não repete silenciosamente a mesma requisição, evitando duplicação potencial de consumo.
+
 | Provider | API key | Modelo por ambiente | Reasoning por ambiente | Default atual |
 |---|---|---|---|---|
 | OpenAI | `OPENAI_API_KEY` | `SEARCHGEO_OPENAI_MODEL` | `SEARCHGEO_OPENAI_REASONING_EFFORT` | `gpt-5.6-terra` / `HIGH` |
@@ -189,6 +204,8 @@ Provider explícito sem sua API key retorna `NOT_CONFIGURED`. Nenhuma chamada ex
 
 Em `auto`, provider sem token simplesmente **não entra na cadeia**. Se nenhum provider tiver token/configuração elegível, `AUTO` opera sem chamadas externas e a análise semântica fica sem provider configurado.
 
+A ausência de `DEEPSEEK_API_KEY` ou `MIMO_API_KEY` não interfere em uma execução explícita `--ai-provider openai`. Da mesma forma, cada provider explícito depende apenas da sua própria credencial/configuração.
+
 ### Configuração/modelo inválido
 
 Provider explícito com model ID fora do allowlist falha na validação da CLI/configuração antes da auditoria efetiva.
@@ -222,6 +239,8 @@ Em `auto`, a falha coloca aquele provider em `QUARANTINED_FOR_AUDIT` e o próxim
 ### Lock de provider por URL
 
 Quando um provider produz a primeira análise válida de uma URL, essa URL fica fixada naquele provider para manter Desktop/Mobile comparáveis.
+
+Depois de um resultado válido, outros providers não são chamados para completar o mesmo contexto. No segundo device, somente o provider já fixado pode ser usado.
 
 Se o mesmo provider falhar no segundo device da URL:
 
@@ -259,6 +278,8 @@ A seção **Uso de IA — execução e telemetria** mostra, quando M18 está mat
 - failover observado;
 - cobertura por URL/device;
 - uma linha por tentativa com URL, device, provider, model, status, tokens, custo estimado, duração e erro sanitizado.
+
+A tabela permanece dentro do bloco principal do relatório e usa rolagem horizontal interna quando a largura das colunas excede o espaço disponível.
 
 `ESTIMATED_COST` é estimativa calculada pelo catálogo local versionado; não é invoice nem billing do provider e não participa do score.
 
@@ -298,6 +319,14 @@ OpenAI explícito:
 
 ```powershell
 $env:OPENAI_API_KEY = "<chave>"
+searchgeo audit https://example.com --project "Institucional" --ai-provider openai --ai-model gpt-5.6-terra
+```
+
+OpenAI com timeout ampliado explicitamente pelo ambiente:
+
+```powershell
+$env:OPENAI_API_KEY = "<chave>"
+$env:SEARCHGEO_AI_TIMEOUT_SECONDS = "240"
 searchgeo audit https://example.com --project "Institucional" --ai-provider openai --ai-model gpt-5.6-terra
 ```
 
