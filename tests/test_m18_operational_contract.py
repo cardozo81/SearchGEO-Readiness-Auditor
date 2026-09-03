@@ -50,7 +50,7 @@ class M18OperationalContractTests(unittest.TestCase):
         self.assertEqual(status, "CHAIN_EXHAUSTED")
         self.assertTrue(exhausted)
 
-    def test_explicit_provider_without_token_is_visible_in_persistence_and_reports(self) -> None:
+    def test_explicit_provider_without_token_is_visible_in_persistence_and_ai_page(self) -> None:
         with _server() as origin, TemporaryDirectory() as directory:
             html = """<!doctype html><html lang='pt-BR'><head><title>Sem token</title></head>
 <body><main><h1>Sem token</h1><p>Fixture para validar estado operacional sem credencial.</p></main></body></html>"""
@@ -87,15 +87,16 @@ class M18OperationalContractTests(unittest.TestCase):
             self.assertIsNone(session["effective_provider"])
             self.assertEqual(attempts, 0)
 
-            report = result.report_path.read_text(encoding="utf-8")
-            remediation = (result.audit_root / "remediation.html").read_text(encoding="utf-8")
-            self.assertIn("IA habilitada pelo comando", report)
-            self.assertIn("Provider configurado", report)
-            self.assertIn("NOT_CONFIGURED", report)
-            self.assertIn("Chamadas externas realizadas", report)
-            self.assertIn("Nenhuma chamada externa foi realizada", report)
-            self.assertIn("provider de IA selecionado, mas sem configuração/credencial elegível", remediation)
-            self.assertIn("<strong>Chamadas externas:</strong> 0", remediation)
+            overview = result.report_path.read_text(encoding="utf-8")
+            ai = (result.audit_root / "report" / "ai-usage.html").read_text(encoding="utf-8")
+            remediation = (result.audit_root / "report" / "remediation.html").read_text(encoding="utf-8")
+            self.assertIn("Uso de IA", ai)
+            self.assertIn("IA habilitada", ai)
+            self.assertIn("NOT_CONFIGURED", ai)
+            self.assertIn("Nenhuma chamada externa", ai)
+            self.assertIn("Nenhum resultado semântico válido", ai)
+            self.assertNotIn("NOT_CONFIGURED", overview)
+            self.assertIn("Remediações", remediation)
 
     def test_cli_reference_documents_every_exposed_argument(self) -> None:
         text = Path("docs/CLI_REFERENCE.md").read_text(encoding="utf-8")
@@ -110,8 +111,10 @@ class M18OperationalContractTests(unittest.TestCase):
             "`--market CODE`",
             "`--max-pages N`",
             "`--audits-root PATH`",
+            "`--device-context`",
             "`--ai-provider`",
             "`--ai-model MODEL_ID`",
+            "`SEARCHGEO_DEVICE_CONTEXT`",
         )
         for token in required_tokens:
             with self.subTest(token=token):
