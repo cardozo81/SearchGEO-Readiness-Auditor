@@ -1,80 +1,56 @@
-# Guia de IA — M18
+# AI_GUIDE.md
 
-Este documento descreve o contrato operacional atual de IA do SearchGEO Readiness Auditor. IA é **opcional** e nunca calcula o Score oficial.
+Guia de uso da camada semântica opcional do SearchGEO.
 
-## Modos disponíveis
+## Princípio
 
-| Seleção CLI | Comportamento |
-|---|---|
-| `--ai-provider none` | IA desabilitada. Nenhuma chamada externa. |
-| `--ai-provider openai` | Usa somente OpenAI. Sem cross-provider fallback. |
-| `--ai-provider deepseek` | Usa somente DeepSeek. Sem cross-provider fallback. |
-| `--ai-provider mimo` | Usa somente Xiaomi MiMo. Sem cross-provider fallback. |
-| `--ai-provider auto` | Cria cadeia determinística com providers elegíveis e permite failover controlado. |
+IA externa é capacidade complementar. O auditor permanece funcional sem IA.
 
-O default é `none`.
+Falha, indisponibilidade, quota, timeout ou credencial ausente de um provider é limitação operacional da auditoria; **não é finding do website**.
 
-## O que a IA faz
+## Dispositivo e custo
 
-Os providers semânticos produzem avaliações auxiliares para `BR-GEO-028..049`, usando apenas o contexto/evidence fornecido pelo auditor.
+A CLI usa Mobile por padrão:
 
-Uma resposta só é aceita quando satisfaz o contrato SearchGEO, incluindo:
+```text
+--device-context mobile
+```
 
-- exatamente 22 assessments semânticos;
-- nenhuma regra ausente;
-- nenhuma regra duplicada;
-- nenhum `rule_id` desconhecido;
-- enums válidos;
-- `evidence_ids` existentes no contexto enviado;
-- estrutura JSON válida;
-- normalização local concluída.
+Valores:
 
-HTTP `200` ou JSON parseável, isoladamente, não significam análise válida.
+```text
+mobile
+desktop
+both
+```
 
-## O que a IA não faz
+A seleção acontece antes do rendering. M7 analisa somente snapshots existentes. Consequência prática:
 
-O LLM não:
+- `mobile`: nenhuma chamada semântica Desktop;
+- `desktop`: nenhuma chamada semântica Mobile;
+- `both`: os dois contextos quando disponíveis.
 
-- calcula `SCORE-GEO-001`;
-- altera pesos;
-- converte `UNKNOWN` em `FAIL`;
-- define severity/actionability/prioridade por conta própria;
-- garante ranking, citação, tráfego ou visibilidade;
-- inventa evidence válida;
-- substitui Business Rules;
-- fornece chain-of-thought persistido ao auditor.
+Para auditoria inicial com IA, `mobile` é a opção de menor custo entre os modos que executam análise de página.
 
-# Providers e modelos suportados
+Variável equivalente:
 
-O M18 usa allowlist explícito de model IDs. Valores fora da lista são rejeitados.
+```powershell
+$env:SEARCHGEO_DEVICE_CONTEXT = "mobile"
+```
 
-| Provider | Model IDs suportados | Default | Reasoning default | Qualificação SearchGEO |
-|---|---|---|---|---|
-| OpenAI | `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna` | `gpt-5.6-terra` | `HIGH` | `QUALIFIED` |
-| DeepSeek | `deepseek-v4-pro`, `deepseek-v4-flash` | `deepseek-v4-pro` | `HIGH` | `PROVISIONAL` |
-| Xiaomi MiMo | `mimo-v2.5-pro`, `mimo-v2.5` | `mimo-v2.5-pro` | `HIGH` | `PROVISIONAL` |
+## Sem IA
 
-MiMo normaliza qualquer reasoning habilitado (`LOW`, `MEDIUM`, `HIGH`) para o perfil operacional `THINKING_ENABLED` no relatório; não se infere superioridade entre esses níveis.
+```powershell
+searchgeo audit https://example.com --ai-provider none
+```
 
-GitHub Copilot **não** é `SemanticProvider` do SearchGEO.
+Com `none`:
 
-## Política de confiabilidade SearchGEO
-
-A ordenação M18 é política inicial de adequação ao contrato do auditor, não benchmark científico universal.
-
-| Rank | Provider | Modelo | Perfil | Classe |
-|---:|---|---|---|---|
-| 1 | OpenAI | `gpt-5.6-sol` | `HIGH/XHIGH` | `QUALIFIED-A+` |
-| 2 | OpenAI | `gpt-5.6-terra` | `HIGH` | `QUALIFIED-A` |
-| 3 | DeepSeek | `deepseek-v4-pro` | `HIGH` | `PROVISIONAL-A-` |
-| 4 | MiMo | `mimo-v2.5-pro` | `THINKING_ENABLED` | `PROVISIONAL-B+` |
-| 5 | OpenAI | `gpt-5.6-luna` | `HIGH` | `QUALIFIED-B+` |
-| 6 | DeepSeek | `deepseek-v4-flash` | `HIGH` | `PROVISIONAL-B` |
-| 7 | MiMo | `mimo-v2.5` | `THINKING_ENABLED` | `PROVISIONAL-B` |
-
-DeepSeek/MiMo permanecem `PROVISIONAL` até benchmark SearchGEO específico.
-
-# Configuração por provider
+- nenhuma chamada externa;
+- regras determinísticas continuam;
+- regras semantic-only sem base suficiente ficam `UNKNOWN`;
+- Coverage/Consolidation podem reduzir;
+- o website não recebe FAIL por ausência de provider.
 
 ## OpenAI
 
@@ -83,17 +59,19 @@ $env:OPENAI_API_KEY = "<chave>"
 searchgeo audit https://example.com --ai-provider openai
 ```
 
-Variáveis opcionais:
+Default:
 
-```powershell
-$env:SEARCHGEO_OPENAI_MODEL = "gpt-5.6-terra"
-$env:SEARCHGEO_OPENAI_REASONING_EFFORT = "HIGH"
+```text
+model: gpt-5.6-terra
+reasoning: HIGH
 ```
 
-Ou model override por execução:
+Modelos aceitos:
 
-```powershell
-searchgeo audit https://example.com --ai-provider openai --ai-model gpt-5.6-sol
+```text
+gpt-5.6-sol
+gpt-5.6-terra
+gpt-5.6-luna
 ```
 
 ## DeepSeek
@@ -103,18 +81,16 @@ $env:DEEPSEEK_API_KEY = "<chave>"
 searchgeo audit https://example.com --ai-provider deepseek
 ```
 
-Variáveis opcionais:
+Modelos:
 
-```powershell
-$env:SEARCHGEO_DEEPSEEK_MODEL = "deepseek-v4-pro"
-$env:SEARCHGEO_DEEPSEEK_REASONING_EFFORT = "HIGH"
+```text
+deepseek-v4-pro
+deepseek-v4-flash
 ```
 
-Override por execução:
+Default `deepseek-v4-pro` / `HIGH`.
 
-```powershell
-searchgeo audit https://example.com --ai-provider deepseek --ai-model deepseek-v4-flash
-```
+A qualificação SearchGEO permanece `PROVISIONAL`.
 
 ## Xiaomi MiMo
 
@@ -123,247 +99,136 @@ $env:MIMO_API_KEY = "<chave>"
 searchgeo audit https://example.com --ai-provider mimo
 ```
 
-Variáveis opcionais:
+Modelos:
 
-```powershell
-$env:SEARCHGEO_MIMO_MODEL = "mimo-v2.5-pro"
-$env:SEARCHGEO_MIMO_REASONING_EFFORT = "HIGH"
+```text
+mimo-v2.5-pro
+mimo-v2.5
 ```
 
-Override por execução:
+Default `mimo-v2.5-pro` / `THINKING_ENABLED`.
+
+A qualificação SearchGEO permanece `PROVISIONAL`.
+
+## Provider explícito
+
+Quando um provider é selecionado explicitamente:
+
+- somente ele pode atender a análise;
+- ausência das chaves dos outros providers não interfere;
+- não existe cross-provider fallback;
+- após falha qualificadora, o provider pode ficar `QUARANTINED_FOR_AUDIT`;
+- não há retries sucessivos em novas URLs após quarantine.
+
+Provider explícito sem token fica `NOT_CONFIGURED` e não realiza chamada.
+
+## AUTO
 
 ```powershell
-searchgeo audit https://example.com --ai-provider mimo --ai-model mimo-v2.5
+searchgeo audit https://example.com --ai-provider auto
 ```
 
-## Timeout das chamadas externas
+A cadeia é construída uma vez com providers elegíveis. Providers sem token ou configuração inválida são excluídos.
 
-A CLI aplica `180` segundos por chamada de IA por padrão. O timeout pode ser alterado para provider explícito e para todos os candidatos elegíveis de `auto`:
-
-```powershell
-$env:SEARCHGEO_AI_TIMEOUT_SECONDS = "240"
-searchgeo audit https://example.com --ai-provider openai
-```
-
-O valor deve ser numérico, finito e maior que zero. Com `--ai-provider none`, a variável é ignorada porque não existe chamada externa.
-
-Timeout não gera retry automático. Uma chamada pode expirar no cliente e ainda ter sido recebida/processada pelo provider; repetir silenciosamente criaria risco de consumo duplicado.
-
-# Sem IA
-
-```powershell
-searchgeo audit https://example.com --ai-provider none
-```
-
-Ou simplesmente:
-
-```powershell
-searchgeo audit https://example.com
-```
-
-A auditoria continua em modo sem IA. Regras semantic-only sem fallback determinístico suficiente ficam `UNKNOWN`. Isso pode reduzir Coverage/Confidence/Consolidation, mas não reduz qualidade do website artificialmente.
-
-# Um provider explícito
-
-Provider explícito é `SINGLE_PROVIDER`.
-
-Regras:
-
-1. só o provider escolhido pode receber requisições;
-2. não existe fallback para outro fornecedor;
-3. sem token, o estado é `NOT_CONFIGURED` e nenhuma requisição externa é realizada;
-4. model inválido é rejeitado antes da execução efetiva;
-5. após falha qualificadora, o provider entra em `QUARANTINED_FOR_AUDIT`;
-6. após quarantine, ele não é chamado novamente em URLs seguintes do mesmo audit;
-7. sessão semântica insuficiente permanece `DEGRADED`, não `CHAIN_EXHAUSTED`;
-8. chaves ausentes de outros providers não interferem no provider explicitamente selecionado.
-
-Exemplo:
-
-```powershell
-$env:OPENAI_API_KEY = "<chave>"
-searchgeo audit --urls-file .\urls.txt --ai-provider openai
-```
-
-Se a OpenAI retornar falta de créditos na primeira chamada, nenhuma DeepSeek/MiMo será usada e OpenAI não será consultada nas URLs seguintes daquele audit.
-
-# Vários providers — `auto`
-
-Configure uma ou mais chaves:
-
-```powershell
-$env:OPENAI_API_KEY = "<chave-openai>"
-$env:DEEPSEEK_API_KEY = "<chave-deepseek>"
-$env:MIMO_API_KEY = "<chave-mimo>"
-searchgeo audit --urls-file .\urls.txt --ai-provider auto
-```
-
-## Como a cadeia é montada
-
-No início do audit:
-
-1. cada provider sem API key é ignorado;
-2. cada provider com configuração/model inválido é excluído e aparece em `excluded_configurations`;
-3. os providers elegíveis são ordenados pelo rank SearchGEO do modelo configurado;
-4. a cadeia resultante fica imutável durante aquele audit.
-
-Para defaults com três tokens:
+Default de preferência para os modelos default:
 
 ```text
 OpenAI gpt-5.6-terra
-  -> DeepSeek deepseek-v4-pro
-  -> MiMo mimo-v2.5-pro
+→ DeepSeek deepseek-v4-pro
+→ MiMo mimo-v2.5-pro
 ```
 
-`AUTO` **não chama todos em paralelo**.
+A ordem é política SearchGEO, não benchmark científico universal.
 
-## Falha e failover
+### Fluxo de uma tentativa
 
-Para uma URL ainda sem provider fixado:
+1. selecionar primeiro provider saudável da cadeia;
+2. fazer uma chamada estruturada;
+3. validar resposta/contrato/evidências;
+4. se válida, aceitar e encerrar o contexto;
+5. se falhar de forma qualificadora, quarantinar e tentar próximo provider quando permitido.
 
-1. tenta o provider saudável de maior prioridade;
-2. se houver resposta válida, encerra a cadeia para aquele contexto e nenhum provider posterior é chamado para sobrescrever o resultado;
-3. se houver erro técnico/contratual, o provider fica `QUARANTINED_FOR_AUDIT`;
-4. o próximo provider saudável pode ser tentado;
-5. provider quarantined nunca é reintroduzido no mesmo audit.
+**Um resultado válido não é sobrescrito por providers posteriores.**
 
-Se todos os providers forem quarantined:
+## URL lock
+
+Quando uma URL recebe primeiro resultado válido, o provider fica associado àquela URL para consistência entre contextos.
+
+Se o mesmo provider falhar no segundo dispositivo da mesma URL em `both`, outro provider não completa essa URL com semântica de fornecedor diferente. O contexto faltante permanece degradado/UNKNOWN e o provider pode ser quarantined para URLs seguintes.
+
+Em modo `mobile` ou `desktop`, existe apenas um contexto por URL e esse caso não ocorre dentro da mesma execução.
+
+## Timeout
+
+Variável:
 
 ```text
-status da sessão: CHAIN_EXHAUSTED
-limitação: AI_PROVIDER_CHAIN_EXHAUSTED
+SEARCHGEO_AI_TIMEOUT_SECONDS
 ```
 
-As regras determinísticas continuam. Dependências semantic-only ficam `UNKNOWN` quando não existe base suficiente.
+Default CLI:
 
-# Provider lock por URL — Desktop/Mobile
-
-O primeiro provider que produz resultado válido para uma URL fica `PINNED_TO_URL` conceitualmente.
+```text
+180
+```
 
 Exemplo:
 
-```text
-URL A Desktop -> OpenAI SUCCESS
-URL A Mobile  -> deve usar OpenAI
+```powershell
+$env:SEARCHGEO_AI_TIMEOUT_SECONDS = "240"
 ```
 
-Se OpenAI falhar no Mobile:
+Número finito > 0.
+
+Não há retry automático após timeout. A API pode ter recebido/processado a chamada mesmo quando o cliente local expirou; repetir automaticamente poderia duplicar consumo.
+
+## Classes operacionais de erro
+
+O runtime normaliza falhas como, conforme o caso:
+
+- autenticação;
+- quota/crédito;
+- rate limit;
+- modelo/permissão;
+- rede;
+- timeout;
+- servidor;
+- contrato/resposta inválida/vazia.
+
+Mensagem sensível do provider não deve ser copiada integralmente ao report.
+
+## Evidência
+
+A resposta do provider só é aceita se satisfizer o contrato estruturado e referenciar evidências válidas do contexto fornecido. Evidência inventada degrada a análise para estado semântico inválido/UNKNOWN; não é usada para criar FAIL.
+
+## Confidence
+
+A confidence retornada pelo provider em uma avaliação semântica individual **não é automaticamente a Confidence do SCORE-GEO-002**.
+
+Da mesma forma, `Confidence LOW` no score não deve disparar, sozinha, uma recomendação para reescrever conteúdo. Alteração de conteúdo deve ser sustentada por RuleExecution/finding e evidência específica.
+
+## Telemetria
+
+A saída final fica em:
 
 ```text
-URL A Mobile -> DEGRADED/UNKNOWN quando aplicável
-OpenAI -> QUARANTINED_FOR_AUDIT para URLs seguintes
-DeepSeek NÃO completa URL A Mobile
-URL B -> pode iniciar em DeepSeek
+report/ai-usage.html
 ```
 
-Isso evita produzir Desktop e Mobile da mesma URL com providers diferentes.
+A página pode mostrar:
 
-# Estados e cenários
-
-| Cenário | Chamada externa? | Resultado operacional |
-|---|---:|---|
-| `none` | Não | `NO_AI` / IA desabilitada |
-| explícito sem token | Não | `NOT_CONFIGURED`; sem IA efetiva |
-| `auto` sem nenhum token | Não | nenhuma cadeia elegível; sem IA efetiva |
-| explícito válido com sucesso | Sim | `FULL` quando universo aplicável é atendido |
-| explícito com erro/crédito | Sim, até falhar | `DEGRADED`; provider quarantined; sem fallback cruzado |
-| `auto` com primeiro provider falhando e segundo funcionando | Sim | failover; primeiro quarantined; segundo pode se tornar efetivo |
-| `auto` com todos falhando | Sim | `CHAIN_EXHAUSTED`; `AI_PROVIDER_CHAIN_EXHAUSTED` |
-| pinned provider falha no segundo device | Sim | sem fallback para mesma URL; contexto degradado |
-
-# Classes de erro
-
-O M18 normaliza diagnósticos em:
-
-```text
-AUTH_ERROR
-QUOTA_ERROR
-CREDIT_ERROR
-RATE_LIMIT_ERROR
-MODEL_ERROR
-PERMISSION_ERROR
-NETWORK_ERROR
-TIMEOUT_ERROR
-SERVER_ERROR
-CONTRACT_ERROR
-EMPTY_RESPONSE
-INVALID_RESPONSE
-UNKNOWN_PROVIDER_ERROR
-```
-
-Exemplos:
-
-- token inválido -> `AUTH_ERROR`;
-- conta sem saldo/créditos -> `CREDIT_ERROR` quando identificável;
-- rate limit -> `RATE_LIMIT_ERROR`;
-- timeout -> `TIMEOUT_ERROR`;
-- resposta incompleta/schema inválido/evidence inventada -> `CONTRACT_ERROR`/`INVALID_RESPONSE` conforme o caso.
-
-`TIMEOUT_ERROR` não equivale a erro de crédito ou autenticação. Ele informa apenas que a chamada não terminou dentro do limite do cliente.
-
-Texto bruto potencialmente sensível da mensagem do provider não é necessário para classificar a falha e não deve ser usado como relatório de diagnóstico.
-
-# Telemetria e custo
-
-Cada tentativa materializável pode registrar:
-
-- URL/device/snapshot;
-- provider;
-- model;
-- reasoning profile;
-- rank;
-- timestamps e duração;
-- status;
-- diagnóstico sanitizado;
-- input tokens;
-- cached input tokens;
-- output tokens;
-- reasoning tokens;
-- total tokens;
-- custo estimado quando calculável;
-- versão do catálogo de preços;
-- hash da requisição;
-- versão do contrato semântico.
-
-Se o provider não reportar tokens, o campo fica `NULL`; o SearchGEO não inventa contagem.
-
-`ESTIMATED_COST`:
-
-- usa catálogo local versionado;
-- só é exibido quando os dados necessários existem;
-- não representa invoice/billing externo;
-- não altera score.
-
-# Onde consultar o uso da IA
-
-## `report.html`
-
-A seção **Uso de IA — execução e telemetria** contém:
-
-- habilitação;
+- IA habilitada;
 - estratégia;
-- provider inicial/efetivo;
-- modelo;
-- profundidade;
+- provider/model efetivo;
 - status;
 - cadeia inicial;
-- cobertura;
-- failover;
-- tabela de tentativas;
-- tokens;
-- `ESTIMATED_COST`;
+- URL/device por tentativa;
+- input/output/reasoning tokens;
 - duração;
+- custo estimado;
 - erro sanitizado.
 
-O bloco é inserido dentro de `<main>`. A tabela usa overflow horizontal interno e o conteúdo principal é limitado à largura disponível ao lado da sidebar fixa.
-
-## `remediation.html`
-
-Exibe apenas **contexto informativo** da análise semântica. Falha de provider não vira finding nem recommendation do website.
-
-## `audit.db`
-
-Tabelas M18:
+No SQLite:
 
 ```text
 ai_audit_sessions
@@ -371,23 +236,26 @@ ai_provider_attempts
 provider_pricing_catalog
 ```
 
-## logging do processo
+O `ESTIMATED_COST` não é invoice.
 
-O SearchGEO emite linhas INFO sanitizadas para tentativas/sessão M18 quando o `log_level` permite. O registro inclui provider/model/status/duração/tokens/custo estimado/error_class, nunca API key ou corpo integral da requisição.
+## Separação do readiness
 
-A baseline não cria `audit.log` automaticamente. O registro persistente é o `audit.db` e o `report.html`.
+`report/index.html`, `mobile.html` e `desktop.html` apresentam qualidade/readiness do website.
 
-# Segurança e privacidade
+`report/ai-usage.html` apresenta funcionamento do provider.
 
-Nunca persistir ou imprimir:
+Essa separação é deliberada: provider indisponível reduz o que o auditor consegue concluir, mas não é defeito do conteúdo auditado.
+
+## Segurança
+
+Nunca persistir:
 
 - API key;
-- `Authorization`;
-- header `api-key`;
-- corpo integral sensível da requisição;
-- chain-of-thought.
+- Authorization;
+- body integral com segredo;
+- resposta de erro não sanitizada quando puder conter informação sensível.
 
-Valide apenas a presença das variáveis:
+Validação de presença:
 
 ```powershell
 Test-Path Env:OPENAI_API_KEY
@@ -395,23 +263,16 @@ Test-Path Env:DEEPSEEK_API_KEY
 Test-Path Env:MIMO_API_KEY
 ```
 
-# Dados enviados ao provider
+## Conteúdo gerado por IA
 
-Ao habilitar IA externa, conteúdo/evidence do site auditado necessários ao contrato semântico são transmitidos ao provider selecionado. Antes de usar IA em conteúdo corporativo, confirme a política de dados/privacidade aplicável.
+O baseline atual **não gera texto para publicação**.
 
-# Structured Output por provider
+Uma evolução posterior está no backlog para, opcionalmente e com default OFF, sugerir texto/local de inserção com base em findings semânticos. Essa capacidade não deve:
 
-- OpenAI: Responses API com JSON Schema estrito.
-- DeepSeek: Responses API em modo estruturado compatível com o adapter e validação local SearchGEO.
-- MiMo: Responses API com JSON object e validação local estrita pelo schema SearchGEO; não se presume garantia nativa de JSON Schema equivalente à OpenAI.
+- alterar automaticamente o site;
+- recalcular score retrospectivamente;
+- transformar sugestão em finding;
+- ser acionada apenas por Confidence LOW;
+- produzir texto artificial “para IA” sem benefício real ao usuário.
 
-Em todos os casos, a validação local SearchGEO é obrigatória antes de aceitar a análise.
-
-# Referências internas
-
-- [Referência completa da CLI](CLI_REFERENCE.md)
-- [Configuração](CONFIGURATION.md)
-- [Compatibilidade](COMPATIBILITY.md)
-- [Troubleshooting](TROUBLESHOOTING.md)
-- [Outputs e artifacts](OUTPUTS_AND_ARTIFACTS.md)
-- [Especificação M18](specification/18_MULTI_AI_PROVIDER_ROUTING.md)
+Isso também mantém alinhamento com o guia do Google de 2026, que não exige reescrever conteúdo especificamente para sistemas generativos.
