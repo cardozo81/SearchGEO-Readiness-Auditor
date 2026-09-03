@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from searchgeo.comparison import DeviceComparator, DeviceComparisonOutcome
+from searchgeo.device_context import runtime_devices
 from searchgeo.domain import (
     DeviceContext,
     EvidenceType,
@@ -45,6 +46,11 @@ def execute_m8(
     execution_ids: list[str] = []
     finding_ids: list[str] = []
     outcomes: dict[str, DeviceComparisonOutcome] = {}
+    selected_devices = runtime_devices()
+    comparison_selected = {
+        DeviceContext.DESKTOP,
+        DeviceContext.MOBILE,
+    }.issubset(selected_devices)
 
     with SemanticPersistence(workspace) as semantic:
         for page_id, per_device in m3_result.snapshot_ids.items():
@@ -53,37 +59,59 @@ def execute_m8(
             desktop = persistence.snapshots.get(desktop_id) if desktop_id else None
             mobile = persistence.snapshots.get(mobile_id) if mobile_id else None
 
-            comparison = comparator.compare(
-                desktop=desktop,
-                mobile=mobile,
-                workspace_root=workspace.root,
-                desktop_entities=semantic.list_entities(desktop_id) if desktop_id else (),
-                mobile_entities=semantic.list_entities(mobile_id) if mobile_id else (),
-                desktop_assessments=semantic.list_assessments(desktop_id) if desktop_id else (),
-                mobile_assessments=semantic.list_assessments(mobile_id) if mobile_id else (),
-            )
-            outcomes[page_id] = comparison.outcome
+            if comparison_selected:
+                comparison = comparator.compare(
+                    desktop=desktop,
+                    mobile=mobile,
+                    workspace_root=workspace.root,
+                    desktop_entities=semantic.list_entities(desktop_id) if desktop_id else (),
+                    mobile_entities=semantic.list_entities(mobile_id) if mobile_id else (),
+                    desktop_assessments=semantic.list_assessments(desktop_id) if desktop_id else (),
+                    mobile_assessments=semantic.list_assessments(mobile_id) if mobile_id else (),
+                )
+                outcome = comparison.outcome
+                changed_fields = list(comparison.changed_fields)
+                material_fields = list(comparison.material_fields)
+                desktop_observed = comparison.desktop
+                mobile_observed = comparison.mobile
+                limitations = list(comparison.limitations)
 
-            if comparison.outcome is DeviceComparisonOutcome.NOT_APPLICABLE:
-                result = RuleResult.NOT_APPLICABLE
-                reason = "NO_DEVICE_SNAPSHOTS"
-            elif comparison.outcome is DeviceComparisonOutcome.UNKNOWN:
-                result = RuleResult.UNKNOWN
-                reason = "ONE_DEVICE_SNAPSHOT_MISSING"
-            elif comparison.materially_problematic:
-                result = RuleResult.WARNING
-                reason = "MATERIAL_DEVICE_DIFFERENCE"
+                if outcome is DeviceComparisonOutcome.NOT_APPLICABLE:
+                    result = RuleResult.NOT_APPLICABLE
+                    reason = "NO_DEVICE_SNAPSHOTS"
+                elif outcome is DeviceComparisonOutcome.UNKNOWN:
+                    result = RuleResult.UNKNOWN
+                    reason = "ONE_DEVICE_SNAPSHOT_MISSING"
+                elif comparison.materially_problematic:
+                    result = RuleResult.WARNING
+                    reason = "MATERIAL_DEVICE_DIFFERENCE"
+                else:
+                    result = RuleResult.PASS
+                    reason = None
             else:
-                result = RuleResult.PASS
-                reason = None
+                # A single-device audit intentionally has no cross-device universe.
+                # This is NOT_APPLICABLE rather than UNKNOWN: nothing failed and no
+                # required snapshot is missing from the operator-selected scope.
+                outcome = DeviceComparisonOutcome.NOT_APPLICABLE
+                result = RuleResult.NOT_APPLICABLE
+                reason = "DEVICE_COMPARISON_NOT_SELECTED"
+                changed_fields = []
+                material_fields = []
+                desktop_observed = None
+                mobile_observed = None
+                limitations = [reason]
 
+            outcomes[page_id] = outcome
             observed = {
-                "classification": comparison.outcome.value,
-                "changed_fields": list(comparison.changed_fields),
-                "material_fields": list(comparison.material_fields),
-                "desktop": comparison.desktop,
-                "mobile": comparison.mobile,
-                "limitations": list(comparison.limitations),
+                "classification": outcome.value,
+                "reason_code": reason,
+                "selected_devices": [item.value for item in selected_devices],
+                "comparison_requested": comparison_selected,
+                "changed_fields": changed_fields,
+                "material_fields": material_fields,
+                "desktop": desktop_observed,
+                "mobile": mobile_observed,
+                "limitations": limitations,
             }
             evidence = manager.record(
                 audit_id=audit_id,
