@@ -108,9 +108,14 @@ def _reproducibility_check(
     }
     persisted_ok = all(scoring.get_score(score.score_id) is not None for score in (*original.scores, *original.overall_by_device.values()))
     contribution_refs_ok = all(
-        scoring.list_contributions(score.score_id) == tuple(
-            contribution for contribution in original.contributions if contribution.score_id == score.score_id
-        )
+        scoring.list_contributions(score.score_id) == tuple(sorted(
+            (
+                contribution
+                for contribution in original.contributions
+                if contribution.score_id == score.score_id
+            ),
+            key=lambda contribution: contribution.contribution_id,
+        ))
         for score in original.scores
     )
     return {

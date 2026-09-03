@@ -37,6 +37,22 @@ def _ai_usage_status(semantic: list[sqlite3.Row]) -> str:
     return "NÃO"
 
 
+def _configured_semantic_provider(audit: sqlite3.Row, semantic: list[sqlite3.Row]) -> str:
+    """Resolve provider configuration independently from provider call outcome."""
+
+    capabilities = tuple(str(item) for item in _json_list(audit["capabilities"]))
+    for capability in capabilities:
+        if capability.startswith("semantic_provider:"):
+            return capability.split(":", 1)[1].strip().upper() or "NÃO INFORMADO"
+
+    providers = {str(row["provider"]).upper() for row in semantic if row["provider"]}
+    if "OPENAI" in providers or "UNAVAILABLE" in providers:
+        return "OPENAI"
+    if providers:
+        return ", ".join(sorted(providers))
+    return "NÃO INFORMADO"
+
+
 class _PersistedInputAwareReportBuilder(M17ReportBuilder):
     """Use raw operator input counts while rendering the deduplicated URL set."""
 
@@ -102,12 +118,44 @@ class _PersistedInputAwareReportBuilder(M17ReportBuilder):
         )
 
         providers = sorted({str(row["provider"]) for row in semantic if row["provider"]})
+        models = sorted({str(row["model"]) for row in semantic if row["model"]})
         legacy_ai_used = any(provider.casefold() not in {"none", "fallback", ""} for provider in providers)
-        return html.replace(
+        usage_status = _ai_usage_status(semantic)
+        configured_provider = _configured_semantic_provider(audit, semantic)
+
+        if configured_provider == "OPENAI" and usage_status == "TENTATIVA SEM SUCESSO":
+            provider_display = "OPENAI — CHAMADA INDISPONÍVEL"
+        elif configured_provider == "OPENAI" and usage_status == "SIM" and "UNAVAILABLE" in {item.upper() for item in providers}:
+            provider_display = "OPENAI — SUCESSO PARCIAL"
+        else:
+            provider_display = configured_provider
+
+        if models:
+            model_display = ", ".join(models)
+        elif configured_provider == "OPENAI":
+            # CLI only constructs OpenAIProvider when a model is configured. A
+            # failed HTTP call, however, has no response model to persist. Do
+            # not mislabel that state as "not applicable".
+            model_display = "CONFIGURADO · NÃO CONFIRMADO PELA API"
+        else:
+            model_display = "NÃO APLICÁVEL"
+
+        html = html.replace(
             _metric("Uso de IA", "SIM" if legacy_ai_used else "NÃO"),
-            _metric("Uso de IA", _ai_usage_status(semantic)),
+            _metric("Uso de IA", usage_status),
             1,
         )
+        html = html.replace(
+            _metric("Provider", ", ".join(providers) or "NÃO INFORMADO"),
+            _metric("Provider configurado", provider_display),
+            1,
+        )
+        html = html.replace(
+            _metric("Modelo", ", ".join(models) or "NÃO APLICÁVEL"),
+            _metric("Modelo", model_display),
+            1,
+        )
+        return html
 
 
 def _collapsed_trace_details(audit_id: str, workspace: AuditWorkspace) -> str:
