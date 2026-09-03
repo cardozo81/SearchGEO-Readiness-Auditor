@@ -77,7 +77,13 @@ class M21WebPerformanceTests(unittest.TestCase):
                 self.assertAlmostEqual(row["cls_p75"], 0.08)
                 self.assertEqual(row["cwv_assessment"], "PASS")
                 self.assertEqual(row["field_source"], "PAGESPEED_CRUX")
-                self.assertEqual(connection.execute("SELECT COUNT(*) FROM scores").fetchone()[0], 0)
+                # This fixture intentionally has no M9 score tables. M21 must
+                # remain additive and must not create or mutate scoring storage.
+                self.assertIsNone(
+                    connection.execute(
+                        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='scores'"
+                    ).fetchone()
+                )
                 artifact = row["pagespeed_artifact_reference"]
             finally:
                 connection.close()
