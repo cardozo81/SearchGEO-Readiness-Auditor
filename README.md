@@ -45,12 +45,24 @@ As heurísticas BR-GEO continuam úteis como modelo de readiness, mas são ident
 | Playwright `>=1.57,<2` | obrigatório |
 | Chromium | obrigatório para rendering real |
 | SQLite | embarcado/local |
-| OpenAI | opcional |
-| DeepSeek | opcional; qualificação SearchGEO `PROVISIONAL` |
-| Xiaomi MiMo | opcional; qualificação SearchGEO `PROVISIONAL` |
+| OpenAI | opcional; via OpenAI API Platform |
+| DeepSeek | opcional; via DeepSeek API; qualificação SearchGEO `PROVISIONAL` |
+| Xiaomi MiMo | opcional; **Pay-as-you-go `sk-...`**; qualificação SearchGEO `PROVISIONAL` |
 | Docker / web server | não requeridos |
 
-Detalhes: [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
+### Atenção: plano comercial não é sinônimo de API compatível
+
+A compatibilidade depende de **provider + produto/plano + credencial + endpoint + modelo**.
+
+| Provider | Suportado pelo SearchGEO atual | Não usar/confundir |
+|---|---|---|
+| OpenAI | API Platform com API key, billing/quota e acesso ao modelo | assinatura/créditos do ChatGPT não são saldo da API |
+| DeepSeek | DeepSeek API com saldo concedido e/ou recarregado | API key sem saldo/quota disponível |
+| Xiaomi MiMo | Pay-as-you-go `sk-...` em `https://api.xiaomimimo.com/v1` | Token Plan `tp-...`; usa Base URL dedicada, créditos independentes e não é suportado/adequado ao auditor automatizado atual |
+
+No MiMo, `tp-...` e `sk-...` pertencem a produtos independentes. O SearchGEO atual chama o endpoint PAYG; portanto configure apenas chave `sk-...`. A MiMo também restringe o Token Plan a ferramentas de programação e proíbe automated scripts/custom application backends fora desse escopo.
+
+Detalhes e fontes oficiais: [docs/AI_GUIDE.md](docs/AI_GUIDE.md) e [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
 
 ## Instalação rápida — PowerShell
 
@@ -174,16 +186,18 @@ searchgeo audit https://example.com --ai-provider none
 ### OpenAI
 
 ```powershell
-$env:OPENAI_API_KEY = "<chave>"
+$env:OPENAI_API_KEY = "<chave-da-API-Platform>"
 searchgeo audit https://example.com --ai-provider openai
 ```
 
 Default: `gpt-5.6-terra` / `HIGH`.
 
+A assinatura ChatGPT não substitui billing da API Platform.
+
 ### DeepSeek
 
 ```powershell
-$env:DEEPSEEK_API_KEY = "<chave>"
+$env:DEEPSEEK_API_KEY = "<chave-da-DeepSeek-API>"
 searchgeo audit https://example.com --ai-provider deepseek
 ```
 
@@ -192,18 +206,20 @@ Default: `deepseek-v4-pro` / `HIGH`.
 ### Xiaomi MiMo
 
 ```powershell
-$env:MIMO_API_KEY = "<chave>"
+$env:MIMO_API_KEY = "<chave-sk-PAYG>"
 searchgeo audit https://example.com --ai-provider mimo
 ```
 
 Default: `mimo-v2.5-pro` / `THINKING_ENABLED`.
 
+**Não use chave Token Plan `tp-...` no SearchGEO atual.**
+
 ### Multi-provider
 
 ```powershell
-$env:OPENAI_API_KEY = "<chave-openai>"
-$env:DEEPSEEK_API_KEY = "<chave-deepseek>"
-$env:MIMO_API_KEY = "<chave-mimo>"
+$env:OPENAI_API_KEY = "<chave-openai-api>"
+$env:DEEPSEEK_API_KEY = "<chave-deepseek-api>"
+$env:MIMO_API_KEY = "<chave-mimo-sk-PAYG>"
 searchgeo audit https://example.com --ai-provider auto
 ```
 
@@ -284,6 +300,8 @@ Test-Path Env:DEEPSEEK_API_KEY
 Test-Path Env:MIMO_API_KEY
 ```
 
+Presença da variável não prova que o plano seja compatível. Consulte [docs/AI_GUIDE.md](docs/AI_GUIDE.md) antes de configurar providers com múltiplos produtos/planos.
+
 ## Documentação
 
 - [Referência completa da CLI](docs/CLI_REFERENCE.md)
@@ -294,7 +312,7 @@ Test-Path Env:MIMO_API_KEY
 - [Interpretação do report site](docs/REPORT_GUIDE.md)
 - [Business Rules](docs/RULES_GUIDE.md)
 - [Scoring e Reliability](docs/SCORING_GUIDE.md)
-- [IA, routing e fallback](docs/AI_GUIDE.md)
+- [IA, routing, fallback e compatibilidade de planos](docs/AI_GUIDE.md)
 - [Outputs e artifacts](docs/OUTPUTS_AND_ARTIFACTS.md)
 - [Guia técnico](docs/TECHNICAL_GUIDE.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
