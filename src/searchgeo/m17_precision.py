@@ -48,6 +48,12 @@ _REASON_SUMMARY: dict[tuple[str, str], str] = {
     ("BR-GEO-034", "STRUCTURED_DATA_INVALID_JSON"): (
         "Pelo menos um bloco script[type=\"application/ld+json\"] contém JSON não interpretável."
     ),
+    ("BR-GEO-051", "EXACT_DUPLICATE_MAIN_CONTENT"): (
+        "O conteúdo principal extraído desta página é exatamente igual ao conteúdo principal extraído de outra página do universo auditado."
+    ),
+    ("BR-GEO-051", "NEAR_DUPLICATE_MAIN_CONTENT"): (
+        "O conteúdo principal extraído desta página atingiu o limiar persistido de similaridade para near-duplicate dentro do universo auditado."
+    ),
 }
 
 _TARGET_SELECTOR: dict[str, str] = {
@@ -198,6 +204,8 @@ def derive_precision(
     evidence_payloads: Iterable[Any] = (),
 ) -> RootCausePrecision:
     reason = _reason_code(analysis.observed_value, evidence_payloads)
+    if reason is None:
+        reason = _derived_rule_reason(analysis.rule_id, analysis.observed_value)
     status = _observed_element_status(analysis, reason)
     observed_selector = _observed_selector(analysis, status)
     recipe = recipe_for(analysis.rule_id)
@@ -264,12 +272,37 @@ def _reason_from_value(value: Any) -> str | None:
     return None
 
 
+def _derived_rule_reason(rule_id: str, observed: Any) -> str | None:
+    if rule_id != "BR-GEO-051" or not isinstance(observed, dict):
+        return None
+    matches = observed.get("matches")
+    if not isinstance(matches, list) or not matches:
+        return None
+    similarities = [
+        float(match["similarity"])
+        for match in matches
+        if isinstance(match, dict) and isinstance(match.get("similarity"), (int, float))
+    ]
+    if not similarities:
+        return None
+    if any(similarity >= 1.0 for similarity in similarities):
+        return "EXACT_DUPLICATE_MAIN_CONTENT"
+    threshold = observed.get("near_duplicate_jaccard_threshold")
+    if isinstance(threshold, (int, float)) and any(similarity >= float(threshold) for similarity in similarities):
+        return "NEAR_DUPLICATE_MAIN_CONTENT"
+    return None
+
+
 def _observed_element_status(analysis: RootCauseAnalysis, reason: str | None) -> str:
     if analysis.affected_elements:
         if all(item.relation == "CONTEXT_REGION" for item in analysis.affected_elements):
             return "CONTEXT_ONLY"
         return "PRESENT"
     if analysis.affected_scope in {"DOMAIN_RESOURCE", "PAGE_RESOURCE"}:
+        return "NOT_APPLICABLE"
+    if analysis.rule_id == "BR-GEO-051":
+        # Cross-page duplicate evidence applies to an extracted document/content
+        # representation, not to one safely attributable DOM node.
         return "NOT_APPLICABLE"
     upper = (reason or "").upper()
     if any(token in upper for token in ("ABSENT", "MISSING", "NOT_FOUND")):
@@ -300,6 +333,10 @@ def _precise_cause(
     reason: str | None,
     status: str,
 ) -> str:
+    if analysis.rule_id == "BR-GEO-051" and reason:
+        duplicate = _duplicate_cause_summary(analysis.observed_value, reason)
+        if duplicate:
+            return duplicate
     if reason:
         mapped = _REASON_SUMMARY.get((analysis.rule_id, reason.upper()))
         if mapped:
@@ -310,6 +347,34 @@ def _precise_cause(
     if reason:
         return f"{base} Motivo técnico persistido: {reason}."
     return base
+
+
+def _duplicate_cause_summary(observed: Any, reason: str) -> str | None:
+    if not isinstance(observed, dict):
+        return _REASON_SUMMARY.get(("BR-GEO-051", reason.upper()))
+    matches = observed.get("matches")
+    if not isinstance(matches, list) or not matches:
+        return _REASON_SUMMARY.get(("BR-GEO-051", reason.upper()))
+    similarities = [
+        float(match["similarity"])
+        for match in matches
+        if isinstance(match, dict) and isinstance(match.get("similarity"), (int, float))
+    ]
+    count = len(similarities)
+    if reason.upper() == "EXACT_DUPLICATE_MAIN_CONTENT":
+        exact_count = sum(similarity >= 1.0 for similarity in similarities)
+        return (
+            "O conteúdo principal extraído desta página é exatamente igual ao de "
+            f"{exact_count} outra(s) página(s) do universo auditado (similaridade 1.0)."
+        )
+    if reason.upper() == "NEAR_DUPLICATE_MAIN_CONTENT":
+        threshold = observed.get("near_duplicate_jaccard_threshold")
+        threshold_text = f"{float(threshold):.2f}" if isinstance(threshold, (int, float)) else "persistido"
+        return (
+            f"O conteúdo principal extraído desta página possui {count} correspondência(s) que atingem "
+            f"o limiar de near-duplicate {threshold_text} dentro do universo auditado."
+        )
+    return None
 
 
 def _json_value(value: Any) -> Any:
