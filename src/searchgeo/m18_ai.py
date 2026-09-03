@@ -396,6 +396,8 @@ class ResponsesSemanticProvider(_HardenedOpenAIProvider):
         self._last_attempt: ProviderAttempt | None = None
         self._history: list[ProviderAttempt] = []
         self.policy = _policy(self.name, self.model)
+        self._runtime_state = RuntimeProviderState.ACTIVE
+        self._successful_urls: set[str] = set()
 
     def _validate_reasoning(self, value: str) -> str:
         normalized = value.strip().upper()
@@ -443,6 +445,15 @@ class ResponsesSemanticProvider(_HardenedOpenAIProvider):
 
     def analyze(self, semantic_input: SemanticInput) -> SemanticProviderResult:
         self._last_attempt = None
+        if self._runtime_state is RuntimeProviderState.QUARANTINED_FOR_AUDIT:
+            return SemanticProviderResult(
+                ProviderState.UNAVAILABLE,
+                reason="AI_PROVIDER_UNAVAILABLE:PROVIDER_QUARANTINED",
+                provider=self.name,
+                model=self.model,
+                reasoning_profile=self.reasoning_profile,
+                diagnostic=ProviderDiagnostic(ProviderErrorClass.UNKNOWN_PROVIDER_ERROR, error_code="PROVIDER_QUARANTINED"),
+            )
         if not self.api_key:
             return SemanticProviderResult(
                 ProviderState.NOT_CONFIGURED,
@@ -525,6 +536,8 @@ class ResponsesSemanticProvider(_HardenedOpenAIProvider):
             provider_qualification=self.policy.qualification,
             provider_reliability_score=self.policy.reliability_score,
         )
+        self._runtime_state = RuntimeProviderState.ACTIVE
+        self._successful_urls.add(semantic_input.page_url)
         self._history.append(self._last_attempt)
         return SemanticProviderResult(
             ProviderState.AVAILABLE,
@@ -568,6 +581,7 @@ class ResponsesSemanticProvider(_HardenedOpenAIProvider):
             provider_qualification=self.policy.qualification,
             provider_reliability_score=self.policy.reliability_score,
         )
+        self._runtime_state = RuntimeProviderState.QUARANTINED_FOR_AUDIT
         self._history.append(self._last_attempt)
         return SemanticProviderResult(
             ProviderState.UNAVAILABLE,
@@ -586,6 +600,29 @@ class ResponsesSemanticProvider(_HardenedOpenAIProvider):
 
     def attempt_history(self) -> tuple[ProviderAttempt, ...]:
         return tuple(self._history)
+
+    def session_snapshot(self) -> dict[str, Any]:
+        successful = bool(self._successful_urls)
+        return {
+            "strategy": "SINGLE_PROVIDER",
+            "enabled": True,
+            "initial_provider": self.name,
+            "initial_model": self.model,
+            "initial_reasoning_profile": self.reasoning_profile,
+            "effective_provider": self.name if successful else None,
+            "effective_model": self.model if successful else None,
+            "effective_reasoning_profile": self.reasoning_profile if successful else None,
+            "configured_chain": [{
+                "provider": self.name,
+                "model": self.model,
+                "reasoning_profile": self.reasoning_profile,
+                "rank": self.policy.rank,
+                "qualification": self.policy.qualification,
+            }],
+            "provider_states": {self.name: self._runtime_state.value},
+            "successful_urls": {self.name: len(self._successful_urls)},
+            "excluded_configurations": [],
+        }
 
 
 class OpenAIProvider(ResponsesSemanticProvider):

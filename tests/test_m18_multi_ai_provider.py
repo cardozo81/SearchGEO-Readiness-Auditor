@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import io
 import json
+import sqlite3
 from datetime import datetime, timezone
 from email.message import Message
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 from urllib.error import HTTPError, URLError
 
+from searchgeo.acquisition import HttpClient
+from searchgeo.audit_runner import run_audit
+from searchgeo.discovery import DiscoveryEngine
 from searchgeo.m18_ai import (
     DeepSeekProvider,
     MiMoProvider,
@@ -20,6 +26,7 @@ from searchgeo.m18_ai import (
     estimate_cost,
 )
 from searchgeo.semantic import SemanticEvidenceInput, SemanticInput
+from tests.test_m12_stable_baseline import _FixtureRenderer, _server
 
 
 def _input(url: str = "https://example.com/produto", snapshot_id: str = "SNP-1") -> SemanticInput:
@@ -251,6 +258,83 @@ class M18ProviderTests(unittest.TestCase):
         result = exhausted.analyze(_input())
         self.assertEqual(result.reason, "AI_PROVIDER_CHAIN_EXHAUSTED")
         self.assertTrue(all(value == "QUARANTINED_FOR_AUDIT" for value in exhausted.session_snapshot()["provider_states"].values()))
+
+
+    def test_explicit_provider_quarantine_blocks_retries_across_urls(self) -> None:
+        calls = 0
+
+        def fail(*_):
+            nonlocal calls
+            calls += 1
+            raise TimeoutError()
+
+        provider = OpenAIProvider(api_key="x", transport=fail)
+        first = provider.analyze(_input("https://example.com/a", "SNP-A"))
+        second = provider.analyze(_input("https://example.com/b", "SNP-B"))
+
+        self.assertEqual(first.state, ProviderState.UNAVAILABLE)
+        self.assertEqual(second.state, ProviderState.UNAVAILABLE)
+        self.assertEqual(second.reason, "AI_PROVIDER_UNAVAILABLE:PROVIDER_QUARANTINED")
+        self.assertEqual(calls, 1)
+        snapshot = provider.session_snapshot()
+        self.assertEqual(snapshot["strategy"], "SINGLE_PROVIDER")
+        self.assertEqual(snapshot["provider_states"]["OPENAI"], "QUARANTINED_FOR_AUDIT")
+        self.assertEqual(len(provider.attempt_history()), 1)
+
+    def test_run_audit_persists_attempts_and_enriches_both_reports(self) -> None:
+        with _server() as origin, TemporaryDirectory() as directory:
+            html = f"""<!doctype html><html lang='pt-BR'><head><title>Guia M18</title>
+<meta name='description' content='Guia técnico.'><link rel='canonical' href='{origin}/'>
+<script type='application/ld+json'>{{"@context":"https://schema.org","@type":"Article","headline":"Guia M18"}}</script>
+</head><body><main><h1>Guia M18</h1><h2>Visão geral</h2><p>Conteúdo técnico verificável para integração M18.</p></main></body></html>"""
+            secret = "M18-INTEGRATION-SECRET"
+            provider = OpenAIProvider(api_key=secret, transport=_success_transport())
+            result = run_audit(
+                f"{origin}/",
+                audits_root=Path(directory),
+                project_name="Integração M18",
+                max_pages=1,
+                semantic_provider=provider,
+                discovery_engine=DiscoveryEngine(HttpClient(timeout=1)),
+                renderer=_FixtureRenderer(html),
+                lazy_probe=lambda url, device: None,
+            )
+
+            connection = sqlite3.connect(result.audit_root / "audit.db")
+            connection.row_factory = sqlite3.Row
+            try:
+                attempts = connection.execute(
+                    "SELECT provider,model,status,input_tokens,output_tokens,estimated_cost FROM ai_provider_attempts WHERE audit_id=? ORDER BY started_at",
+                    (result.audit_id,),
+                ).fetchall()
+                self.assertEqual(len(attempts), 2)
+                self.assertTrue(all(row["provider"] == "OPENAI" for row in attempts))
+                self.assertTrue(all(row["model"] == "gpt-5.6-terra" for row in attempts))
+                self.assertTrue(all(row["status"] == "SUCCESS" for row in attempts))
+                self.assertTrue(all(row["input_tokens"] == 100 for row in attempts))
+                self.assertTrue(all(row["output_tokens"] == 50 for row in attempts))
+                self.assertTrue(all(row["estimated_cost"] is not None for row in attempts))
+                session = connection.execute(
+                    "SELECT strategy,effective_provider,effective_model,status FROM ai_audit_sessions WHERE audit_id=?",
+                    (result.audit_id,),
+                ).fetchone()
+                self.assertIsNotNone(session)
+                self.assertEqual(session["strategy"], "SINGLE_PROVIDER")
+                self.assertEqual(session["effective_provider"], "OPENAI")
+                self.assertEqual(session["effective_model"], "gpt-5.6-terra")
+            finally:
+                connection.close()
+
+            report = result.report_path.read_text(encoding="utf-8")
+            remediation = (result.audit_root / "remediation.html").read_text(encoding="utf-8")
+            self.assertIn("Uso de IA — execução e telemetria", report)
+            self.assertIn("ESTIMATED_COST", report)
+            self.assertIn("OPENAI", report)
+            self.assertIn("gpt-5.6-terra", report)
+            self.assertIn("Contexto da análise semântica", remediation)
+            self.assertIn("Este bloco é informativo", remediation)
+            self.assertNotIn(secret, report)
+            self.assertNotIn(secret, remediation)
 
 
 if __name__ == "__main__":
