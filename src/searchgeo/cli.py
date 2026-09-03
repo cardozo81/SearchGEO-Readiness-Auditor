@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 from searchgeo import __version__
 from searchgeo.audit_runner import run_audit
 from searchgeo.config import load_config
+from searchgeo.device_context import DEVICE_CONTEXT_ENV, configured_device_context
 from searchgeo.logging_config import configure_logging
 from searchgeo.m18_ai import build_semantic_provider
 
@@ -97,6 +98,15 @@ def build_parser() -> argparse.ArgumentParser:
     audit_parser.add_argument("--max-pages", type=int, default=100, help="deterministic maximum number of audited pages")
     audit_parser.add_argument("--audits-root", default="audits", help="local directory that will contain audit workspaces")
     audit_parser.add_argument(
+        "--device-context",
+        choices=("mobile", "desktop", "both"),
+        default=None,
+        help=(
+            "device context for rendering and semantic analysis; default is mobile, "
+            f"or {DEVICE_CONTEXT_ENV} when configured"
+        ),
+    )
+    audit_parser.add_argument(
         "--ai-provider",
         choices=("none", "openai", "deepseek", "mimo", "auto"),
         default="none",
@@ -176,6 +186,14 @@ def main(argv: list[str] | None = None) -> int:
             targets = _audit_targets(args)
             if args.max_pages <= 0:
                 raise ValueError("--max-pages must be greater than zero")
+
+            # Resolve once per run and freeze it in the process environment so
+            # rendering (M3) and every downstream consumer see the same device
+            # universe. CLI default is MOBILE to avoid unnecessary browser/AI
+            # work; --device-context or SEARCHGEO_DEVICE_CONTEXT can override.
+            device_context = configured_device_context(cli_value=args.device_context, default="mobile")
+            os.environ[DEVICE_CONTEXT_ENV] = device_context
+
             provider = _semantic_provider(args)
             # A urls file is an explicit URL_SET by definition, even when it
             # contains one URL after comments/blank lines are removed. Direct
@@ -202,10 +220,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Auditoria concluída: {result.audit_id}")
         print(f"Status: {result.completion_status.value}")
         print(f"Páginas auditadas: {result.audited_pages}")
+        print(f"Contexto de dispositivo: {device_context.upper()}")
         print(f"Problemas identificados: {result.finding_count}")
         print(f"Recomendações: {result.recommendation_count}")
         print(f"Relatório: {result.report_path}")
-        remediation_path = result.audit_root / "remediation.html"
+        remediation_path = result.audit_root / "report" / "remediation.html"
         if remediation_path.is_file():
             print(f"Relatório por problemas: {remediation_path}")
         return 0
