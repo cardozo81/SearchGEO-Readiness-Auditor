@@ -1,133 +1,128 @@
-# Premissas mínimas e reforços para GEO
+# GEO_MINIMUM_REQUIREMENTS.md
 
-Este guia classifica os principais sinais técnicos e semânticos avaliados pelo SearchGEO como **mínimos**, **contextuais**, **opcionais/reforço** ou **não obrigatórios**.
+## Escopo
 
-O foco primário do baseline é Google Search e seus recursos de IA. Referências a outros mecanismos são secundárias e não alteram a regra principal de scoring.
+Este documento separa:
 
-O SearchGEO mede readiness. Ele não garante rastreamento, indexação, ranking, rich result, citação ou presença em respostas generativas.
+1. requisitos/práticas suportadas por documentação oficial ou standards;
+2. reforços úteis do SearchGEO;
+3. heurísticas internas que não devem ser apresentadas como padrão GEO universal.
 
-## Regra principal de aplicabilidade
+## Não existe um padrão GEO/AEO universal
 
-Uma característica opcional ausente não deve virar falha artificial.
+O SearchGEO não assume que exista uma especificação normativa única denominada GEO/AEO.
 
-A partir de `SCORE-GEO-002`:
+Em 2026, o Google publicou o guia oficial:
 
-- uma dimensão integralmente e legitimamente fora do universo aplicável fica `NOT_APPLICABLE`;
-- `NOT_APPLICABLE` não recebe 0 nem 100;
-- a dimensão não reduz Coverage nem bloqueia o Overall;
-- se o tópico passar a existir na URL, ele se torna aplicável e seus resultados entram normalmente no Score GEO;
-- ausência de RuleExecutions ou pré-requisito bloqueado continua sendo `NOT_CONSOLIDATED`, nunca `NOT_APPLICABLE` benigno.
+**Optimizing your website for generative AI features on Google Search**  
+<https://developers.google.com/search/docs/fundamentals/ai-optimization-guide>
 
-## Matriz de aderência
+O guia deixa claro que AEO/GEO são termos utilizados pelo mercado e que, do ponto de vista do Google, otimização para recursos generativos continua baseada em SEO.
 
-| Tópico | Classificação SearchGEO | Papel para Google/GEO | Como entra no cálculo |
-| --- | --- | --- | --- |
-| URL tecnicamente recuperável | MÍNIMO | Pré-condição para rastreamento/análise. | Falha material afeta Acessibilidade Técnica. |
-| Resposta HTML/conteúdo utilizável | MÍNIMO | A página precisa fornecer conteúdo processável. | Sem documento utilizável, dimensões dependentes não consolidam. |
-| Conteúdo essencial recuperável após JavaScript | MÍNIMO quando aplicável | Em páginas JS/SPA, o conteúdo importante precisa permanecer recuperável. | Entra em Extração de Conteúdo. |
-| Conteúdo principal identificável | MÍNIMO | Base para compreensão semântica. | Afeta Extração, Semântica, Answerability e intents. |
-| Conteúdo importante disponível em texto | MÍNIMO | Google recomenda que conteúdo importante esteja em forma textual. | Informação não recuperável reduz cobertura/readiness. |
-| Indexabilidade e elegibilidade a snippet | MÍNIMO para participação pública em AI Overviews/AI Mode | Google exige que a página esteja indexada e elegível a aparecer com snippet. | Afeta Indexability e pode impedir consolidação útil para presença pública. |
-| Tópico/intenção principal identificável | MÍNIMO semântico | Necessário para compreender o propósito da URL. | Entra em Estrutura Semântica, Answerability e Intent Coverage. |
-| Claims, números e condições coerentes | MÍNIMO de confiança | Reduz ambiguidade e risco de informação conflitante. | Afeta Citation Readiness e Evidence Trust. |
-| JSON-LD / Structured Data | OPCIONAL / REFORÇO | Google recomenda Structured Data para compreensão e rich results; não é requisito adicional para AI Overviews/AI Mode. | Ausente legitimamente: `STRUCTURED_DATA=NOT_APPLICABLE`; presente: BR-GEO-034..037 entram no score. |
-| Sitemap XML | OPCIONAL / DESCOBERTA | Ajuda descoberta e sinais de atualização. | Ausência isolada não é FAIL. |
-| Canonical | CONTEXTUALMENTE RECOMENDADO | Importante quando há duplicidade, variantes ou URL preferencial. | Ausência isolada não é blocker universal; conflitos podem afetar Indexability. |
-| robots.txt como arquivo | OPCIONAL COMO ARQUIVO | Ausência/404 não significa bloqueio; regras presentes precisam permitir a intenção desejada. | Política observada entra em Acessibilidade/Robots. |
-| Autor/publisher | CONTEXTUAL | Importância depende do tipo de página e dos claims. | Entra em Evidence Trust quando aplicável. |
-| Data de publicação/atualização | CONTEXTUAL | Relevante para conteúdo temporal/editorial. | Entra em Freshness quando aplicável. |
-| `llms.txt` ou arquivo especial para IA | NÃO OBRIGATÓRIO | Google declara que não é necessário criar arquivo de IA/markup especial para seus recursos de IA. | Não afeta score automaticamente. |
-| Schema.org especial para IA | NÃO OBRIGATÓRIO | Google declara que não há schema especial necessário para AI Overviews/AI Mode. | Não existe regra que exija schema especial. |
-| GPTBot liberado | NÃO OBRIGATÓRIO para Google Search/GEO | Não é crawler do Google; no SearchGEO é tratado separadamente de search crawlers. | Não penaliza Search readiness por si só. |
+## Requisitos/práticas fundamentais
 
-## Google: JSON-LD é obrigatório?
+### Acesso técnico
 
-Não de forma universal.
+O conteúdo precisa ser tecnicamente recuperável e elegível conforme o crawler/sistema em questão.
 
-Para aparecer como link de suporte em AI Overviews ou AI Mode, a documentação do Google exige que a página esteja indexada e elegível a aparecer na Pesquisa Google com snippet, atendendo aos requisitos técnicos gerais de Search. O Google afirma que não existem requisitos técnicos adicionais para esses recursos e que não é necessário adicionar schema.org especial, arquivo de IA ou nova marcação específica.
+Fontes relevantes:
 
-Structured Data continua relevante porque:
+- Google Search Essentials;
+- RFC 9110;
+- RFC 9309;
+- Google robots.txt specification;
+- OpenAI Publishers and Developers FAQ para controles OAI-SearchBot/GPTBot.
 
-- fornece sinais explícitos sobre entidades, tipos e propriedades;
-- pode habilitar rich results e outras experiências de Search;
-- ajuda o mecanismo a compreender conteúdo de forma mais estruturada;
-- precisa corresponder ao conteúdo visível e não pode ser enganoso.
+### Conteúdo útil, confiável e orientado a pessoas
 
-Google aceita JSON-LD, Microdata e RDFa e recomenda JSON-LD na maioria dos casos por facilidade de implementação/manutenção.
+O Google continua recomendando conteúdo útil, confiável e people-first. O SearchGEO pode medir sinais de clareza, resposta, atribuição e evidência, mas não deve traduzir isso em uma fórmula oficial inexistente.
 
-## Bing: papel do JSON-LD
+### Estrutura compreensível
 
-Bing também usa Structured Data como um dos sinais para compreender conteúdo e entidades. A documentação do Bing Webmaster descreve JSON-LD como uma forma de ajudar o mecanismo a entender melhor a página. Em cenários verticais, como Shopping, Bing recomenda fortemente markup completo e coerente.
+HTML/heading structure, títulos claros e organização lógica ajudam mecanismos e usuários. WHATWG define semântica HTML; o SearchGEO adiciona heurísticas de legibilidade semântica sobre essa base.
 
-Isso não deve ser interpretado como requisito universal para toda URL ser rastreada ou indexada. No SearchGEO, Google permanece a referência primária do baseline; Bing é sinal complementar.
+### Indexabilidade/canonicalização
 
-## Quando JSON-LD existe
+Diretivas, canonical e conflitos técnicos continuam relevantes conforme Google Search Central e protocolos web aplicáveis.
 
-O baseline atual do SearchGEO detecta Structured Data em blocos:
+## O que NÃO é requisito universal
 
-```html
-<script type="application/ld+json">
-...
-</script>
-```
+### Structured Data / JSON-LD
 
-Quando existe JSON-LD:
+Structured Data não é requisito universal para recursos generativos do Google. O próprio guia de 2026 não exige marcação especial de IA.
 
-- BR-GEO-034 avalia interpretabilidade/sintaxe;
-- BR-GEO-035 avalia tipos e propriedades;
-- BR-GEO-036 avalia coerência com conteúdo visível;
-- BR-GEO-037 avalia coerência das entidades declaradas e observadas;
-- PASS/WARNING/FAIL participam do `STRUCTURED_DATA` Score;
-- UNKNOWN/ERROR reduzem Coverage/Consolidation conforme as regras gerais;
-- markup inválido, enganoso ou contraditório pode reduzir a Compatibilidade GEO.
+No `SCORE-GEO-002`:
 
-Adicionar JSON-LD apenas para aumentar cobertura não é prática válida.
+- ausência legítima pode resultar em `STRUCTURED_DATA = NOT_APPLICABLE`;
+- a dimensão fica fora do Overall;
+- markup existente, porém inválido/contraditório, pode ser avaliado negativamente.
 
-## JSON-LD pode usar valores diferentes do HTML?
+### `llms.txt`
 
-Pode usar **representação diferente**, mas não **fato diferente**.
+O Google informa que `llms.txt` não é necessário para seus recursos generativos e não é usado como sinal de ranking/visibilidade no Google Search.
 
-Exemplos coerentes:
+O SearchGEO não deve tratá-lo como blocker obrigatório.
 
-- HTML: `R$ 27,50`; JSON-LD: `price=27.50`, `priceCurrency=BRL`;
-- HTML: `3 de setembro de 2026`; JSON-LD: `2026-09-03`;
-- HTML usa nome comercial; JSON-LD usa nome jurídico completo, desde que a relação esteja sustentada.
+### “GEO schema” especial
 
-Não é aceitável divergir ou inventar:
+Não existe markup especial oficial de GEO/AEO exigido pelo Google.
 
-- preço;
-- disponibilidade;
-- benefícios;
-- ratings/reviews;
-- autoria;
-- datas;
-- identidade do produto/serviço;
-- entidade responsável;
-- claims promocionais ou factuais.
+### Chunking artificial
 
-## Cobertura de formatos
+Não existe exigência oficial de quebrar o conteúdo em blocos artificiais apenas para modelos de IA.
 
-Embora Google aceite JSON-LD, Microdata e RDFa, o parser Structured Data do baseline atual do SearchGEO é especificamente orientado a JSON-LD. Até Microdata/RDFa receberem parser e testes equivalentes, a documentação não deve afirmar cobertura integral desses formatos.
+### Reescrever conteúdo apenas para IA
 
-## Como o relatório deve se comportar
+O Google não recomenda reescrever conteúdo para “falar com IA” em detrimento de pessoas. O SearchGEO deve orientar melhoria de clareza/utilidade/evidência quando um finding específico sustentar a necessidade, não produzir conteúdo artificial apenas para elevar uma métrica interna.
 
-Exemplo sem JSON-LD, com as demais dimensões aplicáveis consolidadas:
+## Heurísticas SearchGEO
+
+Dimensões como:
+
+- Entity Clarity;
+- Answerability;
+- Citation Readiness;
+- Evidence Trust;
+- Intent Coverage;
+
+são úteis como modelo operacional de readiness, mas parte de suas regras é `HEURISTIC`/baseline interna.
+
+A página gerada:
 
 ```text
-Compatibilidade GEO — Desktop: 88,9/100
-Dimensões aplicáveis: 9 de 10
-Dados Estruturados: NÃO APLICÁVEL
+report/references.html
 ```
 
-A nota é calculada somente sobre dimensões aplicáveis.
+expõe essa distinção por regra.
 
-Exemplo com JSON-LD presente:
+## Confidence não é aderência textual
+
+`Confidence LOW` no SCORE-GEO-002 significa baixa força da conclusão do auditor. Não significa que o conteúdo é semanticamente inválido.
+
+Uma recomendação de conteúdo deve ser motivada por evidência/regra específica, não pela Confidence isolada.
+
+## Mobile first operacional
+
+A CLI usa Mobile por padrão:
 
 ```text
-Dados Estruturados: 75,0/100
-Consolidação: CONSOLIDADO
+--device-context mobile
 ```
 
-Nesse caso `STRUCTURED_DATA` passa a integrar o Overall.
+Isso é uma decisão operacional/custo do auditor, não uma afirmação de que Desktop é irrelevante para Search. Use `both` quando a análise comparativa for necessária.
 
-`NÃO DETERMINADO` continua reservado para situações em que a avaliação deveria ocorrer, mas cobertura/confiança não foram suficientes. Isso pode bloquear a Compatibilidade GEO.
+## Referências primárias principais
+
+- Google generative AI optimization guide: <https://developers.google.com/search/docs/fundamentals/ai-optimization-guide>
+- Google Search Essentials: <https://developers.google.com/search/docs/essentials>
+- Google SEO Starter Guide: <https://developers.google.com/search/docs/fundamentals/seo-starter-guide>
+- Google Structured Data: <https://developers.google.com/search/docs/appearance/structured-data/intro-structured-data>
+- Google canonicalization: <https://developers.google.com/search/docs/crawling-indexing/canonicalization>
+- Google robots.txt: <https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec>
+- OpenAI Publishers and Developers FAQ: <https://help.openai.com/en/articles/12627856-publishers-and-developers-faq>
+- Schema.org: <https://schema.org/docs/documents.html>
+- WHATWG sections: <https://html.spec.whatwg.org/dev/sections.html>
+- RFC 9309: <https://www.rfc-editor.org/rfc/rfc9309.html>
+- RFC 9110: <https://www.rfc-editor.org/rfc/rfc9110.html>
+
+O catálogo do report site é versionado pela data de verificação do código. URLs devem ser revisitadas quando regras externas forem revisadas.
