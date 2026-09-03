@@ -29,6 +29,7 @@ searchgeo audit [target ...]
   [--device-context mobile|desktop|both]
   [--ai-provider none|openai|deepseek|mimo|auto]
   [--ai-model MODEL_ID]
+  [--ai-content-remediation | --no-ai-content-remediation]
 ```
 
 ### Glossário completo de argumentos
@@ -45,6 +46,8 @@ searchgeo audit [target ...]
 | `--device-context` | `mobile`, `desktop`, `both` | `mobile`* | Controla rendering e os contextos semânticos/IA. `*` Pode ser definido por `SEARCHGEO_DEVICE_CONTEXT` quando a flag não é passada. |
 | `--ai-provider` | `none`, `openai`, `deepseek`, `mimo`, `auto` | `none` | Provider semântico. |
 | `--ai-model MODEL_ID` | model ID suportado | default do provider | Somente para provider explícito. Não pode ser combinado com `--ai-provider auto`. |
+| `--ai-content-remediation` | boolean flag | `false`* | Habilita M20 para sugerir texto exato com base em findings/evidências persistidos. `*` Pode ser definido por `SEARCHGEO_AI_CONTENT_REMEDIATION`. |
+| `--no-ai-content-remediation` | boolean flag | — | Força M20 textual como desligado, mesmo quando a variável de ambiente está habilitada. |
 
 ## Contexto de dispositivo
 
@@ -58,11 +61,9 @@ Valores válidos:
 
 ```text
 mobile
- desktop
+desktop
 both
 ```
-
-> O espaço antes de `desktop` acima é apenas visual; o valor aceito é `desktop`.
 
 Forma recomendada:
 
@@ -78,7 +79,7 @@ Ou por ambiente:
 $env:SEARCHGEO_DEVICE_CONTEXT = "mobile"
 ```
 
-`mobile` produz apenas snapshots Mobile. Com IA habilitada, somente esses snapshots entram no fluxo semântico, reduzindo chamadas e custo em comparação a `both`.
+`mobile` produz apenas snapshots Mobile. Com IA habilitada, somente esses snapshots entram no fluxo semântico e, quando M20 estiver habilitado, somente esses contextos podem gerar chamadas de remediação, reduzindo custo em comparação a `both`.
 
 `desktop` faz o mesmo para Desktop. `both` produz os dois contextos e habilita a comparação Desktop × Mobile completa.
 
@@ -92,6 +93,8 @@ Chamadas internas diretas a M3 sem a variável preservam o comportamento legado 
 searchgeo audit https://example.com --project "Exemplo"
 ```
 
+Neste modo não há chamada externa. A auditoria ainda produz a revisão determinística de JSON-LD por página em `report/content-suggestions.html`.
+
 ### Mobile + OpenAI
 
 ```powershell
@@ -101,6 +104,18 @@ searchgeo audit https://example.com `
   --device-context mobile `
   --ai-provider openai
 ```
+
+### Mobile + OpenAI + sugestões textuais M20
+
+```powershell
+$env:OPENAI_API_KEY = "<chave>"
+searchgeo audit https://example.com `
+  --device-context mobile `
+  --ai-provider openai `
+  --ai-content-remediation
+```
+
+M20 é uma segunda finalidade de IA. Ele roda somente depois de scoring/findings, não altera retrospectivamente Score, Coverage, Confidence, RuleExecution ou Finding e exige revisão humana antes de qualquer publicação.
 
 ### Desktop apenas
 
@@ -131,11 +146,48 @@ searchgeo audit `
 searchgeo audit --urls-file .\urls.txt --project "Exemplo"
 ```
 
+## Remediação de conteúdo M20
+
+A precedência é:
+
+1. `--ai-content-remediation` ou `--no-ai-content-remediation`;
+2. `SEARCHGEO_AI_CONTENT_REMEDIATION`;
+3. default `false`.
+
+Valores aceitos para a variável:
+
+```text
+true / false
+1 / 0
+yes / no
+on / off
+```
+
+Regras operacionais:
+
+- `Confidence LOW` isoladamente nunca dispara sugestão;
+- entram apenas findings contentuais/semânticos elegíveis já persistidos;
+- evidence IDs retornados precisam pertencer ao próprio finding;
+- a proposta não pode inventar claims, preços, datas, estatísticas, garantias, credenciais ou experiência;
+- novos tokens numéricos ausentes do conteúdo/evidências fornecidos são rejeitados pelo contrato local;
+- provider/model/timeout seguem a configuração M18 já selecionada;
+- M20 herda provider quarantine e roteamento/URL lock do audit;
+- falha de M20 é estado operacional e não vira finding do website;
+- o texto nunca é aplicado automaticamente.
+
+### JSON-LD
+
+A revisão JSON-LD é **determinística e não depende de habilitar M20 textual**.
+
+Quando JSON-LD não existe, o auditor pode propor um baseline seguro `WebPage` com dados observados/persistidos, como URL, idioma, `<title>` e meta description. Quando já existe, o auditor não o sobrescreve: aponta parse errors, duplicações e oportunidades estruturais genéricas verificáveis.
+
+JSON-LD continua sendo reforço opcional. Não é requisito universal de GEO, não existe markup especial GEO/AEO e markup correto não garante rich result.
+
 ## Providers de IA
 
 ### `none`
 
-Nenhuma chamada externa. Regras semantic-only sem evidência suficiente permanecem `UNKNOWN`. Isso pode reduzir Coverage/Consolidation, mas não é `FAIL` do website.
+Nenhuma chamada externa. Regras semantic-only sem evidência suficiente permanecem `UNKNOWN`. Isso pode reduzir Coverage/Consolidation, mas não é `FAIL` do website. Se `--ai-content-remediation` for passado com `--ai-provider none`, a etapa textual fica `NOT_CONFIGURED` sem abortar o audit; a revisão JSON-LD determinística permanece disponível.
 
 ### `openai`
 
@@ -209,6 +261,7 @@ Em `auto`, modelos são definidos pelas variáveis específicas de provider; `--
 |---|---|---|
 | `SEARCHGEO_DEVICE_CONTEXT` | `mobile` na CLI | `mobile`, `desktop`, `both`. |
 | `SEARCHGEO_AI_TIMEOUT_SECONDS` | `180` | Timeout por chamada externa de IA; número finito > 0. |
+| `SEARCHGEO_AI_CONTENT_REMEDIATION` | `false` | Habilita/desabilita sugestões textuais M20 quando a flag CLI não é usada. |
 | `OPENAI_API_KEY` | — | Credencial OpenAI. |
 | `DEEPSEEK_API_KEY` | — | Credencial DeepSeek. |
 | `MIMO_API_KEY` | — | Credencial MiMo. |
@@ -229,6 +282,8 @@ Provider explícito sem token:
 
 Em `auto`, providers sem token são excluídos da cadeia.
 
+M20 não cria uma segunda credencial: reutiliza providers elegíveis do M18. Se o provider já foi colocado em quarantine pela etapa semântica, ele não é reativado só para gerar remediação.
+
 ## Falha / quota / crédito / timeout
 
 Provider explícito:
@@ -239,8 +294,8 @@ Provider explícito:
 `auto`:
 
 - provider falho é quarantined;
-- próximo provider saudável pode atender URLs/contextos elegíveis seguintes;
-- se a cadeia inteira falhar, estado operacional `CHAIN_EXHAUSTED`.
+- próximo provider saudável pode atender contextos elegíveis;
+- se a cadeia inteira falhar, a falha fica explícita na telemetria.
 
 Não há retry automático de timeout, evitando potencial duplicação de consumo.
 
@@ -253,10 +308,12 @@ Auditoria concluída: AUD-...
 Status: COMPLETE_WITH_LIMITATIONS
 Páginas auditadas: ...
 Contexto de dispositivo: MOBILE
+Sugestões de conteúdo por IA: DESABILITADAS
 Problemas identificados: ...
 Recomendações: ...
 Relatório: audits\AUD-...\report\index.html
 Relatório por problemas: audits\AUD-...\report\remediation.html
+Conteúdo e JSON-LD: audits\AUD-...\report\content-suggestions.html
 ```
 
 O ponto de entrada é `report/index.html`.
@@ -266,16 +323,17 @@ O ponto de entrada é `report/index.html`.
 ```text
 report/
 ├─ index.html
-├─ mobile.html          # se Mobile foi auditado
-├─ desktop.html         # se Desktop foi auditado
+├─ mobile.html             # se Mobile foi auditado
+├─ desktop.html            # se Desktop foi auditado
 ├─ remediation.html
+├─ content-suggestions.html
 ├─ ai-usage.html
 ├─ references.html
 └─ css/
    └─ site.css
 ```
 
-A telemetria de IA fica em `ai-usage.html`, separada do readiness do website. Referências oficiais, metodologia e fórmulas ficam em `references.html`.
+A telemetria M18 e M20 fica em `ai-usage.html`, separada do readiness do website. Sugestões de conteúdo e revisão JSON-LD ficam em `content-suggestions.html`. Referências oficiais, metodologia e fórmulas ficam em `references.html`.
 
 ## Regras de target
 
