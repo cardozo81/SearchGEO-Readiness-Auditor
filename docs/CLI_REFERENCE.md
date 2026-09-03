@@ -43,7 +43,7 @@ searchgeo audit [target ...]
 | `--max-pages N` | inteiro > 0 | `100` | Limite determinístico. Em `URL_SET`, deve ser >= quantidade de URLs únicas fornecidas. |
 | `--audits-root PATH` | diretório | `audits` | Raiz local dos workspaces. |
 | `--device-context` | `mobile`, `desktop`, `both` | `mobile`* | Controla rendering e os contextos semânticos/IA. `*` Pode ser definido por `SEARCHGEO_DEVICE_CONTEXT` quando a flag não é passada. |
-| `--ai-provider` | `none`, `openai`, `deepseek`, `mimo`, `auto` | `none` | Provider semântico. |
+| `--ai-provider` | `none`, `openai`, `deepseek`, `mimo`, `auto` | `none` | Provider semântico. A credencial deve pertencer ao produto/plano de API compatível. |
 | `--ai-model MODEL_ID` | model ID suportado | default do provider | Somente para provider explícito. Não pode ser combinado com `--ai-provider auto`. |
 
 ## Contexto de dispositivo
@@ -58,11 +58,9 @@ Valores válidos:
 
 ```text
 mobile
- desktop
+desktop
 both
 ```
-
-> O espaço antes de `desktop` acima é apenas visual; o valor aceito é `desktop`.
 
 Forma recomendada:
 
@@ -95,7 +93,7 @@ searchgeo audit https://example.com --project "Exemplo"
 ### Mobile + OpenAI
 
 ```powershell
-$env:OPENAI_API_KEY = "<chave>"
+$env:OPENAI_API_KEY = "<chave-da-API-Platform>"
 searchgeo audit https://example.com `
   --project "Exemplo" `
   --device-context mobile `
@@ -133,6 +131,8 @@ searchgeo audit --urls-file .\urls.txt --project "Exemplo"
 
 ## Providers de IA
 
+Antes de preencher uma variável de credencial, confirme o produto/plano. A referência detalhada está em [AI_GUIDE.md](AI_GUIDE.md).
+
 ### `none`
 
 Nenhuma chamada externa. Regras semantic-only sem evidência suficiente permanecem `UNKNOWN`. Isso pode reduzir Coverage/Consolidation, mas não é `FAIL` do website.
@@ -140,7 +140,7 @@ Nenhuma chamada externa. Regras semantic-only sem evidência suficiente permanec
 ### `openai`
 
 ```powershell
-$env:OPENAI_API_KEY = "<chave>"
+$env:OPENAI_API_KEY = "<chave-da-API-Platform>"
 searchgeo audit https://example.com --ai-provider openai
 ```
 
@@ -150,10 +150,12 @@ Default:
 gpt-5.6-terra
 ```
 
+Requisito comercial: billing/quota da **OpenAI API Platform**. Assinaturas e créditos do ChatGPT são separados da API e não substituem saldo/quota da organização/projeto de API.
+
 ### `deepseek`
 
 ```powershell
-$env:DEEPSEEK_API_KEY = "<chave>"
+$env:DEEPSEEK_API_KEY = "<chave-da-DeepSeek-API>"
 searchgeo audit https://example.com --ai-provider deepseek
 ```
 
@@ -163,10 +165,12 @@ Default:
 deepseek-v4-pro
 ```
 
+O saldo da API pode incluir saldo concedido e recarregado. `HTTP 402` indica saldo insuficiente.
+
 ### `mimo`
 
 ```powershell
-$env:MIMO_API_KEY = "<chave>"
+$env:MIMO_API_KEY = "<chave-sk-PAYG>"
 searchgeo audit https://example.com --ai-provider mimo
 ```
 
@@ -176,6 +180,10 @@ Default:
 mimo-v2.5-pro
 ```
 
+O adapter atual usa MiMo **Pay-as-you-go** em `https://api.xiaomimimo.com/v1/responses`; portanto a credencial esperada é `sk-...`.
+
+**MiMo Token Plan `tp-...` não é suportado pelo SearchGEO atual.** Ele usa Base URL dedicada por região e créditos independentes. A documentação oficial da MiMo restringe esse pacote a ferramentas de programação e proíbe automated scripts/custom application backends fora desse escopo.
+
 ### `auto`
 
 ```powershell
@@ -183,6 +191,8 @@ searchgeo audit https://example.com --ai-provider auto
 ```
 
 A cadeia é formada uma vez por audit com providers que possuem token e configuração válida. Execução sequencial; primeiro resultado válido encerra o contexto. Providers posteriores não sobrescrevem o resultado aceito.
+
+A existência da variável não prova compatibilidade comercial da credencial. Em particular, não configure `MIMO_API_KEY` com `tp-...`.
 
 ## Modelos aceitos
 
@@ -203,15 +213,17 @@ MIMO
 
 Em `auto`, modelos são definidos pelas variáveis específicas de provider; `--ai-model` é rejeitado.
 
+Model ID aceito pelo SearchGEO não garante que toda conta/plano tenha acesso ao modelo. O provider pode aplicar permissões, tiers, quotas, limites de gasto ou rate limits próprios.
+
 ## Variáveis de ambiente
 
 | Variável | Default | Uso |
 |---|---|---|
 | `SEARCHGEO_DEVICE_CONTEXT` | `mobile` na CLI | `mobile`, `desktop`, `both`. |
 | `SEARCHGEO_AI_TIMEOUT_SECONDS` | `180` | Timeout por chamada externa de IA; número finito > 0. |
-| `OPENAI_API_KEY` | — | Credencial OpenAI. |
-| `DEEPSEEK_API_KEY` | — | Credencial DeepSeek. |
-| `MIMO_API_KEY` | — | Credencial MiMo. |
+| `OPENAI_API_KEY` | — | Credencial da OpenAI API Platform. |
+| `DEEPSEEK_API_KEY` | — | Credencial da DeepSeek API. |
+| `MIMO_API_KEY` | — | Credencial MiMo Pay-as-you-go `sk-...`; Token Plan `tp-...` não suportado. |
 | `SEARCHGEO_OPENAI_MODEL` | `gpt-5.6-terra` | Model OpenAI no AUTO/configuração por env. |
 | `SEARCHGEO_DEEPSEEK_MODEL` | `deepseek-v4-pro` | Model DeepSeek. |
 | `SEARCHGEO_MIMO_MODEL` | `mimo-v2.5-pro` | Model MiMo. |
@@ -229,6 +241,8 @@ Provider explícito sem token:
 
 Em `auto`, providers sem token são excluídos da cadeia.
 
+Uma credencial de produto/plano incompatível não deve ser tratada como configuração válida apenas porque a variável existe.
+
 ## Falha / quota / crédito / timeout
 
 Provider explícito:
@@ -243,6 +257,8 @@ Provider explícito:
 - se a cadeia inteira falhar, estado operacional `CHAIN_EXHAUSTED`.
 
 Não há retry automático de timeout, evitando potencial duplicação de consumo.
+
+Antes de concluir que uma falha é “falta de crédito”, verifique também produto/plano, endpoint, tipo de chave, limite de gasto e acesso ao modelo. Para MiMo, `401` pode representar mistura Token Plan/PAYG e `402` no endpoint PAYG representa saldo PAYG insuficiente.
 
 ## Saída da CLI
 
