@@ -30,3 +30,53 @@ jobs:
             git push origin HEAD:m18-multi-ai-provider-routing
           fi
       - run: python -m unittest discover -s tests -v
+      - name: Conditional live provider smoke
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          MIMO_API_KEY: ${{ secrets.MIMO_API_KEY }}
+        run: |
+          python - <<'PY'
+          import os
+          from searchgeo.m18_ai import build_semantic_provider
+          from searchgeo.semantic import ProviderState, SemanticEvidenceInput, SemanticInput
+
+          available = [
+              name for name, key in (
+                  ("openai", os.environ.get("OPENAI_API_KEY")),
+                  ("deepseek", os.environ.get("DEEPSEEK_API_KEY")),
+                  ("mimo", os.environ.get("MIMO_API_KEY")),
+              ) if key
+          ]
+          if not available:
+              print("LIVE_SMOKE=SKIPPED_NO_CREDENTIALS")
+              raise SystemExit(0)
+
+          semantic_input = SemanticInput(
+              snapshot_id="SNP-LIVE-SMOKE",
+              page_url="https://example.com/m18-live-smoke",
+              title="SearchGEO M18 live smoke",
+              main_content="Synthetic SearchGEO provider compatibility smoke input. No website score should be inferred.",
+              structured_data=None,
+              primary_language="pt-BR",
+              market="BR",
+              evidence=(SemanticEvidenceInput(
+                  evidence_id="EVD-LIVE-SMOKE",
+                  evidence_type="TEXT_EXCERPT",
+                  source="m18-live-smoke",
+                  observed_value={"text": "Synthetic compatibility smoke input."},
+              ),),
+          )
+
+          failures = []
+          for name in available:
+              provider = build_semantic_provider(name, env=os.environ)
+              result = provider.analyze(semantic_input)
+              diagnostic = result.diagnostic.error_class.value if getattr(result, "diagnostic", None) and result.diagnostic.error_class else "NONE"
+              print(f"LIVE_SMOKE provider={name.upper()} state={result.state.value} diagnostic={diagnostic}")
+              if result.state is not ProviderState.AVAILABLE:
+                  failures.append(f"{name.upper()}:{diagnostic}")
+          if failures:
+              raise RuntimeError("live provider smoke failed: " + ",".join(failures))
+          print("LIVE_SMOKE=SUCCESS")
+          PY
