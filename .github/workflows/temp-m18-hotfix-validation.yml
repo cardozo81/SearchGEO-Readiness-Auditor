@@ -1,0 +1,21 @@
+name: Temporary M18 hotfix validation
+
+on:
+  push:
+    branches:
+      - hotfix-m18-openai-timeout-report-layout
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install package
+        run: python -m pip install -e .
+      - name: Compile
+        run: python -m compileall -q src tests
+      - name: Run M18 regression suite
+        run: python -m unittest -v tests.test_m18_timeout_and_report_layout tests.test_m18_multi_ai_provider tests.test_m18_operational_contract tests.test_openai_provider_hardening
