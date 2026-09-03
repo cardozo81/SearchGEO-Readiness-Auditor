@@ -209,7 +209,18 @@ searchgeo audit https://example.com --ai-provider mimo
 
 Default: `mimo-v2.5-pro` / `HIGH`, normalizado no relatório como `THINKING_ENABLED`.
 
-Um provider explícito **não faz fallback para outro fornecedor**. Após falha qualificadora ele entra em `QUARANTINED_FOR_AUDIT` e não é chamado novamente dentro daquele audit.
+Um provider explícito **não faz fallback para outro fornecedor**. Após falha qualificadora ele entra em `QUARANTINED_FOR_AUDIT` e não é chamado novamente dentro daquele audit. A ausência das chaves dos outros providers não interfere na execução explícita escolhida.
+
+## Timeout das chamadas de IA
+
+A CLI usa `180` segundos por chamada semântica externa. O valor pode ser alterado por ambiente:
+
+```powershell
+$env:SEARCHGEO_AI_TIMEOUT_SECONDS = "240"
+searchgeo audit https://example.com --ai-provider openai
+```
+
+O valor deve ser numérico, finito e maior que zero. Timeout não dispara retry automático, evitando uma segunda cobrança potencial quando a primeira chamada expirou localmente mas pode ter continuado no provider.
 
 ## 3. Usar vários providers com fallback
 
@@ -222,7 +233,7 @@ $env:MIMO_API_KEY = "<chave-mimo>"
 searchgeo audit --urls-file .\urls.txt --project "Exemplo" --ai-provider auto
 ```
 
-`AUTO` monta uma cadeia imutável no início do audit com apenas providers que possuem token e configuração válida. As chamadas são sequenciais, não paralelas.
+`AUTO` monta uma cadeia imutável no início do audit com apenas providers que possuem token e configuração válida. As chamadas são sequenciais, não paralelas. O primeiro resultado válido encerra a cadeia naquele contexto; providers posteriores não são chamados para sobrescrever o resultado.
 
 Para os modelos default, a ordem atual é:
 
@@ -277,6 +288,8 @@ O `report.html` contém a seção **Uso de IA — execução e telemetria**, com
 - duração;
 - `ESTIMATED_COST` quando calculável;
 - erro sanitizado.
+
+A seção de telemetria é inserida dentro de `<main>`. Quando a tabela excede a largura disponível, a rolagem horizontal ocorre dentro do próprio bloco, sem invadir a sidebar fixa.
 
 No `audit.db`, M18 persiste:
 
