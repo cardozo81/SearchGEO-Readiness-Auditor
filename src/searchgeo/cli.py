@@ -262,6 +262,12 @@ def _configured_lighthouse_categories(cli_value: str | None) -> tuple[str, ...]:
 
 def _configured_web_performance(args: argparse.Namespace) -> WebPerformanceConfig:
     enabled = _configured_bool(args.web_performance, _WEB_PERFORMANCE_ENV, False)
+    # When M21 network collection is OFF, its tuning variables must not become
+    # a new failure surface for the pre-existing audit command. Real workspaces
+    # still materialize a DISABLED state using stable defaults.
+    if not enabled:
+        return WebPerformanceConfig(enabled=False).validate()
+
     max_pages = _configured_nonnegative_int(
         args.web_performance_max_pages,
         _WEB_PERFORMANCE_MAX_PAGES_ENV,
@@ -277,7 +283,7 @@ def _configured_web_performance(args: argparse.Namespace) -> WebPerformanceConfi
         or os.environ.get(_WEB_PERFORMANCE_FIELD_SOURCE_ENV, "auto")
     ).strip().casefold()
     config = WebPerformanceConfig(
-        enabled=enabled,
+        enabled=True,
         max_pages=max_pages,
         timeout_seconds=timeout,
         categories=_configured_lighthouse_categories(args.lighthouse_categories),
