@@ -1,0 +1,35 @@
+name: Temporary M18 provider configuration reporting validation
+
+on:
+  push:
+    branches: [hotfix-m18-provider-configuration-reporting]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -e .
+      - run: python -m playwright install --with-deps chromium
+      - run: python -m compileall -q src tests
+      - name: M18 directed
+        run: python -m unittest tests.test_m18_multi_ai_provider tests.test_m18_operational_contract -v
+      - name: Full regression
+        run: python -m unittest discover -s tests -v
+      - name: Hygiene
+        run: |
+          git diff --check origin/main...HEAD
+          if git grep -n -E '(sk-[A-Za-z0-9_-]{20,}|github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})' -- .; then
+            echo 'Potential credential material detected.' >&2
+            exit 1
+          fi
+          echo 'SECRET_SCAN=PASS'
