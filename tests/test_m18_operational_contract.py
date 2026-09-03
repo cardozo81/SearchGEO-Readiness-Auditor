@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sqlite3
+from tempfile import TemporaryDirectory
 import unittest
 
+from searchgeo.acquisition import HttpClient
+from searchgeo.audit_runner import run_audit
+from searchgeo.discovery import DiscoveryEngine
+from searchgeo.m18_ai import OpenAIProvider
 from searchgeo.m18_persistence import _resolve_session_status
+from tests.test_m12_stable_baseline import _FixtureRenderer, _server
 
 
 class M18OperationalContractTests(unittest.TestCase):
@@ -11,16 +18,29 @@ class M18OperationalContractTests(unittest.TestCase):
         status, exhausted = _resolve_session_status(
             strategy="SINGLE_PROVIDER",
             enabled=True,
+            configured=True,
             audit_mode="DEGRADED",
             provider_states={"OPENAI": "QUARANTINED_FOR_AUDIT"},
         )
         self.assertEqual(status, "DEGRADED")
         self.assertFalse(exhausted)
 
+    def test_selected_provider_without_credential_is_not_configured(self) -> None:
+        status, exhausted = _resolve_session_status(
+            strategy="SINGLE_PROVIDER",
+            enabled=True,
+            configured=False,
+            audit_mode="NO_AI",
+            provider_states={"OPENAI": "ACTIVE"},
+        )
+        self.assertEqual(status, "NOT_CONFIGURED")
+        self.assertFalse(exhausted)
+
     def test_auto_all_quarantined_is_chain_exhausted(self) -> None:
         status, exhausted = _resolve_session_status(
             strategy="AUTO",
             enabled=True,
+            configured=True,
             audit_mode="DEGRADED",
             provider_states={
                 "OPENAI": "QUARANTINED_FOR_AUDIT",
@@ -29,6 +49,53 @@ class M18OperationalContractTests(unittest.TestCase):
         )
         self.assertEqual(status, "CHAIN_EXHAUSTED")
         self.assertTrue(exhausted)
+
+    def test_explicit_provider_without_token_is_visible_in_persistence_and_reports(self) -> None:
+        with _server() as origin, TemporaryDirectory() as directory:
+            html = """<!doctype html><html lang='pt-BR'><head><title>Sem token</title></head>
+<body><main><h1>Sem token</h1><p>Fixture para validar estado operacional sem credencial.</p></main></body></html>"""
+            provider = OpenAIProvider(api_key="")
+            result = run_audit(
+                f"{origin}/",
+                audits_root=Path(directory),
+                project_name="M18 sem token",
+                max_pages=1,
+                semantic_provider=provider,
+                discovery_engine=DiscoveryEngine(HttpClient(timeout=1)),
+                renderer=_FixtureRenderer(html),
+                lazy_probe=lambda url, device: None,
+            )
+
+            connection = sqlite3.connect(result.audit_root / "audit.db")
+            connection.row_factory = sqlite3.Row
+            try:
+                session = connection.execute(
+                    "SELECT strategy,enabled,status,effective_provider FROM ai_audit_sessions WHERE audit_id=?",
+                    (result.audit_id,),
+                ).fetchone()
+                attempts = connection.execute(
+                    "SELECT COUNT(*) FROM ai_provider_attempts WHERE audit_id=?",
+                    (result.audit_id,),
+                ).fetchone()[0]
+            finally:
+                connection.close()
+
+            self.assertIsNotNone(session)
+            self.assertEqual(session["strategy"], "SINGLE_PROVIDER")
+            self.assertEqual(session["enabled"], 1)
+            self.assertEqual(session["status"], "NOT_CONFIGURED")
+            self.assertIsNone(session["effective_provider"])
+            self.assertEqual(attempts, 0)
+
+            report = result.report_path.read_text(encoding="utf-8")
+            remediation = (result.audit_root / "remediation.html").read_text(encoding="utf-8")
+            self.assertIn("IA habilitada pelo comando", report)
+            self.assertIn("Provider configurado", report)
+            self.assertIn("NOT_CONFIGURED", report)
+            self.assertIn("Chamadas externas realizadas", report)
+            self.assertIn("Nenhuma chamada externa foi realizada", report)
+            self.assertIn("provider de IA selecionado, mas sem configuração/credencial elegível", remediation)
+            self.assertIn("<strong>Chamadas externas:</strong> 0", remediation)
 
     def test_cli_reference_documents_every_exposed_argument(self) -> None:
         text = Path("docs/CLI_REFERENCE.md").read_text(encoding="utf-8")
@@ -50,9 +117,9 @@ class M18OperationalContractTests(unittest.TestCase):
             with self.subTest(token=token):
                 self.assertIn(token, text)
 
-        for provider in ("none", "openai", "deepseek", "mimo", "auto"):
-            with self.subTest(provider=provider):
-                self.assertIn(provider, text)
+        for provider_name in ("none", "openai", "deepseek", "mimo", "auto"):
+            with self.subTest(provider=provider_name):
+                self.assertIn(provider_name, text)
 
 
 if __name__ == "__main__":
