@@ -1,337 +1,235 @@
-# Guia do Usuário
+# USER_GUIDE.md
 
-Este guia descreve o uso da baseline atual do SearchGEO Readiness Auditor. Para a lista exaustiva dos parâmetros, consulte [CLI_REFERENCE.md](CLI_REFERENCE.md).
+## Fluxo recomendado
 
-# Preparar o terminal
+1. instalar Python 3.13, package, Playwright e Chromium;
+2. escolher o universo de URLs;
+3. escolher o contexto de dispositivo;
+4. decidir se IA será usada;
+5. executar a auditoria;
+6. abrir `report/index.html`;
+7. navegar para Mobile/Desktop, remediações, IA ou referências conforme a necessidade.
 
-No Windows PowerShell:
-
-```powershell
-cd C:\caminho\SearchGEO-Readiness-Auditor
-.\.venv\Scripts\Activate.ps1
-searchgeo --version
-searchgeo audit --help
-```
-
-Se o ambiente não estiver instalado, siga [INSTALLATION.md](INSTALLATION.md).
-
-# Executar uma URL
+## Execução padrão
 
 ```powershell
-searchgeo audit https://example.com --project "Projeto Exemplo"
+searchgeo audit https://example.com --project "Exemplo"
 ```
 
-Também é aceito domínio sem scheme:
-
-```powershell
-searchgeo audit example.com
-```
-
-Quando houver path/query/fragment, informe `http://` ou `https://`.
-
-# Executar várias URLs no mesmo audit
-
-```powershell
-searchgeo audit `
-  https://example.com/ `
-  https://example.com/produto-a `
-  https://example.com/produto-b `
-  --project "Projeto Exemplo"
-```
-
-As URLs explícitas são normalizadas/deduplicadas e pertencem ao mesmo `audit_id`. O conjunto deve respeitar as regras de origem da auditoria.
-
-# Executar por arquivo
-
-`urls.txt`:
+Defaults relevantes:
 
 ```text
-# páginas principais
-https://example.com/
-https://example.com/produto-a
-https://example.com/produto-b
-```
-
-Execução:
-
-```powershell
-searchgeo audit --urls-file .\urls.txt --project "Projeto Exemplo"
-```
-
-Linhas vazias e comentários iniciados por `#` são ignorados. `--urls-file` caracteriza `URL_SET`, mesmo se só uma URL válida permanecer.
-
-É permitido combinar positionals e arquivo.
-
-# Parâmetros disponíveis
-
-Resumo:
-
-```text
-searchgeo [--config PATH] audit [target ...]
-          [--urls-file PATH]
-          [--project TEXT]
-          [--language CODE]
-          [--market CODE]
-          [--max-pages N]
-          [--audits-root PATH]
-          [--ai-provider none|openai|deepseek|mimo|auto]
-          [--ai-model MODEL_ID]
-```
-
-Defaults:
-
-```text
+device = mobile
+AI = none
 language = pt-BR
 market = BR
 max-pages = 100
 audits-root = audits
-ai-provider = none
 ```
 
-A descrição detalhada de cada argumento, inclusive `--config`, `--version` e `--help`, está em [CLI_REFERENCE.md](CLI_REFERENCE.md).
+## Dispositivo
 
-# Exemplo operacional completo
+### Mobile — padrão
 
 ```powershell
-searchgeo audit https://example.com `
-  --project "Projeto Exemplo" `
-  --language pt-BR `
-  --market BR `
-  --max-pages 25 `
-  --audits-root .\audits `
-  --ai-provider none
+searchgeo audit https://example.com --device-context mobile
 ```
 
-# IA desabilitada
+Gera somente contexto Mobile. É a opção recomendada para análise inicial e reduz custo/tempo quando IA está habilitada.
+
+### Desktop
+
+```powershell
+searchgeo audit https://example.com --device-context desktop
+```
+
+### Ambos
+
+```powershell
+searchgeo audit https://example.com --device-context both
+```
+
+Use `both` quando a comparação Desktop × Mobile for requisito da auditoria.
+
+Também é possível:
+
+```powershell
+$env:SEARCHGEO_DEVICE_CONTEXT = "mobile"
+```
+
+A flag `--device-context` tem precedência sobre a variável.
+
+## Múltiplas URLs
+
+```powershell
+searchgeo audit `
+  https://example.com/ `
+  https://example.com/produto `
+  https://example.com/faq `
+  --project "Exemplo" `
+  --max-pages 3
+```
+
+Ou:
+
+```powershell
+searchgeo audit --urls-file .\urls.txt --project "Exemplo"
+```
+
+Todas as URLs de um `URL_SET` devem pertencer à mesma origem normalizada.
+
+## Sem IA
 
 ```powershell
 searchgeo audit https://example.com --ai-provider none
 ```
 
-Esse é o default. A pipeline determinística continua. Dependências semantic-only sem base suficiente ficam `UNKNOWN`; ausência de IA não é falha do website.
+A auditoria continua com regras determinísticas. Regras semânticas sem evidência suficiente ficam `UNKNOWN`; isso não equivale a FAIL do site.
 
-# Um único provider de IA
-
-## OpenAI
+## Com OpenAI
 
 ```powershell
 $env:OPENAI_API_KEY = "<chave>"
-searchgeo audit https://example.com --ai-provider openai
+searchgeo audit https://example.com `
+  --device-context mobile `
+  --ai-provider openai
 ```
 
-Default: `gpt-5.6-terra`.
+O default OpenAI é `gpt-5.6-terra`.
 
-## DeepSeek
+## Com AUTO multi-provider
 
 ```powershell
+$env:OPENAI_API_KEY = "<chave>"
 $env:DEEPSEEK_API_KEY = "<chave>"
-searchgeo audit https://example.com --ai-provider deepseek
-```
-
-Default: `deepseek-v4-pro`.
-
-## Xiaomi MiMo
-
-```powershell
 $env:MIMO_API_KEY = "<chave>"
-searchgeo audit https://example.com --ai-provider mimo
+searchgeo audit https://example.com --ai-provider auto
 ```
 
-Default: `mimo-v2.5-pro`.
+Providers sem token/configuração válida são excluídos. O primeiro resultado válido encerra a cadeia naquele contexto.
 
-Provider explícito usa somente o fornecedor escolhido. Se falhar, não troca para outro provider; após falha qualificadora ele fica quarantined durante o restante do audit.
-
-# Override de modelo
-
-Somente com provider explícito:
-
-```powershell
-searchgeo audit https://example.com --ai-provider openai --ai-model gpt-5.6-sol
-searchgeo audit https://example.com --ai-provider deepseek --ai-model deepseek-v4-flash
-searchgeo audit https://example.com --ai-provider mimo --ai-model mimo-v2.5
-```
-
-`--ai-model` com `--ai-provider auto` é rejeitado. Em AUTO, use as variáveis por provider.
-
-# Vários providers com AUTO
-
-```powershell
-$env:OPENAI_API_KEY = "<chave-openai>"
-$env:DEEPSEEK_API_KEY = "<chave-deepseek>"
-$env:MIMO_API_KEY = "<chave-mimo>"
-searchgeo audit --urls-file .\urls.txt --project "Projeto Exemplo" --ai-provider auto
-```
-
-O AUTO:
-
-1. ignora providers sem token;
-2. exclui configurações inválidas;
-3. ordena providers elegíveis pelo rank SearchGEO do modelo;
-4. chama sequencialmente, não em paralelo;
-5. quarantina provider que falha;
-6. tenta o próximo saudável quando permitido;
-7. nunca reintroduz provider quarantined no mesmo audit.
-
-Para os defaults, a ordem é OpenAI Terra → DeepSeek V4 Pro → MiMo V2.5 Pro.
-
-# Provider selecionado sem token
-
-Provider explícito sem token:
-
-- nenhuma chamada externa;
-- estado `NOT_CONFIGURED`;
-- auditoria continua sem IA efetiva.
-
-AUTO:
-
-- provider sem token não entra na cadeia;
-- se nenhum provider for elegível, nenhuma chamada externa acontece.
-
-# Sem créditos, quota, timeout ou erro
-
-Falhas são classificadas e sanitizadas.
-
-Provider explícito:
-
-```text
-SINGLE_PROVIDER -> DEGRADED
-```
-
-Não existe cross-provider fallback.
-
-AUTO:
-
-```text
-provider falho -> QUARANTINED_FOR_AUDIT
-próximo saudável -> pode ser tentado
-```
-
-Se todos os providers AUTO falharem:
-
-```text
-CHAIN_EXHAUSTED
-AI_PROVIDER_CHAIN_EXHAUSTED
-```
-
-Isso é limitação da auditoria, não finding do site.
-
-# Lock por URL entre Desktop/Mobile
-
-Quando um provider entrega a primeira análise válida de uma URL, ele fica fixado para Desktop/Mobile dessa URL.
-
-Se falhar no segundo device:
-
-- outro provider não completa a mesma URL;
-- o contexto faltante fica degradado/`UNKNOWN` quando aplicável;
-- o provider é quarantined para URLs seguintes;
-- a próxima URL pode usar o próximo provider saudável.
-
-# Saída da CLI
-
-A conclusão normal imprime:
+## Saída esperada
 
 ```text
 Auditoria concluída: AUD-...
 Status: ...
-Páginas auditadas: N
-Problemas identificados: N
-Recomendações: N
-Relatório: audits\AUD-...\report.html
-Relatório por problemas: audits\AUD-...\remediation.html
+Páginas auditadas: ...
+Contexto de dispositivo: MOBILE
+Problemas identificados: ...
+Recomendações: ...
+Relatório: audits\AUD-...\report\index.html
+Relatório por problemas: audits\AUD-...\report\remediation.html
 ```
 
-Cada nova execução cria um novo workspace.
+## Abrindo o relatório
 
-# Workspace
+Abra diretamente:
 
 ```text
-<audits-root>/<AUD-ID>/
-  audit.db
-  report.html
-  remediation.html
-  artifacts/
+audits/<AUD-ID>/report/index.html
 ```
 
-Os dados primários são `audit.db` + artifacts. Os HTMLs são projeções.
+O report site não precisa de servidor.
 
-# `report.html`
+Menu:
 
-Visão orientada à auditoria/páginas. Inclui, conforme evidência disponível:
+- **Visão geral** — dashboard executivo;
+- **Relatório Mobile** — aparece quando Mobile foi auditado;
+- **Relatório Desktop** — aparece quando Desktop foi auditado;
+- **Remediações** — causas e ações agrupadas;
+- **Uso de IA** — telemetria operacional;
+- **Referências e metodologia** — fontes e fórmulas.
 
-- compatibilidade GEO;
-- Score/Coverage/Confidence/Consolidation;
-- Desktop/Mobile separados;
-- findings, actionability e prioridade;
-- screenshots/DOM/evidence;
-- causa raiz e correção;
-- recursos de domínio;
-- contexto e telemetria de IA.
+## Como interpretar a visão geral
 
-A seção M18 **Uso de IA — execução e telemetria** diferencia:
+Não leia somente o número do Score.
 
-- IA habilitada;
-- estratégia;
-- provider inicial e efetivo;
-- modelo/depth;
-- status;
-- cadeia inicial;
-- failover;
-- tentativas por URL/device;
-- tokens;
-- custo estimado;
-- duração;
-- erro sanitizado.
+### Score
 
-# `remediation.html`
+Qualidade observada nas regras efetivamente avaliadas.
 
-Visão transversal por problema/regra. Agrupa ocorrências e mantém contexto operacional da IA apenas de forma informativa. Falha de provider não vira finding nem recommendation.
+### Coverage
 
-# Telemetria no `audit.db`
+Quanto do universo aplicável realmente foi avaliado.
 
-M18 persiste:
+Coverage baixa significa análise incompleta, não site ruim.
+
+### Confidence
+
+Força da conclusão do auditor.
+
+**Confidence LOW não significa que o texto não é válido para GEO.** Pode ocorrer por baixa Coverage, evidência incompleta ou erros de execução. Uma mudança de conteúdo só deve ser recomendada quando um finding/RuleExecution sustenta essa alteração.
+
+### Consolidation
+
+Indica se a base é suficiente para publicar o resultado como consolidado.
+
+## Mobile × Desktop
+
+Com `both`, leia os relatórios separadamente. Uma diferença entre dispositivos não é automaticamente problema.
+
+A página Mobile nunca mistura finding exclusivamente Desktop, e vice-versa.
+
+## Remediações
+
+Abra:
 
 ```text
-ai_audit_sessions
-ai_provider_attempts
-provider_pricing_catalog
+report/remediation.html
 ```
 
-API keys e Authorization não são persistidos.
+A página agrupa causas e, quando disponível, apresenta:
 
-# Logging
+- reason code;
+- selector observado;
+- alvo técnico;
+- mudança recomendada;
+- observado versus esperado;
+- critérios de aceite;
+- passos de revalidação;
+- decisão humana necessária.
 
-Quando `log_level` permite, o processo emite logs sanitizados por tentativa/sessão de IA com provider/model/status/duração/tokens/custo estimado/error_class.
+## IA
 
-A aplicação não cria `audit.log` automaticamente. O registro persistente é `audit.db` + `report.html`.
+Abra:
 
-# Interpretar limitações
+```text
+report/ai-usage.html
+```
 
-`COMPLETE_WITH_LIMITATIONS` não significa automaticamente website ruim. Pode refletir, entre outros:
+Essa página é operacional. Timeout, quota, auth ou provider ausente não são problemas GEO do site.
 
-- IA desabilitada/indisponível;
-- provider sem token;
-- falha/quarantine de provider;
-- chain exhausted AUTO;
-- falta de rendering/evidence;
-- max pages;
-- score não consolidável.
+O custo mostrado é estimativa local, não fatura.
 
-`UNKNOWN`, `ERROR` e `NOT_APPLICABLE` não equivalem a `FAIL`.
+## Referências
 
-# Reexecutar
+Abra:
 
-Não existe resume/update in-place. Corrija o contexto e execute nova auditoria:
+```text
+report/references.html
+```
+
+Ali estão fontes oficiais e a distinção entre norma/standard e heurística interna.
+
+O SearchGEO não promete uma “nota oficial GEO”. O guia atual do Google para recursos generativos reforça fundamentos de SEO e não exige markup GEO/AEO especial, chunking artificial ou conteúdo reescrito apenas para IA.
+
+## Segurança
+
+Nunca salve API keys em HTML, Git ou scripts compartilhados.
+
+Valide somente presença:
 
 ```powershell
-searchgeo audit https://example.com --project "Revalidação"
+Test-Path Env:OPENAI_API_KEY
+Test-Path Env:DEEPSEEK_API_KEY
+Test-Path Env:MIMO_API_KEY
 ```
 
-Compare os workspaces/HTMLs entre execuções.
+## Próximas leituras
 
-# Referências
-
-- [Referência completa da CLI](CLI_REFERENCE.md)
-- [Configuração](CONFIGURATION.md)
-- [Guia de IA](AI_GUIDE.md)
-- [Guia do relatório](REPORT_GUIDE.md)
-- [Outputs e artifacts](OUTPUTS_AND_ARTIFACTS.md)
+- [CLI_REFERENCE.md](CLI_REFERENCE.md)
+- [CONFIGURATION.md](CONFIGURATION.md)
+- [REPORT_GUIDE.md](REPORT_GUIDE.md)
+- [SCORING_GUIDE.md](SCORING_GUIDE.md)
+- [AI_GUIDE.md](AI_GUIDE.md)
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
