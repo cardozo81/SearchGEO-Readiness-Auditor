@@ -1,6 +1,6 @@
 # FUNCTIONAL_REQUIREMENTS.md
 
-**Status:** APPROVED — M20 + M18 + SCORE-GEO-002 + REPORT-SITE-GEO-001
+**Status:** APPROVED — M21 + M20 + M18 + SCORE-GEO-002 + REPORT-SITE-GEO-001
 
 ## Requisitos Funcionais
 
@@ -280,6 +280,45 @@ Expor M20 em `report/content-suggestions.html`, com shared navigation/CSS, e exi
 ### FR-GEO-092
 Informar explicitamente que JSON-LD é reforço opcional, que não existe markup especial GEO/AEO obrigatório, que propriedades de rich result dependem do tipo/feature e que markup válido não garante exibição de rich result.
 
+### FR-GEO-093
+Expor M21 por `--web-performance`, `--no-web-performance` e `SEARCHGEO_WEB_PERFORMANCE`, com default público `false` e nenhuma chamada PageSpeed/CrUX quando desabilitado.
+
+### FR-GEO-094
+Quando M21 estiver habilitado, coletar por página/dispositivo selecionado evidência Lighthouse por PageSpeed Insights API e persistir scores/metricas retornados sem convertê-los em contribuição de `SCORE-GEO-002`.
+
+### FR-GEO-095
+Coletar Core Web Vitals de campo LCP, INP e CLS em p75 quando disponíveis, distinguindo explicitamente dados CrUX reais de métricas Lighthouse de laboratório.
+
+### FR-GEO-096
+Avaliar Core Web Vitals com thresholds oficiais vigentes da implementação e usar `INCOMPLETE`/`UNAVAILABLE` quando a amostra ou uma métrica necessária não existir; ausência de CrUX nunca deve virar website FAIL.
+
+### FR-GEO-097
+Expor política de field data `auto|pagespeed|crux|none`; `auto` deve preferir dados CrUX devolvidos pelo PageSpeed e usar CrUX API direta somente como fallback quando necessário e configurado.
+
+### FR-GEO-098
+Expor `--web-performance-max-pages`, `--web-performance-timeout-seconds` e `--lighthouse-categories`, com equivalentes por ambiente, para controlar quota, duração e escopo de chamadas externas.
+
+### FR-GEO-099
+Isolar `SEARCHGEO_PAGESPEED_API_KEY` e `SEARCHGEO_CRUX_API_KEY` entre si e das credenciais OpenAI/DeepSeek/MiMo; nenhuma credencial M21 deve ser persistida ou exibida.
+
+### FR-GEO-100
+M21 deve adicionar zero chamadas LLM e não pode reutilizar automaticamente SemanticProvider/M20 para interpretar métricas externas.
+
+### FR-GEO-101
+Persistir M21 em tabelas auxiliares e artifacts JSON reabríveis, mantendo tentativas/erros de PageSpeed/CrUX como telemetria operacional externa e não como Finding/Recommendation do website.
+
+### FR-GEO-102
+Materializar `report/web-performance.html` com navegação/CSS compartilhados, separando Lighthouse lab, Core Web Vitals field, source/scope, indisponibilidade e telemetria de coleta.
+
+### FR-GEO-103
+Projetar no `report/index.html` somente resumo explicitamente rotulado como Web Performance externo, sem substituir ou recalcular Overall Readiness, Coverage ou Confidence.
+
+### FR-GEO-104
+Adicionar ao `report/references.html` fontes oficiais de PageSpeed Insights, CrUX, Lighthouse e Core Web Vitals e declarar que essas fontes sustentam os fenômenos medidos, não homologam `SCORE-GEO-002` como standard GEO/AEO.
+
+### FR-GEO-105
+Executar M21 como enriquecimento pós-auditoria/fail-open: indisponibilidade ou erro do serviço externo não pode invalidar RuleExecution, Finding, Recommendation ou score já concluídos.
+
 ## Requisitos Não Funcionais
 
 ### NFR-GEO-001
@@ -329,3 +368,15 @@ M20 deve ser fail-open em relação ao audit: indisponibilidade da finalidade de
 
 ### NFR-GEO-016
 Sugestões M20 e JSON-LD devem permanecer advisory, reabríveis no `audit.db` e separadas dos objetos normativos de scoring.
+
+### NFR-GEO-017
+M21 deve permanecer opcional, default OFF para rede externa, com limite explícito de páginas e timeout configurável para impedir consumo PageSpeed/CrUX não previsto.
+
+### NFR-GEO-018
+M21 deve ser fail-open em relação à auditoria principal e não introduzir dependência obrigatória de PageSpeed, CrUX ou credencial Google para funcionamento de `SCORE-GEO-002`.
+
+### NFR-GEO-019
+Métricas M21 devem permanecer reabríveis a partir de `audit.db` + artifacts JSON sem nova chamada externa, preservando source, device, URL/origin scope e versão Lighthouse quando disponível.
+
+### NFR-GEO-020
+M21 não pode persistir API keys, URLs contendo parâmetros de chave, Authorization ou erro externo não sanitizado; telemetria de coleta deve permanecer separada da telemetria IA.
