@@ -1,0 +1,257 @@
+from __future__ import annotations
+
+import io
+import json
+from datetime import datetime, timezone
+from email.message import Message
+import unittest
+from urllib.error import HTTPError, URLError
+
+from searchgeo.m18_ai import (
+    DeepSeekProvider,
+    MiMoProvider,
+    OpenAIProvider,
+    ProviderErrorClass,
+    ProviderRoutingSession,
+    ProviderState,
+    ProviderUsage,
+    SEMANTIC_RULE_IDS,
+    build_semantic_provider,
+    estimate_cost,
+)
+from searchgeo.semantic import SemanticEvidenceInput, SemanticInput
+
+
+def _input(url: str = "https://example.com/produto", snapshot_id: str = "SNP-1") -> SemanticInput:
+    return SemanticInput(
+        snapshot_id=snapshot_id,
+        page_url=url,
+        title="Produto Alpha",
+        main_content="Conteúdo factual sobre Produto Alpha.",
+        structured_data=None,
+        primary_language="pt-BR",
+        market="BR",
+        evidence=(SemanticEvidenceInput(
+            evidence_id="EVD-1",
+            evidence_type="TEXT_EXCERPT",
+            source="test",
+            observed_value={"text": "Produto Alpha"},
+        ),),
+    )
+
+
+def _assessment(rule_id: str, evidence_ids: list[str] | None = None) -> dict[str, object]:
+    return {
+        "rule_id": rule_id,
+        "result": "UNKNOWN",
+        "confidence": 0.0,
+        "evidence_ids": evidence_ids or [],
+        "reasoning_summary": "Insufficient evidence in fixture.",
+        "observed_value": {"summary": "", "details": []},
+    }
+
+
+def _payload(rule_ids: tuple[str, ...] = SEMANTIC_RULE_IDS) -> dict[str, object]:
+    return {
+        "assessments": [_assessment(rule_id) for rule_id in rule_ids],
+        "entities": [],
+        "primary_intent": None,
+        "secondary_intents": [],
+    }
+
+
+def _success_transport(calls: list[dict[str, object]] | None = None):
+    def transport(url, headers, body, timeout):
+        if calls is not None:
+            calls.append({"url": url, "headers": headers, "body": json.loads(body), "timeout": timeout})
+        return {
+            "output_text": json.dumps(_payload()),
+            "usage": {
+                "input_tokens": 100,
+                "input_tokens_details": {"cached_tokens": 20},
+                "output_tokens": 50,
+                "output_tokens_details": {"reasoning_tokens": 10},
+                "total_tokens": 150,
+            },
+        }
+    return transport
+
+
+def _http_error(status: int, *, error_type: str, error_code: str):
+    headers = Message()
+    headers["x-request-id"] = "req_safe_1"
+    body = io.BytesIO(json.dumps({"error": {"type": error_type, "code": error_code, "message": "SECRET-MESSAGE"}}).encode())
+    return HTTPError("https://provider.invalid/responses", status, "error", headers, body)
+
+
+class M18ProviderTests(unittest.TestCase):
+    def test_configuration_supports_each_provider_and_auto_order(self) -> None:
+        openai = build_semantic_provider("openai", env={"OPENAI_API_KEY": "x"})
+        deepseek = build_semantic_provider("deepseek", env={"DEEPSEEK_API_KEY": "x"})
+        mimo = build_semantic_provider("mimo", env={"MIMO_API_KEY": "x"})
+        self.assertEqual((openai.name, openai.model), ("OPENAI", "gpt-5.6-terra"))
+        self.assertEqual((deepseek.name, deepseek.model), ("DEEPSEEK", "deepseek-v4-pro"))
+        self.assertEqual((mimo.name, mimo.model, mimo.reasoning_profile), ("MIMO", "mimo-v2.5-pro", "THINKING_ENABLED"))
+
+        auto = build_semantic_provider("auto", env={
+            "OPENAI_API_KEY": "x", "DEEPSEEK_API_KEY": "x", "MIMO_API_KEY": "x",
+        })
+        self.assertEqual([item.name for item in auto.providers], ["OPENAI", "DEEPSEEK", "MIMO"])
+        self.assertEqual([item.policy.rank for item in auto.providers], [2, 3, 4])
+
+    def test_auto_excludes_missing_and_invalid_configuration(self) -> None:
+        auto = build_semantic_provider("auto", env={
+            "OPENAI_API_KEY": "x",
+            "MIMO_API_KEY": "x",
+            "SEARCHGEO_MIMO_MODEL": "bad-model",
+        })
+        self.assertEqual([item.name for item in auto.providers], ["OPENAI"])
+        self.assertEqual(auto.excluded_configurations, ("MIMO:INVALID_CONFIGURATION",))
+
+    def test_provider_requests_use_expected_structured_modes_and_reasoning(self) -> None:
+        calls: list[dict[str, object]] = []
+        for provider in (
+            OpenAIProvider(api_key="x", transport=_success_transport(calls)),
+            DeepSeekProvider(api_key="x", transport=_success_transport(calls)),
+            MiMoProvider(api_key="x", transport=_success_transport(calls)),
+        ):
+            result = provider.analyze(_input(snapshot_id=f"SNP-{provider.name}"))
+            self.assertEqual(result.state, ProviderState.AVAILABLE)
+        self.assertEqual(calls[0]["body"]["text"]["format"]["type"], "json_schema")
+        self.assertTrue(calls[0]["body"]["text"]["format"]["strict"])
+        self.assertEqual(calls[1]["body"]["text"]["format"]["type"], "json_schema")
+        self.assertNotIn("strict", calls[1]["body"]["text"]["format"])
+        self.assertEqual(calls[2]["body"]["text"]["format"]["type"], "json_object")
+        self.assertEqual(calls[2]["body"]["reasoning"]["effort"], "high")
+
+    def test_usage_and_estimated_cost_are_normalized(self) -> None:
+        provider = OpenAIProvider(api_key="x", transport=_success_transport())
+        result = provider.analyze(_input())
+        self.assertEqual(result.usage, ProviderUsage(100, 20, 50, 10, 150))
+        attempts = provider.attempt_history()
+        self.assertEqual(len(attempts), 1)
+        self.assertIsNotNone(attempts[0].estimated_cost)
+        self.assertEqual(attempts[0].cost_currency, "USD")
+        amount, currency, version = estimate_cost(
+            "OPENAI", "gpt-5.6-terra", ProviderUsage(100, 20, 50, 10, 150), datetime.now(timezone.utc)
+        )
+        self.assertIsNotNone(amount)
+        self.assertEqual(currency, "USD")
+        self.assertTrue(version)
+        missing, _, _ = estimate_cost("OPENAI", "gpt-5.6-terra", ProviderUsage(100, None, 50, None, 150), datetime.now(timezone.utc))
+        self.assertIsNone(missing)
+
+    def test_contract_rejects_partial_invalid_evidence_and_empty_output(self) -> None:
+        partial = OpenAIProvider(api_key="x", transport=lambda *_: {"output_text": json.dumps(_payload(SEMANTIC_RULE_IDS[:-1]))})
+        self.assertEqual(partial.analyze(_input()).diagnostic.error_class, ProviderErrorClass.CONTRACT_ERROR)
+
+        invented_payload = _payload()
+        invented_payload["assessments"][0]["evidence_ids"] = ["INVENTED"]
+        invented = OpenAIProvider(api_key="x", transport=lambda *_: {"output_text": json.dumps(invented_payload)})
+        self.assertEqual(invented.analyze(_input()).diagnostic.error_class, ProviderErrorClass.CONTRACT_ERROR)
+
+        invalid = OpenAIProvider(api_key="x", transport=lambda *_: {"output_text": "{not-json"})
+        self.assertEqual(invalid.analyze(_input()).diagnostic.error_class, ProviderErrorClass.INVALID_RESPONSE)
+
+        empty = OpenAIProvider(api_key="x", transport=lambda *_: {})
+        self.assertEqual(empty.analyze(_input()).diagnostic.error_class, ProviderErrorClass.EMPTY_RESPONSE)
+
+    def test_http_and_network_errors_are_sanitized_and_classified(self) -> None:
+        def quota(*_):
+            raise _http_error(429, error_type="insufficient_quota", error_code="credit_balance_exhausted")
+        result = OpenAIProvider(api_key="SUPER-SECRET-KEY", transport=quota).analyze(_input())
+        self.assertEqual(result.diagnostic.error_class, ProviderErrorClass.CREDIT_ERROR)
+        self.assertNotIn("SUPER-SECRET-KEY", result.reason)
+        self.assertNotIn("SECRET-MESSAGE", result.reason)
+
+        def auth(*_):
+            raise _http_error(401, error_type="invalid_api_key", error_code="invalid_api_key")
+        self.assertEqual(OpenAIProvider(api_key="x", transport=auth).analyze(_input()).diagnostic.error_class, ProviderErrorClass.AUTH_ERROR)
+
+        def network(*_):
+            raise URLError("offline")
+        self.assertEqual(OpenAIProvider(api_key="x", transport=network).analyze(_input()).diagnostic.error_class, ProviderErrorClass.NETWORK_ERROR)
+
+    def test_auto_failover_quarantines_and_promotes_fallback(self) -> None:
+        calls = {"OPENAI": 0, "DEEPSEEK": 0, "MIMO": 0}
+        def openai_fail(*_):
+            calls["OPENAI"] += 1
+            raise _http_error(429, error_type="insufficient_quota", error_code="credit_balance_exhausted")
+        def deepseek_success(*args):
+            calls["DEEPSEEK"] += 1
+            return _success_transport()( *args )
+        def mimo_success(*args):
+            calls["MIMO"] += 1
+            return _success_transport()( *args )
+
+        router = ProviderRoutingSession((
+            OpenAIProvider(api_key="x", transport=openai_fail),
+            DeepSeekProvider(api_key="x", transport=deepseek_success),
+            MiMoProvider(api_key="x", transport=mimo_success),
+        ))
+        result = router.analyze(_input("https://example.com/a", "SNP-A-D"))
+        self.assertEqual(result.provider, "DEEPSEEK")
+        self.assertEqual(calls, {"OPENAI": 1, "DEEPSEEK": 1, "MIMO": 0})
+        snapshot = router.session_snapshot()
+        self.assertEqual(snapshot["provider_states"]["OPENAI"], "QUARANTINED_FOR_AUDIT")
+        self.assertEqual(snapshot["effective_provider"], "DEEPSEEK")
+
+        router.analyze(_input("https://example.com/b", "SNP-B-D"))
+        self.assertEqual(calls["OPENAI"], 1)
+        self.assertEqual(calls["DEEPSEEK"], 2)
+
+    def test_url_lock_prevents_cross_provider_mobile_completion(self) -> None:
+        deepseek_calls = 0
+        mimo_calls = 0
+        def deepseek(*args):
+            nonlocal deepseek_calls
+            deepseek_calls += 1
+            if deepseek_calls == 1:
+                return _success_transport()(*args)
+            raise TimeoutError()
+        def mimo(*args):
+            nonlocal mimo_calls
+            mimo_calls += 1
+            return _success_transport()(*args)
+
+        router = ProviderRoutingSession((
+            DeepSeekProvider(api_key="x", transport=deepseek),
+            MiMoProvider(api_key="x", transport=mimo),
+        ))
+        url = "https://example.com/a"
+        self.assertEqual(router.analyze(_input(url, "SNP-A-D")).provider, "DEEPSEEK")
+        failed_mobile = router.analyze(_input(url, "SNP-A-M"))
+        self.assertEqual(failed_mobile.state, ProviderState.UNAVAILABLE)
+        self.assertEqual(mimo_calls, 0)
+        # A new URL starts with the next healthy provider after DeepSeek quarantine.
+        self.assertEqual(router.analyze(_input("https://example.com/b", "SNP-B-D")).provider, "MIMO")
+        self.assertEqual(mimo_calls, 1)
+
+    def test_success_stops_chain_and_chain_exhaustion_is_explicit(self) -> None:
+        mimo_calls = 0
+        def mimo(*args):
+            nonlocal mimo_calls
+            mimo_calls += 1
+            return _success_transport()(*args)
+        router = ProviderRoutingSession((
+            OpenAIProvider(api_key="x", transport=_success_transport()),
+            DeepSeekProvider(api_key="x", transport=_success_transport()),
+            MiMoProvider(api_key="x", transport=mimo),
+        ))
+        self.assertEqual(router.analyze(_input()).provider, "OPENAI")
+        self.assertEqual(mimo_calls, 0)
+        self.assertEqual(len(router.attempt_history()), 1)
+
+        def fail(*_):
+            raise TimeoutError()
+        exhausted = ProviderRoutingSession((
+            DeepSeekProvider(api_key="x", transport=fail),
+            MiMoProvider(api_key="x", transport=fail),
+        ))
+        result = exhausted.analyze(_input())
+        self.assertEqual(result.reason, "AI_PROVIDER_CHAIN_EXHAUSTED")
+        self.assertTrue(all(value == "QUARANTINED_FOR_AUDIT" for value in exhausted.session_snapshot()["provider_states"].values()))
+
+
+if __name__ == "__main__":
+    unittest.main()
