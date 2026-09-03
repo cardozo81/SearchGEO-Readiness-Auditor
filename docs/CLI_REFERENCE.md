@@ -1,22 +1,12 @@
 # CLI_REFERENCE.md
 
-Referência operacional da linha de comando do SearchGEO Readiness Auditor.
+Referência operacional da CLI do SearchGEO.
 
-## Sintaxe global
+## Sintaxe
 
 ```text
 searchgeo [--config PATH] [--version] [-h|--help] audit [target ...] [opções]
 ```
-
-## Parâmetros globais
-
-| Parâmetro | Default | Descrição |
-|---|---|---|
-| `-h`, `--help` | — | Ajuda do comando atual. |
-| `--version` | — | Exibe versão do package. |
-| `--config PATH` | — | Caminho de `searchgeo.toml`; atualmente usado para configuração de logging. |
-
-## `searchgeo audit`
 
 ```text
 searchgeo audit [target ...]
@@ -32,280 +22,119 @@ searchgeo audit [target ...]
   [--ai-content-remediation | --no-ai-content-remediation]
 ```
 
-### Glossário completo de argumentos
+## Glossário completo
 
-| Argumento | Tipo / valores | Default | Regra |
-|---|---|---|---|
-| `target` | domínio ou URL HTTP(S), zero ou mais posicionais | — | Ao menos um target deve vir por posição ou `--urls-file`. Um target posicional usa modo tradicional; dois ou mais formam `URL_SET`. |
-| `--urls-file PATH` | arquivo UTF-8 | — | Uma URL/domínio por linha; vazias e linhas iniciadas por `#` são ignoradas. O modo é `URL_SET` mesmo se sobrar uma URL válida. |
-| `--project TEXT` | texto | hostname/target | Nome humano da auditoria. |
-| `--language CODE` | texto | `pt-BR` | Contexto primário de idioma. |
-| `--market CODE` | texto | `BR` | Contexto de mercado. |
-| `--max-pages N` | inteiro > 0 | `100` | Limite determinístico. Em `URL_SET`, deve ser >= quantidade de URLs únicas fornecidas. |
-| `--audits-root PATH` | diretório | `audits` | Raiz local dos workspaces. |
-| `--device-context` | `mobile`, `desktop`, `both` | `mobile`* | Controla rendering e os contextos semânticos/IA. `*` Pode ser definido por `SEARCHGEO_DEVICE_CONTEXT` quando a flag não é passada. |
-| `--ai-provider` | `none`, `openai`, `deepseek`, `mimo`, `auto` | `none` | Provider semântico. |
-| `--ai-model MODEL_ID` | model ID suportado | default do provider | Somente para provider explícito. Não pode ser combinado com `--ai-provider auto`. |
-| `--ai-content-remediation` | boolean flag | `false`* | Habilita M20 para sugerir texto exato com base em findings/evidências persistidos. `*` Pode ser definido por `SEARCHGEO_AI_CONTENT_REMEDIATION`. |
-| `--no-ai-content-remediation` | boolean flag | — | Força M20 textual como desligado, mesmo quando a variável de ambiente está habilitada. |
+| Argumento | Valores/default | Regra |
+|---|---|---|
+| `target` | domínio/URL HTTP(S) | ao menos um target por posição ou `--urls-file`; múltiplos formam `URL_SET` |
+| `--urls-file PATH` | UTF-8 | uma URL/domínio por linha; ignora vazias e `#` |
+| `--project TEXT` | hostname/target | nome humano |
+| `--language CODE` | `pt-BR` | idioma primário |
+| `--market CODE` | `BR` | mercado |
+| `--max-pages N` | `100` | inteiro > 0; URL_SET exige limite >= URLs únicas |
+| `--audits-root PATH` | `audits` | raiz dos workspaces |
+| `--device-context` | `mobile` | `mobile`, `desktop`, `both`; ambiente pode definir quando flag ausente |
+| `--ai-provider` | `none` | `none`, `openai`, `deepseek`, `mimo`, `auto`; credencial deve pertencer ao produto de API compatível |
+| `--ai-model MODEL_ID` | default do provider | só provider explícito; incompatível com `auto` |
+| `--ai-content-remediation` | `false` | habilita sugestões M20 evidence-backed |
+| `--no-ai-content-remediation` | — | força M20 textual OFF |
 
-## Contexto de dispositivo
+## Device context
 
-A precedência é:
+Precedência: `--device-context` → `SEARCHGEO_DEVICE_CONTEXT` → `mobile`.
 
-1. `--device-context`;
-2. `SEARCHGEO_DEVICE_CONTEXT`;
-3. default CLI `mobile`.
+`mobile`/`desktop` geram somente o snapshot escolhido; `both` gera ambos e habilita comparação Desktop × Mobile. M7/M20 nunca devem chamar provider para device sem snapshot.
 
-Valores válidos:
+## M20
 
-```text
-mobile
-desktop
-both
-```
+Precedência: `--ai-content-remediation`/`--no-ai-content-remediation` → `SEARCHGEO_AI_CONTENT_REMEDIATION` → `false`.
 
-Forma recomendada:
+Valores de ambiente aceitos: `true/false`, `1/0`, `yes/no`, `on/off`.
+
+Exemplo:
 
 ```powershell
-searchgeo audit https://example.com --device-context mobile
-searchgeo audit https://example.com --device-context desktop
-searchgeo audit https://example.com --device-context both
-```
-
-Ou por ambiente:
-
-```powershell
-$env:SEARCHGEO_DEVICE_CONTEXT = "mobile"
-```
-
-`mobile` produz apenas snapshots Mobile. Com IA habilitada, somente esses snapshots entram no fluxo semântico e, quando M20 estiver habilitado, somente esses contextos podem gerar chamadas de remediação, reduzindo custo em comparação a `both`.
-
-`desktop` faz o mesmo para Desktop. `both` produz os dois contextos e habilita a comparação Desktop × Mobile completa.
-
-Chamadas internas diretas a M3 sem a variável preservam o comportamento legado `both`; essa exceção existe para compatibilidade de API interna/testes e não altera o default da CLI.
-
-## Exemplos de execução
-
-### Mobile + sem IA — defaults
-
-```powershell
-searchgeo audit https://example.com --project "Exemplo"
-```
-
-Neste modo não há chamada externa. A auditoria ainda produz a revisão determinística de JSON-LD por página em `report/content-suggestions.html`.
-
-### Mobile + OpenAI
-
-```powershell
-$env:OPENAI_API_KEY = "<chave>"
-searchgeo audit https://example.com `
-  --project "Exemplo" `
-  --device-context mobile `
-  --ai-provider openai
-```
-
-### Mobile + OpenAI + sugestões textuais M20
-
-```powershell
-$env:OPENAI_API_KEY = "<chave>"
+$env:OPENAI_API_KEY = "<chave-da-API-Platform>"
 searchgeo audit https://example.com `
   --device-context mobile `
   --ai-provider openai `
   --ai-content-remediation
 ```
 
-M20 é uma segunda finalidade de IA. Ele roda somente depois de scoring/findings, não altera retrospectivamente Score, Coverage, Confidence, RuleExecution ou Finding e exige revisão humana antes de qualquer publicação.
+M20 roda depois de scoring/findings, não altera avaliação, não é disparado apenas por Confidence LOW, exige finding/evidence elegível e não aplica texto automaticamente.
 
-### Desktop apenas
+A revisão JSON-LD é determinística mesmo com M20 textual OFF.
 
-```powershell
-searchgeo audit https://example.com --device-context desktop
-```
+## Providers e planos
 
-### Comparação completa
+Antes de configurar chave, valide [AI_GUIDE.md](AI_GUIDE.md).
 
-```powershell
-searchgeo audit https://example.com --device-context both
-```
-
-### URL_SET
+### OpenAI
 
 ```powershell
-searchgeo audit `
-  https://example.com/ `
-  https://example.com/produto `
-  https://example.com/faq `
-  --project "Exemplo" `
-  --max-pages 3
-```
-
-### Arquivo
-
-```powershell
-searchgeo audit --urls-file .\urls.txt --project "Exemplo"
-```
-
-## Remediação de conteúdo M20
-
-A precedência é:
-
-1. `--ai-content-remediation` ou `--no-ai-content-remediation`;
-2. `SEARCHGEO_AI_CONTENT_REMEDIATION`;
-3. default `false`.
-
-Valores aceitos para a variável:
-
-```text
-true / false
-1 / 0
-yes / no
-on / off
-```
-
-Regras operacionais:
-
-- `Confidence LOW` isoladamente nunca dispara sugestão;
-- entram apenas findings contentuais/semânticos elegíveis já persistidos;
-- evidence IDs retornados precisam pertencer ao próprio finding;
-- a proposta não pode inventar claims, preços, datas, estatísticas, garantias, credenciais ou experiência;
-- novos tokens numéricos ausentes do conteúdo/evidências fornecidos são rejeitados pelo contrato local;
-- provider/model/timeout seguem a configuração M18 já selecionada;
-- M20 herda provider quarantine e roteamento/URL lock do audit;
-- falha de M20 é estado operacional e não vira finding do website;
-- o texto nunca é aplicado automaticamente.
-
-### JSON-LD
-
-A revisão JSON-LD é **determinística e não depende de habilitar M20 textual**.
-
-Quando JSON-LD não existe, o auditor pode propor um baseline seguro `WebPage` com dados observados/persistidos, como URL, idioma, `<title>` e meta description. Quando já existe, o auditor não o sobrescreve: aponta parse errors, duplicações e oportunidades estruturais genéricas verificáveis.
-
-JSON-LD continua sendo reforço opcional. Não é requisito universal de GEO, não existe markup especial GEO/AEO e markup correto não garante rich result.
-
-## Providers de IA
-
-### `none`
-
-Nenhuma chamada externa. Regras semantic-only sem evidência suficiente permanecem `UNKNOWN`. Isso pode reduzir Coverage/Consolidation, mas não é `FAIL` do website. Se `--ai-content-remediation` for passado com `--ai-provider none`, a etapa textual fica `NOT_CONFIGURED` sem abortar o audit; a revisão JSON-LD determinística permanece disponível.
-
-### `openai`
-
-```powershell
-$env:OPENAI_API_KEY = "<chave>"
+$env:OPENAI_API_KEY = "<chave-da-API-Platform>"
 searchgeo audit https://example.com --ai-provider openai
 ```
 
-Default:
+Default `gpt-5.6-terra`. ChatGPT e API possuem billing separado.
 
-```text
-gpt-5.6-terra
-```
-
-### `deepseek`
+### DeepSeek
 
 ```powershell
-$env:DEEPSEEK_API_KEY = "<chave>"
+$env:DEEPSEEK_API_KEY = "<chave-da-DeepSeek-API>"
 searchgeo audit https://example.com --ai-provider deepseek
 ```
 
-Default:
+Default `deepseek-v4-pro`; `402` indica saldo insuficiente da API.
 
-```text
-deepseek-v4-pro
-```
-
-### `mimo`
+### MiMo
 
 ```powershell
-$env:MIMO_API_KEY = "<chave>"
+$env:MIMO_API_KEY = "<chave-sk-PAYG>"
 searchgeo audit https://example.com --ai-provider mimo
 ```
 
-Default:
+Default `mimo-v2.5-pro`. O adapter usa PAYG `https://api.xiaomimimo.com/v1/responses`. Token Plan `tp-...` não é suportado e não deve ser usado.
 
-```text
-mimo-v2.5-pro
-```
-
-### `auto`
+### AUTO
 
 ```powershell
 searchgeo audit https://example.com --ai-provider auto
 ```
 
-A cadeia é formada uma vez por audit com providers que possuem token e configuração válida. Execução sequencial; primeiro resultado válido encerra o contexto. Providers posteriores não sobrescrevem o resultado aceito.
+Cadeia imutável com providers elegíveis; primeiro resultado válido encerra o contexto. A existência de uma variável não prova que o plano/credencial seja compatível.
 
 ## Modelos aceitos
 
 ```text
-OPENAI
-  gpt-5.6-sol
-  gpt-5.6-terra
-  gpt-5.6-luna
-
-DEEPSEEK
-  deepseek-v4-pro
-  deepseek-v4-flash
-
-MIMO
-  mimo-v2.5-pro
-  mimo-v2.5
+OPENAI:   gpt-5.6-sol | gpt-5.6-terra | gpt-5.6-luna
+DEEPSEEK: deepseek-v4-pro | deepseek-v4-flash
+MIMO:     mimo-v2.5-pro | mimo-v2.5
 ```
-
-Em `auto`, modelos são definidos pelas variáveis específicas de provider; `--ai-model` é rejeitado.
 
 ## Variáveis de ambiente
 
 | Variável | Default | Uso |
 |---|---|---|
-| `SEARCHGEO_DEVICE_CONTEXT` | `mobile` na CLI | `mobile`, `desktop`, `both`. |
-| `SEARCHGEO_AI_TIMEOUT_SECONDS` | `180` | Timeout por chamada externa de IA; número finito > 0. |
-| `SEARCHGEO_AI_CONTENT_REMEDIATION` | `false` | Habilita/desabilita sugestões textuais M20 quando a flag CLI não é usada. |
-| `OPENAI_API_KEY` | — | Credencial OpenAI. |
-| `DEEPSEEK_API_KEY` | — | Credencial DeepSeek. |
-| `MIMO_API_KEY` | — | Credencial MiMo. |
-| `SEARCHGEO_OPENAI_MODEL` | `gpt-5.6-terra` | Model OpenAI no AUTO/configuração por env. |
-| `SEARCHGEO_DEEPSEEK_MODEL` | `deepseek-v4-pro` | Model DeepSeek. |
-| `SEARCHGEO_MIMO_MODEL` | `mimo-v2.5-pro` | Model MiMo. |
+| `SEARCHGEO_DEVICE_CONTEXT` | `mobile` na CLI | device |
+| `SEARCHGEO_AI_TIMEOUT_SECONDS` | `180` | timeout externo |
+| `SEARCHGEO_AI_CONTENT_REMEDIATION` | `false` | M20 textual |
+| `OPENAI_API_KEY` | — | OpenAI API Platform |
+| `DEEPSEEK_API_KEY` | — | DeepSeek API |
+| `MIMO_API_KEY` | — | MiMo PAYG `sk-...` |
+| `SEARCHGEO_OPENAI_MODEL` | `gpt-5.6-terra` | modelo AUTO/env |
+| `SEARCHGEO_DEEPSEEK_MODEL` | `deepseek-v4-pro` | modelo |
+| `SEARCHGEO_MIMO_MODEL` | `mimo-v2.5-pro` | modelo |
 
-Variáveis adicionais de reasoning/depth existentes no contrato M18 continuam documentadas em [AI_GUIDE.md](AI_GUIDE.md).
+Provider explícito sem chave fica `NOT_CONFIGURED`; outras chaves não interferem. Credenciais são isoladas por provider e nunca devem fazer fallback entre endpoints.
 
-## Provider sem chave
+Timeout não gera retry automático.
 
-Provider explícito sem token:
-
-- fica operacionalmente `NOT_CONFIGURED`;
-- não chama API;
-- auditoria continua em modo sem IA efetiva/degradado conforme o restante do pipeline;
-- outras chaves ausentes não interferem.
-
-Em `auto`, providers sem token são excluídos da cadeia.
-
-M20 não cria uma segunda credencial: reutiliza providers elegíveis do M18. Se o provider já foi colocado em quarantine pela etapa semântica, ele não é reativado só para gerar remediação.
-
-## Falha / quota / crédito / timeout
-
-Provider explícito:
-
-- não faz cross-provider fallback;
-- após falha qualificadora é quarantined para o restante do audit.
-
-`auto`:
-
-- provider falho é quarantined;
-- próximo provider saudável pode atender contextos elegíveis;
-- se a cadeia inteira falhar, a falha fica explícita na telemetria.
-
-Não há retry automático de timeout, evitando potencial duplicação de consumo.
-
-## Saída da CLI
-
-Exemplo:
+## Saída
 
 ```text
 Auditoria concluída: AUD-...
-Status: COMPLETE_WITH_LIMITATIONS
+Status: ...
 Páginas auditadas: ...
 Contexto de dispositivo: MOBILE
 Sugestões de conteúdo por IA: DESABILITADAS
@@ -316,34 +145,25 @@ Relatório por problemas: audits\AUD-...\report\remediation.html
 Conteúdo e JSON-LD: audits\AUD-...\report\content-suggestions.html
 ```
 
-O ponto de entrada é `report/index.html`.
-
-## Estrutura do report site
+## Report site
 
 ```text
 report/
 ├─ index.html
-├─ mobile.html             # se Mobile foi auditado
-├─ desktop.html            # se Desktop foi auditado
+├─ mobile.html             # condicional
+├─ desktop.html            # condicional
 ├─ remediation.html
 ├─ content-suggestions.html
 ├─ ai-usage.html
 ├─ references.html
-└─ css/
-   └─ site.css
+└─ css/site.css
 ```
 
-A telemetria M18 e M20 fica em `ai-usage.html`, separada do readiness do website. Sugestões de conteúdo e revisão JSON-LD ficam em `content-suggestions.html`. Referências oficiais, metodologia e fórmulas ficam em `references.html`.
+## Target
 
-## Regras de target
+Somente HTTP/HTTPS; credenciais embutidas são rejeitadas; URL_SET deve manter mesma origem normalizada.
 
-- somente HTTP/HTTPS;
-- domínio sem scheme é aceito quando não contém path/query/fragment;
-- URL com path/query/fragment deve incluir `http://` ou `https://`;
-- credenciais embutidas na URL são rejeitadas;
-- URLs de um mesmo audit `URL_SET` devem pertencer à mesma origem normalizada.
-
-## Ajuda local
+## Ajuda
 
 ```powershell
 searchgeo --help

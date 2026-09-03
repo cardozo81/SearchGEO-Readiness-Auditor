@@ -1,6 +1,6 @@
 # SMOKE_TEST.md
 
-Smoke test humano mínimo após instalação/merge.
+Smoke mínimo após instalação/merge.
 
 ## 1. Ambiente
 
@@ -11,197 +11,84 @@ searchgeo --version
 searchgeo audit --help
 ```
 
-Esperado: Python 3.13.x e help contendo `--device-context` e `--ai-provider`.
+Help deve conter `--device-context`, `--ai-provider` e `--ai-content-remediation`.
 
 ## 2. Mobile sem IA — default
 
 ```powershell
-searchgeo audit https://example.com `
-  --project "Smoke Mobile" `
-  --max-pages 1
+searchgeo audit https://example.com --project "Smoke Mobile" --max-pages 1
 ```
 
-Esperado na CLI:
+Esperado:
 
 ```text
 Contexto de dispositivo: MOBILE
-Relatório: audits\AUD-...\report\index.html
+Sugestões de conteúdo por IA: DESABILITADAS
 ```
 
-Validar no workspace:
+Workspace:
 
 ```text
-report/index.html          existe
-report/mobile.html         existe
-report/desktop.html        não existe
-report/remediation.html    existe
-report/ai-usage.html       existe
-report/references.html     existe
-report/css/site.css        existe
-report.html                não existe na raiz
-remediation.html           não existe na raiz
+report/index.html                 existe
+report/mobile.html                existe
+report/desktop.html               não existe
+report/remediation.html           existe
+report/content-suggestions.html   existe
+report/ai-usage.html              existe
+report/references.html            existe
+report/css/site.css               existe
 ```
 
-Abrir `report/index.html` e confirmar menu/layout.
+Em `content-suggestions.html`, M20 textual deve estar DISABLED e a revisão JSON-LD deve existir.
 
-## 3. CSS compartilhado
-
-Inspecionar fonte de `index.html`:
-
-```html
-<link rel="stylesheet" href="css/site.css">
-```
-
-Não deve existir `<style>` embutido nas páginas finais do report site.
-
-## 4. Confidence
-
-Na visão geral, confirmar texto explícito de que:
-
-- Coverage baixa não é nota baixa do website;
-- Confidence LOW não significa texto ruim/não-GEO;
-- Score, Coverage e Confidence são indicadores distintos.
-
-## 5. Both
+## 3. Desktop e Both
 
 ```powershell
-searchgeo audit https://example.com `
-  --project "Smoke Both" `
-  --max-pages 1 `
-  --device-context both
+searchgeo audit https://example.com --max-pages 1 --device-context desktop
+searchgeo audit https://example.com --max-pages 1 --device-context both
 ```
 
-Esperado:
+Validar páginas condicionais e BR-GEO-052 somente em `both`.
 
-```text
-report/mobile.html
-report/desktop.html
-```
+## 4. JSON-LD ausente
 
-O menu deve expor ambos.
+Usar página sem JSON-LD. Confirmar proposta `WebPage` somente com valores observados/persistidos. Não aceitar autor/preço/rating/data/claim inventado.
 
-## 6. Desktop apenas
+## 5. JSON-LD existente
+
+Confirmar preservação do graph e revisão não destrutiva de parse, duplicações, `@context`, `@type` e propriedades genéricas quando sustentadas.
+
+## 6. M20 com IA
+
+Pré-requisito: chave de API do produto correto.
 
 ```powershell
-searchgeo audit https://example.com `
-  --project "Smoke Desktop" `
-  --max-pages 1 `
-  --device-context desktop
-```
-
-Esperado:
-
-```text
-report/desktop.html existe
-report/mobile.html não existe
-```
-
-## 7. OpenAI Mobile
-
-Pré-requisito:
-
-```powershell
-Test-Path Env:OPENAI_API_KEY
-```
-
-Deve retornar `True` sem imprimir segredo.
-
-Executar:
-
-```powershell
-searchgeo audit https://example.com `
-  --project "Smoke OpenAI Mobile" `
+searchgeo audit https://URL-DE-TESTE `
   --max-pages 1 `
   --device-context mobile `
-  --ai-provider openai
+  --ai-provider openai `
+  --ai-content-remediation
 ```
 
-Abrir:
+Validar em `content-suggestions.html`: finding, objetivo, localização, texto proposto, evidence IDs, provider/model, revisão humana. Em `ai-usage.html`, validar telemetria M20.
 
-```text
-report/ai-usage.html
-```
+## 7. Falha M20/provider
 
-Validar:
+Sem token ou com provider indisponível, audit deve concluir; M20 registra estado operacional e não altera Score/finding. JSON-LD determinístico permanece.
 
-- provider/model;
-- status;
-- tentativas;
-- device Mobile;
-- tokens quando reportados;
-- duração;
-- custo estimado quando calculável;
-- nenhuma API key.
+## 8. Segurança
 
-Para uma página com um snapshot Mobile e provider saudável, não deve haver tentativa Desktop.
+Nenhuma API key/Authorization nos HTMLs/DB/artifacts. Um teste “sem token” nunca deve executar chamada real mesmo que o terminal tenha chave exportada.
 
-## 8. Timeout opcional
+## 9. CSS/Confidence/References
 
-```powershell
-$env:SEARCHGEO_AI_TIMEOUT_SECONDS = "240"
-```
+Validar CSS externo, ausência de `<style>` final, explicação de Coverage/Confidence e fontes oficiais em `references.html`.
 
-Repetir o teste somente se necessário. Default é 180 s.
-
-## 9. AUTO
-
-Com pelo menos duas chaves válidas:
-
-```powershell
-searchgeo audit https://example.com `
-  --max-pages 1 `
-  --device-context mobile `
-  --ai-provider auto
-```
-
-Validar em `ai-usage.html`:
-
-- cadeia inicial;
-- primeiro resultado válido encerra o contexto;
-- ausência de provider não configurado na cadeia;
-- failover somente quando aplicável.
-
-## 10. Remediation
-
-Abrir:
-
-```text
-report/remediation.html
-```
-
-Para findings com M16/M17, confirmar presença de detalhes colapsáveis com:
-
-- causa;
-- reason code;
-- selector observado/alvo;
-- mudança recomendada;
-- observado/esperado;
-- critério de aceite;
-- revalidação.
-
-## 11. References
-
-Abrir:
-
-```text
-report/references.html
-```
-
-Confirmar:
-
-- fontes oficiais;
-- Google generative AI optimization guide;
-- OpenAI Publishers/Developers FAQ;
-- RFC/WHATWG/Schema.org quando aplicáveis;
-- fórmula SCORE-GEO-002;
-- aviso de que thresholds visuais são internos;
-- distinção entre standard oficial e heurística SearchGEO.
-
-## 12. Suíte automatizada
+## 10. Suíte
 
 ```powershell
 python -m compileall -q src tests
 python -m unittest discover -s tests -v
 ```
 
-Nenhum merge deve ocorrer com falha conhecida nessa suíte.
+Nenhum merge com falha conhecida. A validação de estabilização deve passar em Windows e Linux.

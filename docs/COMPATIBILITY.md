@@ -10,45 +10,36 @@
 | Chromium | obrigatório para rendering real |
 | SQLite | embarcado/local |
 | Filesystem | local e gravável |
-| HTTP/HTTPS egress | necessário para targets e providers externos |
-| Docker | não requerido/não fornecido |
-| Web server | não requerido |
+| HTTP/HTTPS egress | targets/providers externos |
+| Docker / web server | não requeridos |
 
-O `pyproject.toml` é a fonte de verdade para versão Python/dependência do package.
+## Dispositivos
 
-## Contextos de dispositivo
+CLI: `mobile`, `desktop`, `both`; default `mobile`. Snapshot não selecionado não é materializado e não pode gerar chamada M7/M20.
 
-A CLI suporta:
-
-```text
-mobile
-desktop
-both
-```
-
-Default:
-
-```text
-mobile
-```
-
-Perfis reais de navegador continuam definidos em `rendering.py`. Quando somente um contexto é selecionado, não é criado snapshot do outro dispositivo.
-
-Chamadas internas a M3 sem `SEARCHGEO_DEVICE_CONTEXT` preservam `both` por compatibilidade interna; isso não altera o default de usuário da CLI.
-
-## Providers de IA
+## Providers
 
 | Provider | Estado |
 |---|---|
 | `none` | suportado/default |
-| OpenAI | suportado |
-| DeepSeek | suportado; qualificação SearchGEO `PROVISIONAL` |
-| Xiaomi MiMo | suportado; qualificação SearchGEO `PROVISIONAL` |
-| `auto` | suportado; roteamento sequencial/failover controlado |
+| OpenAI | API Platform suportada |
+| DeepSeek | API suportada; qualificação `PROVISIONAL` |
+| Xiaomi MiMo | PAYG `sk-...` suportado; qualificação `PROVISIONAL` |
+| `auto` | suportado |
 
-Não é necessário SDK Python específico desses providers; os adapters usam HTTP.
+### Produto/plano
 
-## Modelos aceitos
+| Provider | Produto | Compatibilidade |
+|---|---|---|
+| OpenAI | API Platform com billing/quota/model access | suportado |
+| OpenAI | assinaturas/créditos ChatGPT | não equivalem a saldo de API |
+| DeepSeek | DeepSeek API com saldo | suportado |
+| MiMo | PAYG `sk-...`, `https://api.xiaomimimo.com/v1` | suportado |
+| MiMo | Token Plan `tp-...`, Base URL dedicada | não suportado/não usar |
+
+Credenciais são isoladas por provider; nenhuma chave pode ser reutilizada implicitamente em endpoint de outro fornecedor.
+
+## Modelos
 
 ```text
 OPENAI:   gpt-5.6-sol | gpt-5.6-terra | gpt-5.6-luna
@@ -56,85 +47,29 @@ DEEPSEEK: deepseek-v4-pro | deepseek-v4-flash
 MIMO:     mimo-v2.5-pro | mimo-v2.5
 ```
 
-Model ID diferente deve ser considerado não suportado pelo contrato atual, mesmo que a API externa possua outros modelos.
-
-## Saída persistente
-
-Contrato público:
+## Saída
 
 ```text
-<audits-root>/<AUD-ID>/audit.db
-<audits-root>/<AUD-ID>/artifacts/
-<audits-root>/<AUD-ID>/report/index.html
-<audits-root>/<AUD-ID>/report/remediation.html
-<audits-root>/<AUD-ID>/report/ai-usage.html
-<audits-root>/<AUD-ID>/report/references.html
-<audits-root>/<AUD-ID>/report/css/site.css
+<AUD-ID>/audit.db
+<AUD-ID>/artifacts/
+<AUD-ID>/report/index.html
+<AUD-ID>/report/remediation.html
+<AUD-ID>/report/content-suggestions.html
+<AUD-ID>/report/ai-usage.html
+<AUD-ID>/report/references.html
+<AUD-ID>/report/css/site.css
 ```
 
-Condicionalmente:
+`mobile.html`/`desktop.html` são condicionais.
 
-```text
-report/mobile.html
-report/desktop.html
-```
+## Structured Data / M20
 
-A página correspondente existe apenas se o dispositivo foi auditado.
+Parser operacional específico: JSON-LD. M20 pode propor baseline JSON-LD quando ausente e revisar markup existente. Isso é advisory; não publica alteração no site. JSON-LD continua opcional/reforço e ausência legítima não é FAIL universal.
 
-## HTML/CSS
+## Segurança
 
-O report site final:
+Provider externo requer credencial do produto correto, endpoint compatível, saldo/quota/permissão e termos que autorizem o workload. Secrets não devem aparecer em artifacts/report/logs.
 
-- é estático;
-- usa links relativos;
-- não exige JavaScript para navegação básica;
-- não exige web server;
-- usa stylesheet externo compartilhado;
-- não embute CSS final no `<head>` de cada página.
+## Fora do escopo
 
-## Dados primários
-
-O HTML não é fonte primária. A reprodutibilidade depende de:
-
-```text
-audit.db
-artifacts/
-```
-
-## Structured Data
-
-A cobertura operacional específica do parser é JSON-LD. Microdata e RDFa não devem ser tratados como equivalentes automaticamente pelo auditor atual.
-
-JSON-LD também não é requisito universal para um Overall SearchGEO: quando ausente e as regras correspondentes são legitimamente `NOT_APPLICABLE`, a dimensão Structured Data fica fora da agregação.
-
-## GEO/AEO externo
-
-O produto não declara compatibilidade com um “padrão GEO” universal porque esse padrão normativo não existe.
-
-A referência oficial mais direta do Google para recursos generativos é:
-
-<https://developers.google.com/search/docs/fundamentals/ai-optimization-guide>
-
-O guia mantém SEO como base e não cria requisito especial de AEO/GEO, `llms.txt`, chunking obrigatório ou Structured Data específico para IA.
-
-## Rede e segurança
-
-Para provider externo são necessários:
-
-- DNS;
-- HTTPS egress;
-- credencial válida;
-- saldo/quota/permissão compatível;
-- política organizacional que autorize envio do contexto persistido ao provider.
-
-Secrets não devem aparecer em artifacts, report site ou logs.
-
-## Não homologado / fora do escopo
-
-- executável standalone sem Python;
-- macOS como target formal de handoff;
-- banco de dados remoto;
-- execução distribuída;
-- interface web/backend do SearchGEO;
-- Docker oficial;
-- geração automática de conteúdo como parte do baseline atual.
+Executável standalone sem Python, banco remoto, execução distribuída, web backend, Docker oficial, publicação/aplicação automática de conteúdo/Structured Data e MiMo Token Plan `tp-...`.

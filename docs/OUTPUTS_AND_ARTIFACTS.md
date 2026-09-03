@@ -2,197 +2,84 @@
 
 ## Workspace
 
-Cada auditoria possui:
-
 ```text
 <audits-root>/<AUD-ID>/
 ├─ audit.db
 ├─ artifacts/
 └─ report/
    ├─ index.html
-   ├─ mobile.html          # condicional
-   ├─ desktop.html         # condicional
+   ├─ mobile.html              # condicional
+   ├─ desktop.html             # condicional
    ├─ remediation.html
+   ├─ content-suggestions.html
    ├─ ai-usage.html
    ├─ references.html
-   └─ css/
-      └─ site.css
+   └─ css/site.css
 ```
 
-`audit.db` e `artifacts/` são dados/evidências persistentes. `report/` é projeção humana.
+`audit.db` + `artifacts/` são fonte persistente; `report/` é projeção humana.
 
-## `audit.db`
+## audit.db
 
-SQLite local, reabrível. Contém entidades do pipeline, incluindo conforme aplicável:
+Inclui audit/target/pages/snapshots, RuleExecutions, Evidence, findings, semântica, scores, recomendações, M16/M17, report metadata, M18 e M20.
 
-- audit/target/pages/snapshots;
-- RuleExecutions;
-- Evidence;
-- findings;
-- semantic assessments/entities;
-- scores e contributions;
-- remediation groups/recommendations;
-- materialização M16/M17;
-- report metadata;
-- sessão/tentativas M18 e catálogo de preço.
-
-O report site não substitui o banco e não recalcula o conteúdo persistido.
-
-## `artifacts/`
-
-Contém evidência materializada pelo pipeline, por exemplo:
-
-- respostas RAW;
-- HTML renderizado;
-- conteúdo extraído;
-- Structured Data;
-- screenshots;
-- outros artefatos referenciados por Evidence/PageSnapshot.
-
-A estrutura interna pode incluir subdiretórios por page/device/snapshot. Referências persistidas usam caminhos relativos ao workspace.
-
-## `report/index.html`
-
-Ponto de entrada do mini-site. Dashboard executivo com:
-
-- dispositivos efetivamente auditados;
-- Overall quando consolidado;
-- Coverage;
-- Confidence;
-- Consolidation;
-- dimensões;
-- contagens de actionability;
-- links para os outros domínios.
-
-## `report/mobile.html`
-
-Materializado somente quando existem snapshots Mobile. Contém:
-
-- scorecard Mobile;
-- dimensões Mobile;
-- páginas auditadas;
-- snapshots visuais quando disponíveis;
-- findings Mobile/BOTH aplicáveis;
-- avaliações semânticas Mobile não aprovadas.
-
-## `report/desktop.html`
-
-Equivalente para Desktop e só existe quando Desktop foi auditado.
-
-## `report/remediation.html`
-
-Visão transversal por causa/problema. Reutiliza dados persistidos de priorização e M16/M17.
-
-Pode apresentar por ocorrência:
-
-- causa raiz;
-- reason code;
-- selector observado;
-- alvo técnico/local esperado;
-- mudança recomendada;
-- observado vs esperado;
-- exemplo;
-- critérios de aceite;
-- revalidação;
-- decisão humana.
-
-## `report/ai-usage.html`
-
-Telemetria operacional M18 separada do readiness do website:
-
-- estratégia;
-- provider/model efetivo;
-- status;
-- cadeia inicial;
-- chamadas por URL/device;
-- tokens;
-- duração;
-- custo estimado;
-- erros sanitizados.
-
-Essa página não cria finding nem altera Score.
-
-## `report/references.html`
-
-Referência técnica gerada junto com a auditoria:
-
-- fontes oficiais/primárias;
-- distinção entre regras oficiais, standards e heurísticas internas;
-- fórmula do Score;
-- Coverage;
-- Confidence;
-- Overall;
-- limites das classificações internas.
-
-## `report/css/site.css`
-
-Único stylesheet estrutural do report site final.
-
-Os HTMLs finais referenciam:
-
-```html
-<link rel="stylesheet" href="css/site.css">
-```
-
-Não há CSS final inline/embutido no `<head>` das páginas do report site.
-
-## Por que não existem `report.html` e `remediation.html` na raiz
-
-M11/M18 ainda podem construir HTML intermediário como parte do pipeline interno para preservar contratos existentes. Ao final de `run_audit`, o `report_site` materializa as páginas definitivas e remove esses intermediários da raiz.
-
-O contrato público de saída é:
+Tabelas M20:
 
 ```text
-report/index.html
-report/remediation.html
+content_remediation_runs
+content_remediation_attempts
+content_remediation_suggestions
+jsonld_remediation_suggestions
 ```
 
-## Metadado de report
+## artifacts
 
-A tabela `reports` aponta `file_path` para:
+RAW, rendered HTML, conteúdo principal, Structured Data, screenshots e outras evidências referenciadas por caminhos relativos.
 
-```text
-report/index.html
-```
+## report/index.html
 
-Isso mantém o ponto de entrada reabrível a partir do banco.
+Dashboard executivo: devices, Overall, Coverage, Confidence, Consolidation, dimensões/actionability e links.
 
-## Seleção de dispositivo e artifacts
+## mobile.html / desktop.html
 
-CLI default:
+Gerados somente para devices auditados; contêm scorecard, páginas, snapshots, findings e estado semântico do contexto.
 
-```text
-mobile
-```
+## remediation.html
 
-Com `mobile`, artifacts de rendering/visual são produzidos apenas para Mobile. Com `desktop`, apenas Desktop. Com `both`, ambos.
+Plano técnico evidence-backed baseado em prioridade e M16/M17.
 
-Consequentemente, M7/IA trabalha somente sobre os snapshots selecionados.
+## content-suggestions.html
+
+Projeção advisory M20:
+
+- status M20;
+- sugestões textuais aceitas, com finding/evidence/provider/model;
+- proposta JSON-LD quando ausente;
+- melhorias quando JSON-LD existe;
+- aviso de revisão humana.
+
+A página não altera Score/findings e não aplica alterações ao website.
+
+## ai-usage.html
+
+Telemetria operacional separada do readiness, incluindo M18 e M20: estratégia/provider/model, URL/device, status, tokens, duração, custo estimado e erros sanitizados.
+
+## references.html
+
+Fontes oficiais/primárias, natureza das regras, fórmulas e limites do modelo interno.
+
+## CSS
+
+Todos os HTMLs finais usam `report/css/site.css`; não há CSS final embutido no head.
+
+## Device selection
+
+Artifacts e chamadas externas só existem para devices selecionados/materializados.
 
 ## Segurança
 
-Não devem ser persistidos em outputs:
-
-- API key;
-- Authorization header;
-- senha;
-- secret/token de credencial;
-- body integral de requisição externa contendo segredo.
-
-Dados exibidos em HTML passam por sanitização/redaction conforme o contrato vigente.
+Não persistir API key, Authorization, senha/secret ou body integral sensível. Credenciais permanecem isoladas por provider.
 
 ## Portabilidade
 
-O report site usa caminhos relativos e pode ser aberto localmente. Para preservar links de screenshots/artifacts, mova o workspace inteiro, não somente a pasta `report/`.
-
-## Fonte de verdade
-
-Ordem de autoridade operacional:
-
-```text
-audit.db + artifacts
-        ↓
-report site
-```
-
-O HTML é descartável/regerável conceitualmente; nunca deve ser usado como única fonte para recalcular o score.
+Para preservar screenshots, mova o workspace inteiro; `report/` usa caminhos relativos a `../artifacts/`.
