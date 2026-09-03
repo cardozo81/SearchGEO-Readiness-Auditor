@@ -41,12 +41,34 @@ Chamadas internas a M3 sem `SEARCHGEO_DEVICE_CONTEXT` preservam `both` por compa
 | Provider | Estado |
 |---|---|
 | `none` | suportado/default |
-| OpenAI | suportado |
-| DeepSeek | suportado; qualificação SearchGEO `PROVISIONAL` |
-| Xiaomi MiMo | suportado; qualificação SearchGEO `PROVISIONAL` |
+| OpenAI | suportado via OpenAI API Platform |
+| DeepSeek | suportado via DeepSeek API; qualificação SearchGEO `PROVISIONAL` |
+| Xiaomi MiMo | suportado via MiMo Pay-as-you-go API (`sk-...`); qualificação SearchGEO `PROVISIONAL` |
 | `auto` | suportado; roteamento sequencial/failover controlado |
 
 Não é necessário SDK Python específico desses providers; os adapters usam HTTP.
+
+### Compatibilidade por produto/plano
+
+A existência de uma assinatura ou saldo no ecossistema do fornecedor não é suficiente. O SearchGEO depende do produto de API efetivamente associado à chave e ao endpoint.
+
+| Provider | Produto/plano | Compatibilidade atual | Observação |
+|---|---|---|---|
+| OpenAI | API Platform com billing/quota/model access válidos | **Suportado** | prepaid, cobrança automática ou contrato Enterprise/Scale Tier podem financiar a API conforme a conta; limites de organização/projeto continuam valendo |
+| OpenAI | ChatGPT Free/Go/Plus/Pro/Business/Enterprise/Edu e créditos de recursos do ChatGPT/Codex | **Não equivalem a saldo de API** | billing do ChatGPT e da API é separado |
+| DeepSeek | DeepSeek API com `granted_balance` e/ou `topped_up_balance` | **Suportado** | ambos compõem o saldo da API; `402` indica saldo insuficiente |
+| Xiaomi MiMo | Pay-as-you-go API, chave `sk-...`, Base URL `https://api.xiaomimimo.com/v1` | **Suportado** | é o modo implementado pelo adapter atual |
+| Xiaomi MiMo | Token Plan, chave `tp-...`, Base URL dedicada `https://token-plan-<região>.xiaomimimo.com/v1` | **Não suportado / não usar** | produto separado; além do endpoint diferente, a MiMo restringe o Token Plan a ferramentas de programação e proíbe automated scripts/custom application backends fora desse escopo |
+
+Consequências importantes para MiMo:
+
+- `tp-...` e `sk-...` são credenciais de produtos independentes;
+- créditos do Token Plan não financiam uma chamada PAYG feita com `sk-...`;
+- misturar chave Token Plan com endpoint PAYG pode resultar em `401`;
+- `402` no endpoint PAYG indica saldo insuficiente da conta PAYG chamada;
+- o SearchGEO atual não seleciona Base URL de Token Plan e não deve ser configurado com `tp-...`.
+
+Detalhes operacionais e fontes oficiais: [AI_GUIDE.md](AI_GUIDE.md).
 
 ## Modelos aceitos
 
@@ -57,6 +79,8 @@ MIMO:     mimo-v2.5-pro | mimo-v2.5
 ```
 
 Model ID diferente deve ser considerado não suportado pelo contrato atual, mesmo que a API externa possua outros modelos.
+
+Suporte ao model ID também não garante que toda conta/plano possua acesso operacional a ele; permissões, tiers, quota, saldo e limites do provider podem variar por conta.
 
 ## Saída persistente
 
@@ -123,9 +147,11 @@ Para provider externo são necessários:
 
 - DNS;
 - HTTPS egress;
-- credencial válida;
+- credencial válida para o produto/plano correto;
+- endpoint compatível com a credencial;
 - saldo/quota/permissão compatível;
-- política organizacional que autorize envio do contexto persistido ao provider.
+- acesso ao modelo configurado;
+- política organizacional e termos do fornecedor que autorizem o caso de uso e o envio do contexto persistido ao provider.
 
 Secrets não devem aparecer em artifacts, report site ou logs.
 
@@ -137,4 +163,5 @@ Secrets não devem aparecer em artifacts, report site ou logs.
 - execução distribuída;
 - interface web/backend do SearchGEO;
 - Docker oficial;
-- geração automática de conteúdo como parte do baseline atual.
+- geração automática de conteúdo como parte do baseline atual;
+- uso do Xiaomi MiMo Token Plan `tp-...` no auditor automatizado atual.
