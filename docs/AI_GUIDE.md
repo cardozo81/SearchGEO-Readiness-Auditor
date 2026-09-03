@@ -136,6 +136,19 @@ Override por execução:
 searchgeo audit https://example.com --ai-provider mimo --ai-model mimo-v2.5
 ```
 
+## Timeout das chamadas externas
+
+A CLI aplica `180` segundos por chamada de IA por padrão. O timeout pode ser alterado para provider explícito e para todos os candidatos elegíveis de `auto`:
+
+```powershell
+$env:SEARCHGEO_AI_TIMEOUT_SECONDS = "240"
+searchgeo audit https://example.com --ai-provider openai
+```
+
+O valor deve ser numérico, finito e maior que zero. Com `--ai-provider none`, a variável é ignorada porque não existe chamada externa.
+
+Timeout não gera retry automático. Uma chamada pode expirar no cliente e ainda ter sido recebida/processada pelo provider; repetir silenciosamente criaria risco de consumo duplicado.
+
 # Sem IA
 
 ```powershell
@@ -162,7 +175,8 @@ Regras:
 4. model inválido é rejeitado antes da execução efetiva;
 5. após falha qualificadora, o provider entra em `QUARANTINED_FOR_AUDIT`;
 6. após quarantine, ele não é chamado novamente em URLs seguintes do mesmo audit;
-7. sessão semântica insuficiente permanece `DEGRADED`, não `CHAIN_EXHAUSTED`.
+7. sessão semântica insuficiente permanece `DEGRADED`, não `CHAIN_EXHAUSTED`;
+8. chaves ausentes de outros providers não interferem no provider explicitamente selecionado.
 
 Exemplo:
 
@@ -208,7 +222,7 @@ OpenAI gpt-5.6-terra
 Para uma URL ainda sem provider fixado:
 
 1. tenta o provider saudável de maior prioridade;
-2. se houver resposta válida, encerra a cadeia para aquele contexto;
+2. se houver resposta válida, encerra a cadeia para aquele contexto e nenhum provider posterior é chamado para sobrescrever o resultado;
 3. se houver erro técnico/contratual, o provider fica `QUARANTINED_FOR_AUDIT`;
 4. o próximo provider saudável pode ser tentado;
 5. provider quarantined nunca é reintroduzido no mesmo audit.
@@ -285,6 +299,8 @@ Exemplos:
 - timeout -> `TIMEOUT_ERROR`;
 - resposta incompleta/schema inválido/evidence inventada -> `CONTRACT_ERROR`/`INVALID_RESPONSE` conforme o caso.
 
+`TIMEOUT_ERROR` não equivale a erro de crédito ou autenticação. Ele informa apenas que a chamada não terminou dentro do limite do cliente.
+
 Texto bruto potencialmente sensível da mensagem do provider não é necessário para classificar a falha e não deve ser usado como relatório de diagnóstico.
 
 # Telemetria e custo
@@ -338,6 +354,8 @@ A seção **Uso de IA — execução e telemetria** contém:
 - `ESTIMATED_COST`;
 - duração;
 - erro sanitizado.
+
+O bloco é inserido dentro de `<main>`. A tabela usa overflow horizontal interno e o conteúdo principal é limitado à largura disponível ao lado da sidebar fixa.
 
 ## `remediation.html`
 
