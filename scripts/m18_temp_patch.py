@@ -2,28 +2,133 @@ from pathlib import Path
 
 root = Path('.')
 
-p = root/'src/searchgeo/m18_ai.py'
+# 1) Explicit providers must quarantine after a qualifying provider failure so
+# they are not called again for later URLs in the same audit. No cross-provider
+# fallback is introduced for SINGLE_PROVIDER mode.
+p = root / 'src/searchgeo/m18_ai.py'
 s = p.read_text(encoding='utf-8')
-old = '''        if not isinstance(raw, Mapping):\n            return self._failure_result(semantic_input, started_at, started_perf, summary, payload_hash, ProviderDiagnostic(ProviderErrorClass.INVALID_RESPONSE), AttemptStatus.CONTRACT_ERROR)\n        native_error = _response_error(raw)\n'''
-new = '''        if not isinstance(raw, Mapping):\n            return self._failure_result(semantic_input, started_at, started_perf, summary, payload_hash, ProviderDiagnostic(ProviderErrorClass.INVALID_RESPONSE), AttemptStatus.CONTRACT_ERROR)\n        if not raw.get("output_text") and not raw.get("output"):\n            return self._failure_result(semantic_input, started_at, started_perf, summary, payload_hash, ProviderDiagnostic(ProviderErrorClass.EMPTY_RESPONSE), AttemptStatus.CONTRACT_ERROR, usage=_usage_from_native(raw))\n        native_error = _response_error(raw)\n'''
-if old in s:
-    p.write_text(s.replace(old, new, 1), encoding='utf-8')
 
-sections = {
-'docs/AI_GUIDE.md': '''\n\n<!-- M18_MULTI_AI_PROVIDER_ROUTING -->\n## M18 — Multi-AI Provider, routing e telemetria\nProviders de runtime: `OPENAI`, `DEEPSEEK`, `MIMO`, `NONE`; `AUTO` usa somente providers com API key e configuração válida, em ordem determinística de confiabilidade SearchGEO. Provider explícito não faz failover cruzado. Após falha em AUTO o provider fica `QUARANTINED_FOR_AUDIT`; o primeiro resultado válido fixa o provider da URL para Desktop/Mobile. A mesma URL nunca recebe duas análises válidas de providers diferentes.\n\n| Provider | Modelo | Profundidade recomendada | Structured Output | Responses API | Classe | Qualificação | Uso |\n|---|---|---|---|---|---|---|---|\n| OPENAI | gpt-5.6-sol | HIGH/XHIGH | SIM | SIM | A+ | QUALIFIED | máxima qualidade |\n| OPENAI | gpt-5.6-terra | HIGH | SIM | SIM | A | QUALIFIED | default |\n| DEEPSEEK | deepseek-v4-pro | HIGH | SIM | SIM | A- | PROVISIONAL | alternativa forte |\n| MIMO | mimo-v2.5-pro | thinking enabled | SIM | SIM | B+ | PROVISIONAL | alternativa forte |\n| OPENAI | gpt-5.6-luna | HIGH | SIM | SIM | B+ | QUALIFIED | volume/custo |\n| DEEPSEEK | deepseek-v4-flash | HIGH | SIM | SIM | B | PROVISIONAL | volume/custo |\n| MIMO | mimo-v2.5 | thinking enabled | SIM | SIM | B | PROVISIONAL | volume/multimodal |\n\n“Confiabilidade SearchGEO” é política inicial de adequação ao contrato específico do auditor, não benchmark científico geral. DeepSeek/MiMo permanecem PROVISIONAL até SearchGEO Provider Benchmark. MiMo normaliza LOW/MEDIUM/HIGH para `THINKING_ENABLED`; não se afirma profundidade relativa entre esses níveis.\n''',
-'docs/CONFIGURATION.md': '''\n\n<!-- M18_MULTI_AI_PROVIDER_ROUTING -->\n## M18 — configuração multi-provider\n`--ai-provider` aceita `none`, `openai`, `deepseek`, `mimo`, `auto`. Defaults: OpenAI `gpt-5.6-terra/HIGH`; DeepSeek `deepseek-v4-pro/HIGH`; MiMo `mimo-v2.5-pro/HIGH` (reportado como thinking enabled). Chaves: `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `MIMO_API_KEY`. Modelos: `SEARCHGEO_OPENAI_MODEL`, `SEARCHGEO_DEEPSEEK_MODEL`, `SEARCHGEO_MIMO_MODEL`. Reasoning: `SEARCHGEO_OPENAI_REASONING_EFFORT`, `SEARCHGEO_DEEPSEEK_REASONING_EFFORT`, `SEARCHGEO_MIMO_REASONING_EFFORT`. Valores de chaves nunca devem ser documentados, impressos ou persistidos.\n\n```powershell\nsearchgeo audit --urls-file .\\urls.txt --project "Projeto" --ai-provider none\nsearchgeo audit --urls-file .\\urls.txt --project "Projeto" --ai-provider deepseek --ai-model deepseek-v4-pro\nsearchgeo audit --urls-file .\\urls.txt --project "Projeto" --ai-provider auto\n```\nAUTO ignora providers sem token ou com configuração inválida e cria cadeia imutável no início do audit.\n''',
-'docs/TROUBLESHOOTING.md': '''\n\n<!-- M18_MULTI_AI_PROVIDER_ROUTING -->\n## M18 — diagnóstico multi-provider\nErros são normalizados como `AUTH_ERROR`, `QUOTA_ERROR`, `CREDIT_ERROR`, `RATE_LIMIT_ERROR`, `MODEL_ERROR`, `PERMISSION_ERROR`, `NETWORK_ERROR`, `TIMEOUT_ERROR`, `SERVER_ERROR`, `CONTRACT_ERROR`, `EMPTY_RESPONSE`, `INVALID_RESPONSE` ou `UNKNOWN_PROVIDER_ERROR`. Em AUTO, erro coloca o provider em `QUARANTINED_FOR_AUDIT`; ele não é retentado no mesmo audit. Se toda a cadeia falhar, aparece `AI_PROVIDER_CHAIN_EXHAUSTED`; regras semânticas dependentes de IA permanecem UNKNOWN e isso não penaliza score. Nunca copie API keys para logs/HTML ao diagnosticar.\n''',
-'docs/USER_GUIDE.md': '''\n\n<!-- M18_MULTI_AI_PROVIDER_ROUTING -->\n## M18 — escolher IA\nUse `none` para IA desabilitada, um provider explícito para execução única sem failover, ou `auto` para seleção/fallback por confiabilidade SearchGEO. O relatório distingue provider configurado, tentado e efetivamente usado, mostra profundidade, status, tokens reportados, `ESTIMATED_COST`, duração e erro sanitizado. Falhas de IA são limitações da auditoria, não problemas do website.\n''',
-'docs/OUTPUTS_AND_ARTIFACTS.md': '''\n\n<!-- M18_MULTI_AI_PROVIDER_ROUTING -->\n## M18 — persistência e relatório de IA\n`audit.db` passa a incluir `ai_audit_sessions`, `ai_provider_attempts` e `provider_pricing_catalog`. Cada tentativa preserva provenance, provider/model/depth, status/erro sanitizado, tokens somente quando reportados, duração, hash de payload e `ESTIMATED_COST` quando calculável. `report.html` inclui contexto operacional e tabela de uso; `remediation.html` inclui apenas contexto informativo, sem transformar falha de provider em finding/recommendation.\n''',
-'docs/specification/00_SPEC_INDEX.md': '''\n\n<!-- M18_MULTI_AI_PROVIDER_ROUTING -->\n## M18 — Multi-AI Provider Abstraction, Reliability Routing & Usage Telemetry\nFonte normativa específica: `18_MULTI_AI_PROVIDER_ROUTING.md`. M18 é extensão de infraestrutura; não altera Business Rules, SCORE-GEO-001, PRIORITY-GEO-001, actionability, Desktop/Mobile nem a semântica de UNKNOWN.\n''',
-'docs/specification/09_IMPLEMENTATION_PLAN.md': '''\n\n<!-- M18_MULTI_AI_PROVIDER_ROUTING -->\n## M18 — Multi-AI Provider Abstraction, Reliability Routing & Usage Telemetry\nImplementar adapters provider-neutral para OpenAI/DeepSeek/MiMo, AUTO determinístico com quarantine e URL provider lock, telemetria persistida, catálogo versionado de preços e projeção operacional nos HTMLs. Preservar NoneProvider/OpenAI compatibility e invariantes de scoring. Testes externos usam mocks/fakes; live smoke é condicionado à presença de tokens.\n''',
-}
-for name, section in sections.items():
-    path = root/name
-    text = path.read_text(encoding='utf-8')
-    if '<!-- M18_MULTI_AI_PROVIDER_ROUTING -->' not in text:
-        path.write_text(text.rstrip()+section+'\n', encoding='utf-8')
+old = '''        self._history: list[ProviderAttempt] = []\n        self.policy = _policy(self.name, self.model)\n'''
+new = '''        self._history: list[ProviderAttempt] = []\n        self.policy = _policy(self.name, self.model)\n        self._runtime_state = RuntimeProviderState.ACTIVE\n        self._successful_urls: set[str] = set()\n'''
+if old in s and 'self._runtime_state = RuntimeProviderState.ACTIVE' not in s:
+    s = s.replace(old, new, 1)
 
-spec = root/'docs/specification/18_MULTI_AI_PROVIDER_ROUTING.md'
-if not spec.exists():
-    spec.write_text('''# M18 — Multi-AI Provider Abstraction, Reliability Routing & Usage Telemetry\n\nM18 é uma extensão aditiva de infraestrutura de IA. Não altera Business Rules, SCORE-GEO-001, PRIORITY-GEO-001, actionability, Desktop/Mobile ou UNKNOWN.\n\n## Providers e contrato\nRuntime aprovado: OPENAI, DEEPSEEK, MIMO, NONE. GitHub Copilot não é SemanticProvider. Todos os adapters produzem contrato normalizado e a aceitação exige exatamente as 22 BR-GEO semânticas, sem regra ausente/duplicada/desconhecida, enums válidos e evidence_ids existentes. HTTP 200 ou JSON parseável isoladamente não significam AVAILABLE.\n\n## Routing default\n1. OPENAI/gpt-5.6-sol HIGH/XHIGH QUALIFIED-A+\n2. OPENAI/gpt-5.6-terra HIGH QUALIFIED-A\n3. DEEPSEEK/deepseek-v4-pro HIGH PROVISIONAL-A-\n4. MIMO/mimo-v2.5-pro THINKING_ENABLED PROVISIONAL-B+\n5. OPENAI/gpt-5.6-luna HIGH QUALIFIED-B+\n6. DEEPSEEK/deepseek-v4-flash HIGH PROVISIONAL-B\n7. MIMO/mimo-v2.5 THINKING_ENABLED PROVISIONAL-B\n\nA classificação é política inicial SearchGEO, não benchmark científico. DeepSeek/MiMo só deixam PROVISIONAL após benchmark específico com rule agreement, evidence fidelity, completeness, schema compliance, hallucination rate, repeatability, UNKNOWN discipline, PT-BR, entity/intent accuracy e operational success rate. Estrutura prevê qualification/version/reliability score.\n\n## Failover e URL lock\nAUTO detecta somente keys presentes e configuração válida, ordena a cadeia uma vez no início e não reintroduz provider quarantined. Falha antes de resultado válido permite fallback na mesma URL. O primeiro resultado válido fixa PINNED_TO_URL; demais devices usam esse provider. Se o pinned falhar no outro device, não há provider alternativo para aquela URL; a lacuna é DEGRADED/UNKNOWN e o provider é quarantined para próximas URLs. Provider explícito nunca faz failover cruzado.\n\n## Telemetria e custo\n`ai_provider_attempts` registra tentativa, URL/device, provider/model/depth/rank, timestamps/duração, status, diagnóstico sanitizado, usage reportado, ESTIMATED_COST, pricing version, summary bounded, hash e semantic contract version. Nunca persistir secret, Authorization, corpo sensível integral ou chain-of-thought. Tokens ausentes ficam NULL. Custo usa catálogo local versionado e nunca billing externo nem score.\n\n## Reporting\nreport.html distingue habilitado/configurado/tentado/sucesso, estratégia, provider inicial/efetivo, modelo/depth/status/failover e tabela de uso. remediation.html contém somente contexto operacional, nunca finding/recommendation por falha da IA. Chain exhausted adiciona `AI_PROVIDER_CHAIN_EXHAUSTED`, mantém determinísticas e UNKNOWN para dependências semânticas, sem penalidade de score.\n''', encoding='utf-8')
+old = '''    def analyze(self, semantic_input: SemanticInput) -> SemanticProviderResult:\n        self._last_attempt = None\n        if not self.api_key:\n'''
+new = '''    def analyze(self, semantic_input: SemanticInput) -> SemanticProviderResult:\n        self._last_attempt = None\n        if self._runtime_state is RuntimeProviderState.QUARANTINED_FOR_AUDIT:\n            return SemanticProviderResult(\n                ProviderState.UNAVAILABLE,\n                reason="AI_PROVIDER_UNAVAILABLE:PROVIDER_QUARANTINED",\n                provider=self.name,\n                model=self.model,\n                reasoning_profile=self.reasoning_profile,\n                diagnostic=ProviderDiagnostic(ProviderErrorClass.UNKNOWN_PROVIDER_ERROR, error_code="PROVIDER_QUARANTINED"),\n            )\n        if not self.api_key:\n'''
+if old in s and 'AI_PROVIDER_UNAVAILABLE:PROVIDER_QUARANTINED' not in s:
+    s = s.replace(old, new, 1)
+
+old = '''        self._history.append(self._last_attempt)\n        return SemanticProviderResult(\n            ProviderState.AVAILABLE,\n'''
+new = '''        self._runtime_state = RuntimeProviderState.ACTIVE\n        self._successful_urls.add(semantic_input.page_url)\n        self._history.append(self._last_attempt)\n        return SemanticProviderResult(\n            ProviderState.AVAILABLE,\n'''
+if old in s and 'self._successful_urls.add(semantic_input.page_url)' not in s:
+    s = s.replace(old, new, 1)
+
+old = '''        self._history.append(self._last_attempt)\n        return SemanticProviderResult(\n            ProviderState.UNAVAILABLE,\n'''
+new = '''        self._runtime_state = RuntimeProviderState.QUARANTINED_FOR_AUDIT\n        self._history.append(self._last_attempt)\n        return SemanticProviderResult(\n            ProviderState.UNAVAILABLE,\n'''
+if old in s and 'self._runtime_state = RuntimeProviderState.QUARANTINED_FOR_AUDIT\n        self._history.append(self._last_attempt)' not in s:
+    s = s.replace(old, new, 1)
+
+old = '''    def attempt_history(self) -> tuple[ProviderAttempt, ...]:\n        return tuple(self._history)\n\n\nclass OpenAIProvider(ResponsesSemanticProvider):\n'''
+new = '''    def attempt_history(self) -> tuple[ProviderAttempt, ...]:\n        return tuple(self._history)\n\n    def session_snapshot(self) -> dict[str, Any]:\n        successful = bool(self._successful_urls)\n        return {\n            "strategy": "SINGLE_PROVIDER",\n            "enabled": True,\n            "initial_provider": self.name,\n            "initial_model": self.model,\n            "initial_reasoning_profile": self.reasoning_profile,\n            "effective_provider": self.name if successful else None,\n            "effective_model": self.model if successful else None,\n            "effective_reasoning_profile": self.reasoning_profile if successful else None,\n            "configured_chain": [{\n                "provider": self.name,\n                "model": self.model,\n                "reasoning_profile": self.reasoning_profile,\n                "rank": self.policy.rank,\n                "qualification": self.policy.qualification,\n            }],\n            "provider_states": {self.name: self._runtime_state.value},\n            "successful_urls": {self.name: len(self._successful_urls)},\n            "excluded_configurations": [],\n        }\n\n\nclass OpenAIProvider(ResponsesSemanticProvider):\n'''
+if old in s and 'def session_snapshot(self) -> dict[str, Any]:' not in s.split('class OpenAIProvider', 1)[0]:
+    s = s.replace(old, new, 1)
+
+p.write_text(s, encoding='utf-8')
+
+# 2) Add directed explicit-quarantine and end-to-end persistence/report tests.
+p = root / 'tests/test_m18_multi_ai_provider.py'
+s = p.read_text(encoding='utf-8')
+if 'import sqlite3\n' not in s:
+    s = s.replace('import json\n', 'import json\nimport sqlite3\n', 1)
+if 'from pathlib import Path\n' not in s:
+    s = s.replace('from email.message import Message\n', 'from email.message import Message\nfrom pathlib import Path\n', 1)
+if 'from tempfile import TemporaryDirectory\n' not in s:
+    s = s.replace('import unittest\n', 'from tempfile import TemporaryDirectory\nimport unittest\n', 1)
+if 'from searchgeo.acquisition import HttpClient\n' not in s:
+    s = s.replace('from searchgeo.m18_ai import (\n', 'from searchgeo.acquisition import HttpClient\nfrom searchgeo.audit_runner import run_audit\nfrom searchgeo.discovery import DiscoveryEngine\nfrom searchgeo.m18_ai import (\n', 1)
+if 'from tests.test_m12_stable_baseline import _FixtureRenderer, _server\n' not in s:
+    s = s.replace('from searchgeo.semantic import SemanticEvidenceInput, SemanticInput\n', 'from searchgeo.semantic import SemanticEvidenceInput, SemanticInput\nfrom tests.test_m12_stable_baseline import _FixtureRenderer, _server\n', 1)
+
+marker = '''\n\nif __name__ == "__main__":\n    unittest.main()\n'''
+methods = r'''
+
+    def test_explicit_provider_quarantine_blocks_retries_across_urls(self) -> None:
+        calls = 0
+
+        def fail(*_):
+            nonlocal calls
+            calls += 1
+            raise TimeoutError()
+
+        provider = OpenAIProvider(api_key="x", transport=fail)
+        first = provider.analyze(_input("https://example.com/a", "SNP-A"))
+        second = provider.analyze(_input("https://example.com/b", "SNP-B"))
+
+        self.assertEqual(first.state, ProviderState.UNAVAILABLE)
+        self.assertEqual(second.state, ProviderState.UNAVAILABLE)
+        self.assertEqual(second.reason, "AI_PROVIDER_UNAVAILABLE:PROVIDER_QUARANTINED")
+        self.assertEqual(calls, 1)
+        snapshot = provider.session_snapshot()
+        self.assertEqual(snapshot["strategy"], "SINGLE_PROVIDER")
+        self.assertEqual(snapshot["provider_states"]["OPENAI"], "QUARANTINED_FOR_AUDIT")
+        self.assertEqual(len(provider.attempt_history()), 1)
+
+    def test_run_audit_persists_attempts_and_enriches_both_reports(self) -> None:
+        with _server() as origin, TemporaryDirectory() as directory:
+            html = f"""<!doctype html><html lang='pt-BR'><head><title>Guia M18</title>
+<meta name='description' content='Guia técnico.'><link rel='canonical' href='{origin}/'>
+<script type='application/ld+json'>{{"@context":"https://schema.org","@type":"Article","headline":"Guia M18"}}</script>
+</head><body><main><h1>Guia M18</h1><h2>Visão geral</h2><p>Conteúdo técnico verificável para integração M18.</p></main></body></html>"""
+            secret = "M18-INTEGRATION-SECRET"
+            provider = OpenAIProvider(api_key=secret, transport=_success_transport())
+            result = run_audit(
+                f"{origin}/",
+                audits_root=Path(directory),
+                project_name="Integração M18",
+                max_pages=1,
+                semantic_provider=provider,
+                discovery_engine=DiscoveryEngine(HttpClient(timeout=1)),
+                renderer=_FixtureRenderer(html),
+                lazy_probe=lambda url, device: None,
+            )
+
+            connection = sqlite3.connect(result.audit_root / "audit.db")
+            connection.row_factory = sqlite3.Row
+            try:
+                attempts = connection.execute(
+                    "SELECT provider,model,status,input_tokens,output_tokens,estimated_cost FROM ai_provider_attempts WHERE audit_id=? ORDER BY started_at",
+                    (result.audit_id,),
+                ).fetchall()
+                self.assertEqual(len(attempts), 2)
+                self.assertTrue(all(row["provider"] == "OPENAI" for row in attempts))
+                self.assertTrue(all(row["model"] == "gpt-5.6-terra" for row in attempts))
+                self.assertTrue(all(row["status"] == "SUCCESS" for row in attempts))
+                self.assertTrue(all(row["input_tokens"] == 100 for row in attempts))
+                self.assertTrue(all(row["output_tokens"] == 50 for row in attempts))
+                self.assertTrue(all(row["estimated_cost"] is not None for row in attempts))
+                session = connection.execute(
+                    "SELECT strategy,effective_provider,effective_model,status FROM ai_audit_sessions WHERE audit_id=?",
+                    (result.audit_id,),
+                ).fetchone()
+                self.assertIsNotNone(session)
+                self.assertEqual(session["strategy"], "SINGLE_PROVIDER")
+                self.assertEqual(session["effective_provider"], "OPENAI")
+                self.assertEqual(session["effective_model"], "gpt-5.6-terra")
+            finally:
+                connection.close()
+
+            report = result.report_path.read_text(encoding="utf-8")
+            remediation = (result.audit_root / "remediation.html").read_text(encoding="utf-8")
+            self.assertIn("Uso de IA — execução e telemetria", report)
+            self.assertIn("ESTIMATED_COST", report)
+            self.assertIn("OPENAI", report)
+            self.assertIn("gpt-5.6-terra", report)
+            self.assertIn("Contexto da análise semântica", remediation)
+            self.assertIn("Este bloco é informativo", remediation)
+            self.assertNotIn(secret, report)
+            self.assertNotIn(secret, remediation)
+'''
+if 'test_explicit_provider_quarantine_blocks_retries_across_urls' not in s:
+    s = s.replace(marker, methods + marker, 1)
+
+p.write_text(s, encoding='utf-8')
