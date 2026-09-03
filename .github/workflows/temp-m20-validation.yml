@@ -26,3 +26,77 @@ jobs:
         run: python -m playwright install chromium
       - run: python -m compileall -q src tests
       - run: python -m unittest discover -s tests -v
+      - name: Cross-platform CLI smoke for mobile desktop and both
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          import sqlite3
+          import subprocess
+
+          root = Path("smoke-audits")
+          cases = (
+              ("mobile", True, False),
+              ("desktop", False, True),
+              ("both", True, True),
+          )
+          for device, expect_mobile, expect_desktop in cases:
+              before = set(root.glob("AUD-*")) if root.exists() else set()
+              subprocess.run(
+                  [
+                      "searchgeo", "audit", "https://example.com",
+                      "--project", f"CI Smoke {device}",
+                      "--max-pages", "1",
+                      "--audits-root", str(root),
+                      "--device-context", device,
+                      "--ai-provider", "none",
+                  ],
+                  check=True,
+              )
+              after = set(root.glob("AUD-*"))
+              created = sorted(after - before, key=lambda p: p.stat().st_mtime)
+              if len(created) != 1:
+                  raise AssertionError(f"expected one new audit for {device}, got {created}")
+              audit = created[0]
+              report = audit / "report"
+              required = [
+                  report / "index.html",
+                  report / "remediation.html",
+                  report / "content-suggestions.html",
+                  report / "ai-usage.html",
+                  report / "references.html",
+                  report / "css" / "site.css",
+              ]
+              missing = [str(path) for path in required if not path.is_file()]
+              if missing:
+                  raise AssertionError(f"missing report files for {device}: {missing}")
+              if (report / "mobile.html").is_file() != expect_mobile:
+                  raise AssertionError(f"unexpected mobile.html state for {device}")
+              if (report / "desktop.html").is_file() != expect_desktop:
+                  raise AssertionError(f"unexpected desktop.html state for {device}")
+              if (audit / "report.html").exists() or (audit / "remediation.html").exists():
+                  raise AssertionError(f"legacy root report leaked for {device}")
+
+              content_html = (report / "content-suggestions.html").read_text(encoding="utf-8")
+              if "Conteúdo" not in content_html or "JSON-LD" not in content_html:
+                  raise AssertionError(f"M20 report content missing for {device}")
+
+              connection = sqlite3.connect(audit / "audit.db")
+              try:
+                  run = connection.execute(
+                      "SELECT enabled,status,attempted_contexts FROM content_remediation_runs"
+                  ).fetchone()
+                  jsonld_count = connection.execute(
+                      "SELECT COUNT(*) FROM jsonld_remediation_suggestions"
+                  ).fetchone()[0]
+                  attempts = connection.execute(
+                      "SELECT COUNT(*) FROM content_remediation_attempts"
+                  ).fetchone()[0]
+              finally:
+                  connection.close()
+              if run is None or run[0] != 0 or run[1] != "DISABLED" or run[2] != 0:
+                  raise AssertionError(f"M20 default-OFF contract failed for {device}: {run}")
+              if jsonld_count < 1:
+                  raise AssertionError(f"missing deterministic JSON-LD guidance for {device}")
+              if attempts != 0:
+                  raise AssertionError(f"external M20 call occurred with AI disabled for {device}")
