@@ -14,12 +14,17 @@ Configuração operacional do SearchGEO Readiness Auditor.
 | `--ai-provider` | `none` |
 | `--ai-content-remediation` | `false` |
 | timeout IA | `180` s |
+| `--web-performance` | `false` |
+| `--web-performance-max-pages` | `10` |
+| `--web-performance-timeout-seconds` | `60` s |
+| `--web-performance-field-source` | `auto` |
+| `--lighthouse-categories` | `performance,accessibility,best-practices,seo` |
 
 ## Device context
 
 `SEARCHGEO_DEVICE_CONTEXT`: `mobile`, `desktop`, `both`. Precedência flag → ambiente → `mobile`.
 
-A seleção limita M3 e, por consequência, M7/M20 aos snapshots escolhidos. Chamada interna direta a M3 sem variável preserva `both` por compatibilidade interna.
+A seleção limita M3 e, por consequência, M7/M20 aos snapshots escolhidos. A mesma seleção limita M21 aos snapshots realmente materializados. Chamada interna direta a M3 sem variável preserva `both` por compatibilidade interna.
 
 ## Antes de configurar IA
 
@@ -39,7 +44,7 @@ Detalhes: [AI_GUIDE.md](AI_GUIDE.md).
 searchgeo audit https://example.com --ai-provider none
 ```
 
-Nenhuma chamada externa; JSON-LD determinístico M20 continua disponível.
+Nenhuma chamada de IA externa; JSON-LD determinístico M20 continua disponível. M21 Web Performance também permanece desligado por default e não chama PageSpeed/CrUX.
 
 ### OpenAI
 
@@ -76,6 +81,15 @@ Somente providers elegíveis/configurados entram na cadeia imutável. Primeiro r
 
 Cada adapter usa exclusivamente a credencial do próprio provider. `OPENAI_API_KEY` não pode preencher ausência de `DEEPSEEK_API_KEY`/`MIMO_API_KEY`, e vice-versa.
 
+As credenciais de medição externa M21 também são isoladas:
+
+```text
+SEARCHGEO_PAGESPEED_API_KEY
+SEARCHGEO_CRUX_API_KEY
+```
+
+Elas não são credenciais de IA, não são reutilizadas pelos SemanticProviders e nunca devem substituir `OPENAI_API_KEY`, `DEEPSEEK_API_KEY` ou `MIMO_API_KEY`.
+
 ## M20 textual
 
 `SEARCHGEO_AI_CONTENT_REMEDIATION`, default `false`; aceita `true/false`, `1/0`, `yes/no`, `on/off`.
@@ -96,9 +110,191 @@ Com `--ai-provider none`, M20 textual fica `NOT_CONFIGURED` sem abortar; JSON-LD
 
 ## JSON-LD
 
-Para cada snapshot auditado, M20 revisa Structured Data. Se ausente, pode propor `WebPage` com URL, idioma, title e description efetivamente observados. Se existente, aponta problemas verificáveis sem reescrever destrutivamente o graph.
+Para cada snapshot auditado, M20 revisa Structured Data. Se ausente, pode propor `WebPage` com URL, idioma, title e description efetivamente observados/persistidos. Se existente, aponta problemas verificáveis sem reescrever destrutivamente o graph.
 
 JSON-LD é opcional/reforço, não requisito universal GEO nem garantia de rich result.
+
+## M21 — Core Web Vitals e Lighthouse
+
+M21 é uma camada de **evidência externa complementar**. Não substitui nem recalcula `SCORE-GEO-002`.
+
+Por padrão:
+
+```text
+SEARCHGEO_WEB_PERFORMANCE=false
+```
+
+Logo uma execução existente continua sem chamadas PageSpeed/CrUX e sem consumo externo adicional.
+
+Ativação:
+
+```powershell
+searchgeo audit https://example.com --web-performance
+```
+
+Equivalente por ambiente:
+
+```powershell
+$env:SEARCHGEO_WEB_PERFORMANCE = "true"
+searchgeo audit https://example.com
+```
+
+Precedência:
+
+1. `--web-performance` / `--no-web-performance`;
+2. `SEARCHGEO_WEB_PERFORMANCE`;
+3. `false`.
+
+### Limite de páginas externas
+
+```powershell
+searchgeo audit https://example.com `
+  --web-performance `
+  --web-performance-max-pages 5
+```
+
+Variável equivalente:
+
+```text
+SEARCHGEO_WEB_PERFORMANCE_MAX_PAGES
+```
+
+Default `10`. Valor `0` significa todas as páginas auditadas.
+
+O limite se aplica a páginas lógicas. Com `--device-context both`, cada página selecionada pode gerar uma medição Mobile e uma Desktop.
+
+### Timeout externo
+
+```text
+SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS
+```
+
+ou:
+
+```powershell
+--web-performance-timeout-seconds 60
+```
+
+Default `60` segundos por request externo. Deve ser número finito > 0. Não existe retry automático de timeout.
+
+### Lighthouse categories
+
+```text
+SEARCHGEO_LIGHTHOUSE_CATEGORIES
+```
+
+ou:
+
+```powershell
+--lighthouse-categories performance,accessibility,best-practices,seo
+```
+
+Valores suportados:
+
+```text
+performance
+accessibility
+best-practices
+seo
+```
+
+Default: todas as quatro categorias oficiais. Elas são solicitadas no mesmo contexto PageSpeed; não geram chamadas de LLM.
+
+### PageSpeed API key
+
+Opcional:
+
+```powershell
+$env:SEARCHGEO_PAGESPEED_API_KEY = "<google-api-key>"
+```
+
+PageSpeed Insights pode ser usado sem chave em uso ad hoc/baixo volume; para automação frequente a documentação oficial recomenda chave. O SearchGEO nunca persiste nem exibe essa chave.
+
+### CrUX API key
+
+Para CrUX direto:
+
+```powershell
+$env:SEARCHGEO_CRUX_API_KEY = "<google-api-key>"
+```
+
+A CrUX API direta exige chave.
+
+### Fonte de field data
+
+```text
+SEARCHGEO_WEB_PERFORMANCE_FIELD_SOURCE
+```
+
+ou:
+
+```powershell
+--web-performance-field-source auto|pagespeed|crux|none
+```
+
+Comportamento:
+
+| Valor | Comportamento |
+|---|---|
+| `auto` | Usa field data CrUX presente no PageSpeed; se faltar e houver `SEARCHGEO_CRUX_API_KEY`, tenta CrUX API direta. |
+| `pagespeed` | Usa apenas field data retornado pelo PageSpeed; não faz chamada CrUX separada. |
+| `crux` | Usa CrUX API direta para field data; requer `SEARCHGEO_CRUX_API_KEY`. PageSpeed continua sendo usado para Lighthouse lab. |
+| `none` | Não processa field data; mantém Lighthouse lab. |
+
+O default `auto` prepara a migração para CrUX direto porque o Google já documentou a retirada futura de field data CrUX da PageSpeed Insights API.
+
+### Consumo e IA
+
+M21 adiciona **zero chamadas de OpenAI/DeepSeek/MiMo**.
+
+O consumo adicional de `--web-performance` é somente dos serviços PageSpeed/CrUX e é controlado por:
+
+- flag de habilitação default OFF;
+- limite de páginas;
+- device context;
+- timeout;
+- política de field data;
+- credenciais Google opcionais/necessárias conforme serviço.
+
+Falha, quota, timeout ou falta de amostra CrUX não são findings do website e não reduzem `SCORE-GEO-002`.
+
+### Core Web Vitals
+
+M21 usa os thresholds oficiais atuais de boa experiência no percentil 75:
+
+```text
+LCP <= 2500 ms
+INP <= 200 ms
+CLS <= 0.10
+```
+
+Estados:
+
+```text
+PASS        # as três métricas disponíveis e boas
+FAIL        # as três disponíveis e ao menos uma excede o threshold bom
+INCOMPLETE  # falta ao menos uma das três métricas
+UNAVAILABLE # nenhum conjunto utilizável de field data
+```
+
+Ausência de amostra CrUX não é convertida em `FAIL`.
+
+### Lighthouse
+
+Os scores e métricas Lighthouse são apresentados como medição externa de laboratório, incluindo quando disponíveis:
+
+- Performance 0–100;
+- Accessibility 0–100;
+- Best Practices 0–100;
+- SEO 0–100;
+- FCP;
+- Speed Index;
+- LCP;
+- Total Blocking Time;
+- CLS;
+- versão do Lighthouse.
+
+Nenhum desses números é somado, multiplicado ou promediado com o `SCORE-GEO-002`.
 
 ## Modelos
 
@@ -110,9 +306,11 @@ MIMO:     mimo-v2.5-pro | mimo-v2.5
 
 Model ID aceito não garante acesso da conta/plano.
 
-## Timeout
+## Timeout IA
 
 `SEARCHGEO_AI_TIMEOUT_SECONDS`, default 180 s, número finito > 0. Sem retry automático. M20 reutiliza o timeout do provider.
+
+Esse timeout é independente de `SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS`.
 
 ## Provider sem credencial
 
@@ -127,11 +325,16 @@ report/
 ├─ desktop.html
 ├─ remediation.html
 ├─ content-suggestions.html
+├─ web-performance.html
 ├─ ai-usage.html
 ├─ references.html
 └─ css/site.css
 ```
 
+`web-performance.html` separa Lighthouse lab, Core Web Vitals field, telemetria de medição e limitações de coleta. `references.html` identifica as fontes oficiais e declara que elas não homologam o score heurístico global do SearchGEO.
+
 ## Fora do contrato público
 
 Sem web/backend, banco remoto, Docker daemon, execução distribuída, retry automático, publicação automática de conteúdo, criação automática de JSON-LD no website, Base URL customizada por CLI ou MiMo Token Plan `tp-...`.
+
+M21 também não cria combinação matemática entre Lighthouse/CWV e `SCORE-GEO-002`, não transforma ausência de CrUX em falha e não cria interpretação por LLM sem opt-in futuro explícito.
