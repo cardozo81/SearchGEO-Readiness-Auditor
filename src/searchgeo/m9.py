@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from searchgeo.domain import EvidenceType, RuleExecution, RuleResult, new_id, utc_now
 from searchgeo.evidence import EvidenceManager
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
-from searchgeo.scoring import ScoringEngine, ScoringResult
+from searchgeo.scoring import SCORING_VERSION, ScoringEngine, ScoringResult
 from searchgeo.scoring_persistence import ScoringPersistence
 
 
@@ -71,7 +71,7 @@ def execute_m9(
         page_id=None, snapshot_id=None, device=None,
         result=RuleResult.PASS if integrity["reproducible"] else RuleResult.FAIL,
         observed_value=integrity,
-        expected_condition="scores are reconstructible from RuleExecutions, rule versions and SCORE-GEO-001 without website/AI re-execution",
+        expected_condition=f"scores are reconstructible from RuleExecutions, rule versions and {SCORING_VERSION} without website/AI re-execution",
         evidence_ids=(evidence.evidence_id,), executed_at=utc_now(), error=None,
     )
     persistence.rule_executions.add(integrity_execution)
@@ -120,7 +120,7 @@ def _reproducibility_check(
     )
     return {
         "reproducible": expected == actual and persisted_ok and contribution_refs_ok,
-        "scoring_version": "SCORE-GEO-001",
+        "scoring_version": SCORING_VERSION,
         "score_count": len(expected),
         "persisted_scores_reopenable": persisted_ok,
         "contributions_reopenable": contribution_refs_ok,

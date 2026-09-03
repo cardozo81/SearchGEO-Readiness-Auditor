@@ -17,13 +17,14 @@ from searchgeo.m16_root_cause import materialize_root_causes
 from searchgeo.m17_duplicate_remediation import refine_br_geo_051_html
 from searchgeo.m17_precision import materialize_m17_precision
 from searchgeo.m17_reporting import M17RemediationReportBuilder, M17ReportBuilder
+from searchgeo.m19_reporting import refine_score_applicability_html
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
 from searchgeo import reporting as reporting_module
 from searchgeo.reporting import ReportPersistence, _redact, write_report
 from searchgeo.remediation import recipe_for
 
 # REPORT-GEO-003 remains the page-oriented report contract. M17 tightens the
-# remediation projection without changing SCORE-GEO-001 or RuleResult semantics.
+# remediation projection; SCORE-GEO-002 only refines applicability aggregation.
 reporting_module.TEMPLATE_VERSION = TEMPLATE_VERSION
 
 
@@ -92,7 +93,12 @@ class _PersistedInputAwareReportBuilder(M17ReportBuilder):
                 html,
                 flags=re.DOTALL,
             )
-        return refine_br_geo_051_html(html)
+        html = refine_br_geo_051_html(html)
+        return refine_score_applicability_html(
+            html,
+            audit_id=audit_id,
+            workspace=workspace,
+        )
 
     def _executive(
         self,

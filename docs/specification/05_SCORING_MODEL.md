@@ -1,7 +1,7 @@
 # SCORING_MODEL.md
 
 **Status:** APPROVED  
-**Scoring baseline:** SCORE-GEO-001
+**Scoring baseline:** SCORE-GEO-002
 
 ## 1. Estrutura
 
@@ -29,6 +29,8 @@ Todo resultado de score possui:
 10. Cobertura de Intenções
 
 Desktop e Mobile separados.
+
+As dez dimensões continuam pertencendo ao modelo. `SCORE-GEO-002` apenas distingue dimensão legitimamente não aplicável de dimensão que deveria ser avaliada mas não consolidou.
 
 ## 3. RuleExecution
 
@@ -86,7 +88,47 @@ Applicable:
 
 NOT_APPLICABLE fica fora.
 
-## 7. Confidence
+## 7. Aplicabilidade da dimensão
+
+`SCORE-GEO-002` adiciona distinção explícita entre aplicabilidade e consolidação.
+
+### 7.1 Sem RuleExecution
+
+Se nenhuma RuleExecution da dimensão existir para o dispositivo:
+
+- Value = null;
+- Coverage = 0;
+- Confidence = UNAVAILABLE;
+- Consolidation = NOT_CONSOLIDATED;
+- limitation = `NO_RULE_EXECUTIONS`.
+
+Ausência de execução não pode ser convertida em `NOT_APPLICABLE`.
+
+### 7.2 Todas as regras legitimamente NOT_APPLICABLE
+
+Se RuleExecutions existem e todas as regras da dimensão estão legitimamente fora do universo aplicável:
+
+- Value = null;
+- Coverage = 0 na dimensão isolada;
+- Confidence = UNAVAILABLE;
+- Consolidation = NOT_APPLICABLE;
+- limitation = `NO_APPLICABLE_RULES`.
+
+A dimensão não recebe 0 nem 100 e é excluída da agregação Overall.
+
+### 7.3 Pré-requisito bloqueado
+
+Se `NOT_APPLICABLE` ocorreu porque um pré-requisito impediu a análise, isso não é não aplicabilidade benigna.
+
+Reason codes contendo `PREREQUISITE_BLOCKED` mantêm a dimensão:
+
+- Value = null;
+- Consolidation = NOT_CONSOLIDATED;
+- limitation = `APPLICABILITY_UNRESOLVED:PREREQUISITE_BLOCKED`.
+
+Isso evita esconder falhas de aquisição/rendering como se a dimensão simplesmente não se aplicasse.
+
+## 8. Confidence
 
 Níveis:
 
@@ -106,9 +148,9 @@ Considerar:
 
 Confidence do LLM não é automaticamente a confidence final do auditor.
 
-## 8. Consolidation
+## 9. Consolidation
 
-Baseline:
+Baseline para dimensões aplicáveis:
 
 Coverage >= 80% e Confidence HIGH/MEDIUM
 → CONSOLIDATED
@@ -125,7 +167,11 @@ Coverage < 50%
 Confidence UNAVAILABLE
 → NOT_CONSOLIDATED
 
-## 9. Sem IA
+Dimensão integralmente não aplicável:
+
+→ NOT_APPLICABLE
+
+## 10. Sem IA
 
 Ausência de IA:
 
@@ -135,7 +181,7 @@ Ausência de IA:
 
 Resultados semânticos sem capacidade suficiente ficam UNKNOWN.
 
-## 10. ScoreContribution
+## 11. ScoreContribution
 
 Toda contribuição registra:
 
@@ -150,7 +196,7 @@ Toda contribuição registra:
 - effective contribution;
 - scoring_group.
 
-## 11. Double Counting
+## 12. Double Counting
 
 Regras correlacionadas utilizam `scoring_group`.
 
@@ -165,22 +211,22 @@ Baseline para regras correlacionadas:
 
 MAX_IMPACT
 
-## 12. Cascading Failures
+## 13. Cascading Failures
 
-Falha de pré-requisito não pode multiplicar penalizações.
+Falha de pré-requisito não pode multiplicar penalizações e também não pode ser usada para remover artificialmente uma dimensão do universo aplicável.
 
-## 13. Site-level rules
+## 14. Site-level rules
 
 Regras globais como robots/sitemap não devem ser replicadas artificialmente por página.
 
-## 14. Aggregation
+## 15. Aggregation
 
 No MVP:
 
 - páginas possuem peso equivalente;
 - não existe page importance subjetiva.
 
-## 15. Overall
+## 16. Overall
 
 Existem:
 
@@ -189,24 +235,53 @@ Existem:
 
 Nunca uma única nota misturando dispositivos.
 
-Overall exige consolidação suficiente das 10 dimensões.
+Overall exige materialização das dez dimensões e consolidação suficiente de todas as dimensões **aplicáveis**.
 
-Se uma dimensão necessária estiver NOT_CONSOLIDATED:
+Fluxo:
+
+1. materializar as dez dimensões;
+2. excluir da agregação apenas dimensões `NOT_APPLICABLE` legítimas;
+3. exigir Value e estado diferente de `NOT_CONSOLIDATED` para todas as dimensões restantes;
+4. calcular média simples dos Values das dimensões aplicáveis;
+5. calcular Overall Coverage pela média das coverages das dimensões aplicáveis;
+6. persistir `DIMENSION_NOT_APPLICABLE:<DIMENSION>` para cada dimensão excluída.
+
+Se uma dimensão aplicável necessária estiver NOT_CONSOLIDATED:
 
 Overall = NOT_CONSOLIDATED
 
-## 16. Technical Readiness
+Uma dimensão `NOT_APPLICABLE` não reduz nota nem Coverage do Overall.
+
+## 17. JSON-LD / Structured Data
+
+JSON-LD não é requisito universal para Compatibilidade GEO calculável.
+
+Quando Structured Data está ausente e `BR-GEO-034..037` são legitimamente `NOT_APPLICABLE`:
+
+- `STRUCTURED_DATA = NOT_APPLICABLE`;
+- a dimensão não participa do Overall;
+- não há penalidade pela ausência isolada.
+
+Quando Structured Data é observado:
+
+- a dimensão torna-se aplicável;
+- BR-GEO-034..037 entram normalmente no fluxo;
+- PASS/WARNING/FAIL influenciam score;
+- UNKNOWN/ERROR influenciam coverage/consolidation;
+- markup inválido ou contraditório pode reduzir o Overall.
+
+## 18. Technical Readiness
 
 Pode resumir:
 
 - Technical Accessibility;
 - Indexability;
 - Content Extractability;
-- Structured Data.
+- Structured Data quando aplicável.
 
 Somente se suficientemente consolidadas.
 
-## 17. Semantic Readiness
+## 19. Semantic Readiness
 
 Pode resumir:
 
@@ -217,21 +292,21 @@ Pode resumir:
 - Evidence & Trust;
 - Intent Coverage.
 
-## 18. Pesos entre dimensões
+## 20. Pesos entre dimensões
 
 MVP:
 
-equal weight
+equal weight entre dimensões aplicáveis.
 
 Não inventar pesos “científicos” antes de calibração empírica.
 
-## 19. Blockers
+## 21. Blockers
 
 Critical blockers são mostrados separadamente.
 
 Um score relativamente alto não pode esconder um blocker crítico.
 
-## 20. Reprodutibilidade
+## 22. Reprodutibilidade
 
 Dadas:
 
@@ -240,4 +315,6 @@ Dadas:
 - rule versions;
 - scoring version;
 
-o score deve poder ser recalculado sem reexecutar website ou IA.
+o score e a decisão de aplicabilidade devem poder ser recalculados sem reexecutar website ou IA.
+
+`BR-GEO-054` deve registrar `SCORE-GEO-002`.

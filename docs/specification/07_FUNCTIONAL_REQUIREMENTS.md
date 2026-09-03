@@ -1,6 +1,6 @@
 # FUNCTIONAL_REQUIREMENTS.md
 
-**Status:** APPROVED — extended by M13 Actionable GEO Report
+**Status:** APPROVED — extended by M13 Actionable GEO Report + SCORE-GEO-002
 
 ## Requisitos Funcionais
 
@@ -122,7 +122,7 @@ Informar Confidence.
 Informar Consolidation Status.
 
 ### FR-GEO-040
-Calcular Overall Desktop e Overall Mobile somente com cobertura suficiente.
+Calcular Overall Desktop e Overall Mobile somente com cobertura suficiente das dimensões aplicáveis.
 
 ### FR-GEO-041
 Evitar dupla penalização via scoring groups.
@@ -202,6 +202,24 @@ Identificar explicitamente recipes de fallback quando ainda não houver recipe e
 ### FR-GEO-066
 Preservar IDs de Evidence e rastreabilidade no fluxo `evidence → finding → priority → remediation → report`.
 
+### FR-GEO-067
+Distinguir dimensão sem RuleExecutions, dimensão com aplicabilidade não resolvida e dimensão integralmente `NOT_APPLICABLE`.
+
+### FR-GEO-068
+Excluir do Overall somente dimensões integralmente e legitimamente `NOT_APPLICABLE`, sem atribuir score 0 ou 100 e sem reduzir Overall Coverage.
+
+### FR-GEO-069
+Quando um tópico opcional passa a existir na URL, suas regras devem tornar-se aplicáveis e participar normalmente de Score, Coverage, Confidence e Consolidation. Para Structured Data, JSON-LD observado torna BR-GEO-034..037 parte do fluxo aplicável.
+
+### FR-GEO-070
+Exibir no `report.html` dimensões legitimamente excluídas como `NÃO APLICÁVEL`, diferenciando-as de `NÃO DETERMINADO`, e indicar quantas dimensões foram efetivamente consideradas no Overall.
+
+### FR-GEO-071
+Documentar de forma explícita premissas classificadas como `MÍNIMO`, `CONTEXTUAL`, `OPCIONAL / REFORÇO` e `NÃO OBRIGATÓRIO`, com foco primário em Google Search/AI features e sem transformar recomendações externas em requisitos artificiais de score.
+
+### FR-GEO-072
+Classificar JSON-LD/Structured Data como `OPCIONAL / REFORÇO` no baseline geral: ausência legítima isolada não é FAIL nem impede Overall; quando presente, deve ser interpretável, factual e coerente com o conteúdo visível.
+
 ## Requisitos Não Funcionais
 
 ### NFR-GEO-001
@@ -239,3 +257,6 @@ O relatório acionável deve permanecer autocontido, responsivo, imprimível e s
 
 ### NFR-GEO-012
 RemediationRecipe e apresentação do relatório devem ser determinísticas e reproduzíveis a partir do estado persistido e da versão do código/ruleset.
+
+### NFR-GEO-013
+A decisão de aplicabilidade de dimensão e a exclusão do Overall devem ser reproduzíveis exclusivamente a partir das RuleExecutions persistidas e da versão do scoring.

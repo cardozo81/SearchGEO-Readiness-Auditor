@@ -157,6 +157,27 @@ Ao final da cascata, deve ser apresentada ao humano a lista completa das branche
 
 A mesma regra de limpeza diferida aplica-se às branches de governança criadas especificamente para viabilizar esta cascata.
 
+### D-037 — SCORE-GEO-002 e aplicabilidade de dimensões
+
+`SCORE-GEO-001` é superseded por `SCORE-GEO-002` quanto à aplicabilidade e agregação das dimensões.
+
+As dez dimensões permanecem no modelo, preservando D-008. Entretanto, uma dimensão cujas RuleExecutions existam e estejam **todas legitimamente `NOT_APPLICABLE`** não pode ser tratada como `NOT_CONSOLIDATED` nem bloquear o Overall.
+
+Regra aprovada:
+
+1. ausência completa de RuleExecutions continua `NOT_CONSOLIDATED`;
+2. `NOT_APPLICABLE` provocado apenas por pré-requisito bloqueado continua `NOT_CONSOLIDATED`;
+3. dimensão integralmente e legitimamente `NOT_APPLICABLE` recebe estado de consolidação `NOT_APPLICABLE`;
+4. dimensão `NOT_APPLICABLE` não recebe score 0 nem 100;
+5. dimensão `NOT_APPLICABLE` é excluída do denominador do Overall e de sua Coverage;
+6. todas as dimensões aplicáveis restantes precisam estar suficientemente consolidadas para existir Overall;
+7. a exclusão deve ser persistida/rastreável como `DIMENSION_NOT_APPLICABLE:<DIMENSION>`;
+8. se um tópico opcional passar a existir — por exemplo JSON-LD — suas regras passam a ser aplicáveis e seus resultados entram normalmente no score.
+
+JSON-LD/Structured Data é classificado como **OPCIONAL / REFORÇO**, não como requisito universal para GEO funcional. Sua ausência legítima, isoladamente, não é FAIL nem impedimento para Compatibilidade GEO mensurável. Quando presente, deve ser interpretável e coerente com o conteúdo visível; markup inválido ou contraditório pode reduzir o score.
+
+O foco primário desta classificação é Google Search e seus recursos de IA. Outros mecanismos podem ser documentados como sinais complementares sem alterar a regra de scoring.
+
 ## PENDING ENVIRONMENT VALIDATION
 
 ### D-028
