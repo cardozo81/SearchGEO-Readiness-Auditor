@@ -395,4 +395,3 @@ Providers de runtime: `OPENAI`, `DEEPSEEK`, `MIMO`, `NONE`; `AUTO` usa somente p
 | MIMO | mimo-v2.5 | thinking enabled | SIM | SIM | B | PROVISIONAL | volume/multimodal |
 
 “Confiabilidade SearchGEO” é política inicial de adequação ao contrato específico do auditor, não benchmark científico geral. DeepSeek/MiMo permanecem PROVISIONAL até SearchGEO Provider Benchmark. MiMo normaliza LOW/MEDIUM/HIGH para `THINKING_ENABLED`; não se afirma profundidade relativa entre esses níveis.
-

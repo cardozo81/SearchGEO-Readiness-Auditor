@@ -262,4 +262,3 @@ searchgeo audit --urls-file .\urls.txt --project "Projeto" --ai-provider deepsee
 searchgeo audit --urls-file .\urls.txt --project "Projeto" --ai-provider auto
 ```
 AUTO ignora providers sem token ou com configuração inválida e cria cadeia imutável no início do audit.
-

@@ -300,4 +300,3 @@ Compare `report.html` e `remediation.html` entre auditorias e, para análise té
 <!-- M18_MULTI_AI_PROVIDER_ROUTING -->
 ## M18 — escolher IA
 Use `none` para IA desabilitada, um provider explícito para execução única sem failover, ou `auto` para seleção/fallback por confiabilidade SearchGEO. O relatório distingue provider configurado, tentado e efetivamente usado, mostra profundidade, status, tokens reportados, `ESTIMATED_COST`, duração e erro sanitizado. Falhas de IA são limitações da auditoria, não problemas do website.
-

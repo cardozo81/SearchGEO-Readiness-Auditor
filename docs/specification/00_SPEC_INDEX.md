@@ -136,4 +136,3 @@ Decisões puramente internas de implementação podem ser tomadas sem aprovaçã
 <!-- M18_MULTI_AI_PROVIDER_ROUTING -->
 ## M18 — Multi-AI Provider Abstraction, Reliability Routing & Usage Telemetry
 Fonte normativa específica: `18_MULTI_AI_PROVIDER_ROUTING.md`. M18 é extensão de infraestrutura; não altera Business Rules, SCORE-GEO-001, PRIORITY-GEO-001, actionability, Desktop/Mobile nem a semântica de UNKNOWN.
-
