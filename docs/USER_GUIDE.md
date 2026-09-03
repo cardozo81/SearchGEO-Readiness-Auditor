@@ -6,9 +6,10 @@
 2. escolher o universo de URLs;
 3. escolher o contexto de dispositivo;
 4. decidir se IA será usada;
-5. executar a auditoria;
-6. abrir `report/index.html`;
-7. navegar para Mobile/Desktop, remediações, IA ou referências conforme a necessidade.
+5. se usar IA, confirmar produto/plano, credencial, endpoint, saldo/quota e acesso ao modelo;
+6. executar a auditoria;
+7. abrir `report/index.html`;
+8. navegar para Mobile/Desktop, remediações, IA ou referências conforme a necessidade.
 
 ## Execução padrão
 
@@ -86,10 +87,20 @@ searchgeo audit https://example.com --ai-provider none
 
 A auditoria continua com regras determinísticas. Regras semânticas sem evidência suficiente ficam `UNKNOWN`; isso não equivale a FAIL do site.
 
+## Antes de usar IA
+
+Ter um plano pago ou créditos no fornecedor não garante acesso de API compatível com o SearchGEO.
+
+- **OpenAI:** o SearchGEO usa a API Platform. ChatGPT e API possuem billing separado; uma assinatura ChatGPT não substitui saldo/quota da API.
+- **DeepSeek:** o SearchGEO usa a DeepSeek API; saldo concedido e recarregado podem compor o saldo total, e `402` indica saldo insuficiente.
+- **Xiaomi MiMo:** o SearchGEO atual suporta Pay-as-you-go com chave `sk-...`. Token Plan `tp-...` usa Base URL e créditos separados e não deve ser usado no auditor automatizado atual.
+
+Veja a matriz e as fontes oficiais em [AI_GUIDE.md](AI_GUIDE.md).
+
 ## Com OpenAI
 
 ```powershell
-$env:OPENAI_API_KEY = "<chave>"
+$env:OPENAI_API_KEY = "<chave-da-API-Platform>"
 searchgeo audit https://example.com `
   --device-context mobile `
   --ai-provider openai
@@ -97,16 +108,34 @@ searchgeo audit https://example.com `
 
 O default OpenAI é `gpt-5.6-terra`.
 
+## Com DeepSeek
+
+```powershell
+$env:DEEPSEEK_API_KEY = "<chave-da-DeepSeek-API>"
+searchgeo audit https://example.com --ai-provider deepseek
+```
+
+## Com Xiaomi MiMo
+
+```powershell
+$env:MIMO_API_KEY = "<chave-sk-PAYG>"
+searchgeo audit https://example.com --ai-provider mimo
+```
+
+Não configure uma chave `tp-...` em `MIMO_API_KEY` no SearchGEO atual.
+
 ## Com AUTO multi-provider
 
 ```powershell
-$env:OPENAI_API_KEY = "<chave>"
-$env:DEEPSEEK_API_KEY = "<chave>"
-$env:MIMO_API_KEY = "<chave>"
+$env:OPENAI_API_KEY = "<chave-da-API-Platform>"
+$env:DEEPSEEK_API_KEY = "<chave-da-DeepSeek-API>"
+$env:MIMO_API_KEY = "<chave-sk-PAYG>"
 searchgeo audit https://example.com --ai-provider auto
 ```
 
 Providers sem token/configuração válida são excluídos. O primeiro resultado válido encerra a cadeia naquele contexto.
+
+A presença de uma variável não prova que o plano seja compatível. Exemplo: uma chave MiMo `tp-...` continua sendo incompatível com o endpoint PAYG usado pelo SearchGEO atual.
 
 ## Saída esperada
 
@@ -199,7 +228,7 @@ report/ai-usage.html
 
 Essa página é operacional. Timeout, quota, auth ou provider ausente não são problemas GEO do site.
 
-O custo mostrado é estimativa local, não fatura.
+O custo mostrado é estimativa local, não fatura e não substitui a verificação do plano/billing real do provider.
 
 ## Referências
 
@@ -224,6 +253,8 @@ Test-Path Env:OPENAI_API_KEY
 Test-Path Env:DEEPSEEK_API_KEY
 Test-Path Env:MIMO_API_KEY
 ```
+
+Presença não significa compatibilidade do produto/plano. Não imprima a chave completa apenas para conferir prefixo ou configuração.
 
 ## Próximas leituras
 
