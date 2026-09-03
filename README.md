@@ -1,39 +1,39 @@
 # SearchGEO Readiness Auditor
 
-Auditor local de **Search/GEO Readiness** com evidência persistida, scoring reprodutível e análise opcional por IA. O objetivo é avaliar acessibilidade técnica, extraibilidade, estrutura semântica, clareza, answerability, citation readiness e outros sinais úteis para Search e sistemas generativos sem prometer ranking, tráfego, citação ou presença em respostas de IA.
+Auditor local de **Search/GEO Readiness** com evidência persistida, scoring reproduzível e análise semântica opcional por IA. O objetivo é avaliar acessibilidade técnica, extraibilidade, estrutura semântica, clareza de entidades, answerability, citation readiness e outros sinais úteis para Search e sistemas generativos sem prometer ranking, tráfego, citação ou presença em respostas de IA.
 
 ## Status atual
 
-**Baseline funcional: M18 + SCORE-GEO-002, com report site estático e seleção de contexto de dispositivo.**
+**Baseline funcional atual: M18 + SCORE-GEO-002.**  
+**Capacidades integradas:** `REPORT-SITE-GEO-001` e seleção configurável de contexto de dispositivo.
 
 A aplicação:
 
 - executa auditoria ponta a ponta por CLI;
-- usa **Mobile como contexto padrão** na CLI para evitar rendering e chamadas de IA de Desktop sem necessidade;
+- usa **Mobile como contexto padrão da CLI** para evitar rendering e chamadas de IA de Desktop sem necessidade;
 - permite `mobile`, `desktop` ou `both`;
-- persiste `audit.db` + artifacts;
-- gera um mini-site estático em `report/`, com CSS compartilhado externo;
+- persiste `audit.db` + `artifacts/`;
+- gera mini-site estático em `report/`, com navegação compartilhada e CSS externo;
 - separa visão geral, Mobile, Desktop, remediações, telemetria de IA e referências/metodologia;
-- suporta IA opcional com OpenAI, DeepSeek, Xiaomi MiMo ou roteamento `auto`;
-- mantém Desktop e Mobile independentes quando ambos são selecionados.
+- suporta execução sem IA, provider explícito ou roteamento multi-provider `auto`;
+- mantém Score, Coverage e Confidence como indicadores distintos;
+- preserva rastreabilidade de Evidence → RuleExecution → Finding → Priority → Remediation → Report.
 
 > O Score SearchGEO é um modelo interno de readiness. Não existe um score GEO/AEO normativo universal publicado por Google, OpenAI, Schema.org, WHATWG ou IETF.
 
 ## Base técnica GEO/AEO/SEO
 
-A página `report/references.html` gerada em cada auditoria documenta fontes e regras de cálculo. Entre as fontes primárias está o guia oficial do Google de 2026, **Optimizing your website for generative AI features on Google Search**:
+A página `report/references.html` gerada em cada auditoria documenta fontes e metodologia. Entre as fontes primárias estão Google Search Central, OpenAI, Schema.org, WHATWG e RFCs relevantes.
 
-<https://developers.google.com/search/docs/fundamentals/ai-optimization-guide>
-
-O próprio Google esclarece nesse guia que AEO/GEO são termos de mercado e que, para os recursos generativos do Google Search, os fundamentos continuam sendo SEO. O SearchGEO, portanto, **não trata como requisito oficial**:
+O SearchGEO não trata como requisito oficial universal:
 
 - markup especial de GEO/AEO;
-- `llms.txt` como requisito de ranking/visibilidade no Google;
-- “chunking” artificial obrigatório;
+- `llms.txt` como requisito de ranking/visibilidade;
+- chunking artificial obrigatório;
 - reescrita de conteúdo apenas para agradar modelos de IA;
 - Structured Data como requisito universal para recursos generativos.
 
-As heurísticas semânticas BR-GEO continuam úteis como modelo de readiness, mas são identificadas como heurísticas internas quando não existe norma externa equivalente.
+As heurísticas BR-GEO continuam úteis como modelo de readiness, mas são identificadas como heurísticas internas quando não existe norma externa equivalente.
 
 ## Compatibilidade
 
@@ -70,7 +70,7 @@ searchgeo --version
 searchgeo audit https://example.com --project "Exemplo"
 ```
 
-Equivale ao contexto:
+Equivale a:
 
 ```text
 --device-context mobile
@@ -105,7 +105,7 @@ searchgeo audit `
 searchgeo audit --urls-file .\urls.txt --project "Exemplo"
 ```
 
-## Contexto de dispositivo e custo
+## Contexto de dispositivo
 
 A seleção pode ser feita pela CLI ou por ambiente:
 
@@ -119,9 +119,11 @@ Precedência:
 2. `SEARCHGEO_DEVICE_CONTEXT`;
 3. default da CLI: `mobile`.
 
-A seleção controla os snapshots produzidos por M3 e, consequentemente, os contextos enviados ao provider semântico. Em uma página auditada com IA, `mobile` evita a chamada correspondente a Desktop; `both` executa os dois contextos quando disponíveis.
+A seleção controla os snapshots produzidos por M3 e os contextos elegíveis para análise semântica. Em uma página auditada com IA, `mobile` evita a chamada correspondente a Desktop; `both` permite os dois contextos quando disponíveis.
 
-Chamadas internas diretas a M3 sem variável preservam o comportamento legado de ambos os dispositivos para compatibilidade de testes/API interna.
+A comparação BR-GEO-052 só é executada quando `both` foi selecionado. Em `mobile` ou `desktop`, ela fica `NOT_APPLICABLE` com reason code `DEVICE_COMPARISON_DISABLED_BY_CONTEXT`; isso não representa erro nem snapshot ausente.
+
+Chamadas internas diretas a M3 sem variável preservam o comportamento legado de ambos os dispositivos para compatibilidade da API interna/testes. O contrato público da CLI permanece Mobile por padrão.
 
 ## Estrutura de saída
 
@@ -140,22 +142,22 @@ audits/<AUD-ID>/
       └─ site.css
 ```
 
-`report/index.html` é o ponto de entrada. Os HTMLs usam o mesmo menu e o mesmo `report/css/site.css`; não dependem de servidor web nem de CSS inline/embutido.
+`report/index.html` é o ponto de entrada. Os HTMLs finais usam o mesmo menu e `report/css/site.css`; não dependem de servidor web nem de CSS inline/embutido.
 
-Os dados primários continuam sendo `audit.db` e os artifacts. O report site é uma projeção para leitura humana.
+`audit.db` e os artifacts persistidos continuam sendo a fonte de verdade. O report site é uma projeção para leitura humana e não recalcula score/findings nem chama IA.
 
 ## Como interpretar Score, Coverage e Confidence
 
-Esses indicadores respondem perguntas diferentes:
+Os indicadores respondem perguntas diferentes:
 
 - **Score / Readiness:** qualidade observada nas regras efetivamente avaliadas;
-- **Coverage:** proporção do universo aplicável que realmente pôde ser avaliado;
-- **Confidence:** força da conclusão do auditor, considerando coverage, evidências e erros de execução;
+- **Coverage:** proporção do universo aplicável que pôde ser avaliado;
+- **Confidence:** força da conclusão do auditor considerando cobertura, evidências e erros de execução;
 - **Consolidation:** se existe base suficiente para publicar aquela dimensão/Overall como consolidada.
 
-**Confidence LOW não significa que o texto do site é ruim ou não aderente a GEO.** Ela significa que a conclusão do auditor possui base limitada. O conteúdo é avaliado pelos RuleExecutions, findings e Score. Um score alto com Confidence LOW exige ressalva e não deve ser comunicado como aprovação sem restrições.
+**Confidence LOW não significa que o texto do site é ruim ou não aderente a GEO.** Significa que a conclusão do auditor possui base limitada. O conteúdo é julgado pelos RuleExecutions, findings e Score. Um score alto com Confidence LOW exige ressalva e não deve ser comunicado como aprovação irrestrita.
 
-As classificações visuais `Excelente / Alta / Moderada / Baixa / Crítica` são faixas internas do SearchGEO, não thresholds oficiais dos mantenedores.
+As classificações `Excelente / Alta / Moderada / Baixa / Crítica` são faixas internas do SearchGEO, não thresholds oficiais dos mantenedores externos.
 
 Detalhes: [docs/SCORING_GUIDE.md](docs/SCORING_GUIDE.md) e [docs/REPORT_GUIDE.md](docs/REPORT_GUIDE.md).
 
@@ -167,7 +169,7 @@ Detalhes: [docs/SCORING_GUIDE.md](docs/SCORING_GUIDE.md) e [docs/REPORT_GUIDE.md
 searchgeo audit https://example.com --ai-provider none
 ```
 
-`none` é o default. Regras semantic-only sem evidência suficiente ficam `UNKNOWN`; isso reduz Coverage/Consolidation quando aplicável, mas não transforma ausência de IA em `FAIL` do website.
+`none` é o default. Regras semantic-only sem evidência suficiente podem ficar `UNKNOWN`; isso reduz Coverage/Consolidation quando aplicável, mas ausência de IA nunca vira `FAIL` do website.
 
 ### OpenAI
 
@@ -205,9 +207,9 @@ $env:MIMO_API_KEY = "<chave-mimo>"
 searchgeo audit https://example.com --ai-provider auto
 ```
 
-`AUTO` monta uma cadeia imutável somente com providers configurados e válidos. As chamadas são sequenciais. O primeiro resultado válido encerra a cadeia naquele contexto; providers posteriores não sobrescrevem o resultado aceito.
+`AUTO` monta cadeia imutável somente com providers configurados e utilizáveis. As tentativas são sequenciais. O primeiro resultado válido encerra a cadeia naquele contexto; providers posteriores não sobrescrevem o resultado aceito.
 
-Um provider explícito não faz fallback para outro fornecedor. Chaves ausentes de providers não selecionados não interferem no provider explícito.
+Provider explícito não faz fallback para outro fornecedor. Chaves ausentes de providers não selecionados não interferem no provider explícito.
 
 Modelos aceitos pelo código:
 
@@ -225,7 +227,7 @@ Default da CLI: `180` segundos por chamada.
 $env:SEARCHGEO_AI_TIMEOUT_SECONDS = "240"
 ```
 
-O valor deve ser numérico, finito e maior que zero. Timeout não dispara retry automático para evitar consumo duplicado quando a chamada já chegou ao provider.
+O valor deve ser numérico, finito e maior que zero. Timeout não dispara retry automático da mesma chamada para evitar consumo duplicado quando a requisição pode ter alcançado o provider.
 
 ## Telemetria de IA
 
@@ -235,23 +237,13 @@ A telemetria operacional fica isolada em:
 report/ai-usage.html
 ```
 
-A página apresenta, quando disponíveis:
+Quando disponíveis, são exibidos estratégia, provider/model efetivo, status, tentativas por URL/device, tokens, duração, custo estimado local e erros sanitizados.
 
-- estratégia;
-- provider/model efetivo;
-- status;
-- cadeia configurada;
-- tentativas por URL/device;
-- tokens;
-- duração;
-- custo estimado local;
-- erros sanitizados.
-
-`ESTIMATED_COST` é estimativa do catálogo versionado local e não equivale à invoice/billing do provider. Falha de IA é limitação da auditoria, não finding do website.
+`ESTIMATED_COST` é estimativa do catálogo versionado local e não equivale à invoice/billing do provider. Falha de IA é limitação operacional da auditoria, não finding do website.
 
 ## Remediação
 
-`report/remediation.html` concentra causas e ações, com materialização M16/M17 quando disponível:
+`report/remediation.html` concentra causas e ações, preservando materialização M16/M17 quando disponível:
 
 - causa raiz;
 - reason code;
@@ -263,7 +255,7 @@ A página apresenta, quando disponíveis:
 - passos de revalidação;
 - decisão humana quando necessária.
 
-Uma evolução futura para **sugestão opcional de texto por IA**, desligada por padrão e sem alterar score/findings, está registrada separadamente no backlog. Ela deverá propor conteúdo apenas quando houver evidência semântica suficiente e nunca gerar “texto para IA” sem valor real ao usuário.
+A futura sugestão opcional de texto por IA está registrada no backlog e permanece **OFF por padrão**. Ela deverá ser evidence-backed, respeitar o contexto de dispositivo, não alterar score retrospectivamente e seguir princípio people-first.
 
 ## Referência completa da CLI
 
@@ -306,7 +298,7 @@ Test-Path Env:MIMO_API_KEY
 - [Outputs e artifacts](docs/OUTPUTS_AND_ARTIFACTS.md)
 - [Guia técnico](docs/TECHNICAL_GUIDE.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
-- [Smoke test humano](docs/SMOKE_TEST.md)
+- [Smoke test](docs/SMOKE_TEST.md)
 - [Premissas mínimas GEO](docs/GEO_MINIMUM_REQUIREMENTS.md)
 
-A fonte normativa permanece em [`docs/specification`](docs/specification/00_SPEC_INDEX.md). Em caso de conflito com documentação operacional, a especificação aprovada deve ser atualizada ou prevalece até a reconciliação explícita.
+A fonte normativa permanece em [`docs/specification`](docs/specification/00_SPEC_INDEX.md). Descrições históricas de milestones que mencionem outputs legados são superseded pelo contrato vigente `REPORT-SITE-GEO-001` quando houver conflito de path/apresentação.
