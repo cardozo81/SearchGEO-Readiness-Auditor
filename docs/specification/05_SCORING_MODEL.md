@@ -28,9 +28,9 @@ Todo resultado de score possui:
 9. Evidências e Confiabilidade
 10. Cobertura de Intenções
 
-Desktop e Mobile separados.
+Desktop e Mobile permanecem separados no modelo. O contexto de execução pode selecionar `mobile`, `desktop` ou `both`; um dispositivo não auditado não deve ser apresentado como resultado válido no report site.
 
-As dez dimensões continuam pertencendo ao modelo. `SCORE-GEO-002` apenas distingue dimensão legitimamente não aplicável de dimensão que deveria ser avaliada mas não consolidou.
+As dez dimensões continuam pertencendo ao modelo. `SCORE-GEO-002` distingue dimensão legitimamente não aplicável de dimensão que deveria ser avaliada mas não consolidou.
 
 ## 3. RuleExecution
 
@@ -88,6 +88,8 @@ Applicable:
 
 NOT_APPLICABLE fica fora.
 
+Coverage baixa significa baixa completude da análise, não baixa qualidade atribuída ao website.
+
 ## 7. Aplicabilidade da dimensão
 
 `SCORE-GEO-002` adiciona distinção explícita entre aplicabilidade e consolidação.
@@ -126,8 +128,6 @@ Reason codes contendo `PREREQUISITE_BLOCKED` mantêm a dimensão:
 - Consolidation = NOT_CONSOLIDATED;
 - limitation = `APPLICABILITY_UNRESOLVED:PREREQUISITE_BLOCKED`.
 
-Isso evita esconder falhas de aquisição/rendering como se a dimensão simplesmente não se aplicasse.
-
 ## 8. Confidence
 
 Níveis:
@@ -137,16 +137,18 @@ Níveis:
 - LOW
 - UNAVAILABLE
 
-Considerar:
+Confidence responde **quão forte é a conclusão do auditor**, considerando cobertura, evidência e confiabilidade da execução. Ela não responde diretamente se o texto do website é “bom”, “ruim” ou “aderente a GEO”.
 
-- evidence quality;
-- analysis method;
-- execution reliability;
-- coverage;
-- contradictions;
-- limitations.
+Baseline algorítmica atual:
 
-Confidence do LLM não é automaticamente a confidence final do auditor.
+- HIGH: Coverage >= 90%, evidência completa e zero errors;
+- MEDIUM: Coverage >= 80% e zero errors;
+- LOW: Coverage > 0 sem atender HIGH/MEDIUM;
+- UNAVAILABLE: Coverage <= 0.
+
+`Confidence LOW` isoladamente **não pode gerar finding, recomendação nem ordem de reescrita de conteúdo**. Uma ação sobre conteúdo exige RuleExecution/finding evidence-backed que sustente a alteração.
+
+Confidence do LLM em uma SemanticAssessment não é automaticamente a Confidence final do auditor.
 
 ## 9. Consolidation
 
@@ -156,10 +158,10 @@ Coverage >= 80% e Confidence HIGH/MEDIUM
 → CONSOLIDATED
 
 Coverage 50–79%
-→ PARTIAL
+→ PARTIAL quando existe avaliação suficiente para esse estado
 
 Coverage >= 80% mas Confidence LOW
-→ PARTIAL ou NOT_CONSOLIDATED conforme dimensão
+→ PARTIAL ou NOT_CONSOLIDATED conforme regra de consolidação vigente
 
 Coverage < 50%
 → NOT_CONSOLIDATED
@@ -175,11 +177,10 @@ Dimensão integralmente não aplicável:
 
 Ausência de IA:
 
-- reduz coverage;
-- pode reduzir consolidation;
-- não reduz qualidade atribuída ao website.
-
-Resultados semânticos sem capacidade suficiente ficam UNKNOWN.
+- reduz coverage quando regras semantic-only ficam sem base;
+- pode reduzir confidence/consolidation;
+- não reduz qualidade atribuída ao website;
+- não transforma regra semantic-only em FAIL.
 
 ## 11. ScoreContribution
 
@@ -200,20 +201,13 @@ Toda contribuição registra:
 
 Regras correlacionadas utilizam `scoring_group`.
 
-Políticas suportadas conceitualmente:
-
-- MAX_IMPACT
-- SUM
-- FIRST_FAILURE
-- EXCLUSIVE
-
 Baseline para regras correlacionadas:
 
 MAX_IMPACT
 
 ## 13. Cascading Failures
 
-Falha de pré-requisito não pode multiplicar penalizações e também não pode ser usada para remover artificialmente uma dimensão do universo aplicável.
+Falha de pré-requisito não pode multiplicar penalizações e não pode remover artificialmente uma dimensão do universo aplicável.
 
 ## 14. Site-level rules
 
@@ -228,22 +222,22 @@ No MVP:
 
 ## 16. Overall
 
-Existem:
+Existem conceitualmente:
 
 - Overall Readiness — Desktop
 - Overall Readiness — Mobile
 
 Nunca uma única nota misturando dispositivos.
 
-Overall exige materialização das dez dimensões e consolidação suficiente de todas as dimensões **aplicáveis**.
+Overall exige materialização das dez dimensões e consolidação suficiente de todas as dimensões aplicáveis do respectivo dispositivo.
 
 Fluxo:
 
 1. materializar as dez dimensões;
 2. excluir da agregação apenas dimensões `NOT_APPLICABLE` legítimas;
 3. exigir Value e estado diferente de `NOT_CONSOLIDATED` para todas as dimensões restantes;
-4. calcular média simples dos Values das dimensões aplicáveis;
-5. calcular Overall Coverage pela média das coverages das dimensões aplicáveis;
+4. calcular média simples dos Values aplicáveis;
+5. calcular Overall Coverage pela média das coverages aplicáveis;
 6. persistir `DIMENSION_NOT_APPLICABLE:<DIMENSION>` para cada dimensão excluída.
 
 Se uma dimensão aplicável necessária estiver NOT_CONSOLIDATED:
@@ -251,6 +245,8 @@ Se uma dimensão aplicável necessária estiver NOT_CONSOLIDATED:
 Overall = NOT_CONSOLIDATED
 
 Uma dimensão `NOT_APPLICABLE` não reduz nota nem Coverage do Overall.
+
+O report site só apresenta o Overall de um dispositivo como resultado de auditoria quando esse dispositivo possui snapshot no universo efetivamente executado.
 
 ## 17. JSON-LD / Structured Data
 
@@ -306,7 +302,11 @@ Critical blockers são mostrados separadamente.
 
 Um score relativamente alto não pode esconder um blocker crítico.
 
-## 22. Reprodutibilidade
+## 22. Classificação visual
+
+As faixas 90/75/60/40 usadas pela UI são **classificação interna de apresentação** do SearchGEO. Não constituem threshold oficial de GEO/AEO de qualquer mantenedor externo.
+
+## 23. Reprodutibilidade
 
 Dadas:
 
