@@ -6,182 +6,184 @@
 
 ## 1. Motivação
 
-`SCORE-GEO-001` tratava uma dimensão sem nenhuma regra aplicável como `NOT_CONSOLIDATED`. Isso confundia dois estados distintos:
-
-1. o auditor não conseguiu avaliar uma dimensão que deveria ser avaliada;
-2. a dimensão está legitimamente fora do universo aplicável daquela URL.
-
-O caso mais evidente é Dados Estruturados. Quando não existe JSON-LD observado, `BR-GEO-034..037` podem ser `NOT_APPLICABLE`. A ausência de Structured Data não é, por si só, FAIL e não deve impedir a Compatibilidade GEO de ser calculada.
+`SCORE-GEO-001` confundia dimensão não aplicável com dimensão que não conseguiu consolidar. `SCORE-GEO-002` separa esses estados e impede penalidade artificial por tópico opcional ausente.
 
 ## 2. Princípio normativo
 
-`NOT_APPLICABLE` não é falha, não é ausência de evidência e não é score zero.
+`NOT_APPLICABLE` não é falha, ausência de evidência nem score zero.
 
 Uma dimensão é:
 
-- `APPLICABLE` quando existe pelo menos uma RuleExecution aplicável à dimensão;
-- `NOT_APPLICABLE` quando RuleExecutions da dimensão existem e todas estão legitimamente `NOT_APPLICABLE`;
-- `NOT_CONSOLIDATED` quando faltam RuleExecutions necessárias, a aplicabilidade não pôde ser resolvida, ou a cobertura/confiabilidade aplicável é insuficiente.
+- `APPLICABLE` quando existe pelo menos uma RuleExecution aplicável;
+- `NOT_APPLICABLE` quando RuleExecutions existem e todas estão legitimamente fora do universo aplicável;
+- `NOT_CONSOLIDATED` quando faltam execuções necessárias, a aplicabilidade ficou bloqueada ou Coverage/Confidence são insuficientes.
 
-A ausência completa de RuleExecutions nunca deve ser interpretada como `NOT_APPLICABLE`.
+Ausência completa de RuleExecutions nunca vira `NOT_APPLICABLE`.
 
-## 3. Pré-requisito bloqueado não equivale a não aplicável
+## 3. Pré-requisito bloqueado
 
-Se regras retornarem `NOT_APPLICABLE` apenas porque uma dependência técnica/conteúdo impediu a avaliação, a dimensão permanece `NOT_CONSOLIDATED`.
+`PREREQUISITE_BLOCKED` não é não aplicabilidade benigna.
 
-Exemplos de razão bloqueante:
+Reason codes como:
 
-- `SEMANTIC_PREREQUISITE_BLOCKED`;
-- `CONTENT_EXTRACTION_PREREQUISITE_BLOCKED`;
-- outros reason codes versionados contendo `PREREQUISITE_BLOCKED`.
+```text
+SEMANTIC_PREREQUISITE_BLOCKED
+CONTENT_EXTRACTION_PREREQUISITE_BLOCKED
+```
 
-Isso impede que uma falha de aquisição/rendering seja artificialmente convertida em exclusão benigna da dimensão.
+mantêm a dimensão `NOT_CONSOLIDATED`.
 
 ## 4. Overall Readiness
 
-As dez dimensões continuam fazendo parte do modelo SearchGEO.
+Para cada dispositivo efetivamente auditado:
 
-Para um dispositivo:
-
-1. materializar as dez dimensões;
-2. separar as dimensões `NOT_APPLICABLE`;
-3. exigir que todas as dimensões restantes possuam `value` e não estejam `NOT_CONSOLIDATED`;
-4. calcular Overall pela média aritmética das dimensões aplicáveis;
+1. materializar as dez dimensões do modelo;
+2. separar `NOT_APPLICABLE` legítimas;
+3. exigir Value e consolidação suficiente das restantes;
+4. calcular média aritmética simples dos Values aplicáveis;
 5. calcular Coverage pela média das dimensões aplicáveis;
-6. calcular Confidence a partir das dimensões aplicáveis;
-7. persistir explicitamente quais dimensões foram excluídas por não aplicabilidade.
+6. calcular Confidence conforme o modelo vigente;
+7. persistir `DIMENSION_NOT_APPLICABLE:<DIMENSION>`.
 
-Limitação persistida:
+Uma dimensão `NOT_APPLICABLE` não recebe 0/100, não reduz Score/Coverage e não bloqueia Overall.
 
-`DIMENSION_NOT_APPLICABLE:<DIMENSION>`
+## 5. Fonte externa atual sobre GEO/AEO
 
-Uma dimensão `NOT_APPLICABLE`:
+O SearchGEO não assume a existência de um standard universal GEO/AEO.
 
-- não recebe 0;
-- não recebe 100;
-- não reduz score;
-- não reduz Coverage;
-- não bloqueia Overall;
-- não é removida do modelo conceitual das dez dimensões.
+Fonte primária do Google, verificada em 2026-09-03:
 
-## 5. Dados Estruturados / JSON-LD
+**Optimizing your website for generative AI features on Google Search**  
+<https://developers.google.com/search/docs/fundamentals/ai-optimization-guide>
 
-### 5.1 Obrigatoriedade
+O Google explicita nesse guia que AEO/GEO são termos usados pela indústria e que, para os recursos generativos do Google Search, as práticas fundamentais continuam sendo SEO.
 
-JSON-LD **não é requisito universal para uma URL ser funcional em GEO**.
+Consequências normativas para o SearchGEO:
 
-O baseline SearchGEO adota essa posição porque:
+- não apresentar o score SearchGEO como score oficial GEO;
+- não exigir markup especial GEO/AEO;
+- não exigir `llms.txt` para Google Search;
+- não exigir chunking artificial;
+- não orientar reescrita de conteúdo apenas “para IA”;
+- não tratar Structured Data como requisito universal de recursos generativos;
+- manter foco em acesso técnico, conteúdo útil/confiável, organização clara e sinais web/SEO efetivamente documentados.
 
-- mecanismos de busca/IA podem compreender conteúdo sem Structured Data;
-- Structured Data é um sinal explícito adicional de significado, entidade e propriedades;
-- mecanismos externos não garantem visibilidade, grounding ou rich result apenas porque Structured Data existe.
+## 6. Structured Data / JSON-LD
 
-### 5.2 Quando não existe
+### 6.1 Obrigatoriedade
 
-Quando Structured Data não é observado e `BR-GEO-034..037` são legitimamente `NOT_APPLICABLE`:
+JSON-LD é **OPCIONAL / REFORÇO** no baseline geral.
 
-- a dimensão `STRUCTURED_DATA` fica `NOT_APPLICABLE`;
-- ela não participa do denominador do Overall;
-- a ausência, isoladamente, não cria finding nem penalidade.
+O guia oficial do Google para recursos generativos não exige Structured Data especial para IA. Structured Data continua útil para seus casos normais de Search/rich results e para explicitar entidades/propriedades quando aplicável.
 
-### 5.3 Quando existe
+### 6.2 Ausente
 
-Quando JSON-LD é observado:
+Se BR-GEO-034..037 são legitimamente `NOT_APPLICABLE`:
 
-- `STRUCTURED_DATA` passa a ser aplicável;
-- BR-GEO-034 avalia interpretabilidade/sintaxe;
-- BR-GEO-035 avalia tipos/propriedades identificáveis;
-- BR-GEO-036 avalia coerência com conteúdo visível;
-- BR-GEO-037 avalia coerência das entidades;
-- resultados PASS/WARNING/FAIL participam normalmente do Score GEO;
-- UNKNOWN/ERROR podem reduzir Coverage/Consolidation;
-- markup inválido ou contraditório pode reduzir a nota.
+- `STRUCTURED_DATA = NOT_APPLICABLE`;
+- não participa do Overall;
+- ausência isolada não cria finding/penalidade.
 
-Adicionar JSON-LD apenas para "destravar" score não é uma prática válida.
+### 6.3 Presente
 
-### 5.4 Coerência factual
+JSON-LD observado torna a dimensão aplicável. Sintaxe, tipos/propriedades e coerência factual passam a ser avaliáveis.
 
-Structured Data pode normalizar a forma da informação, mas não pode inventar fatos.
+Adicionar JSON-LD apenas para destravar score é inválido.
 
-Exemplos legítimos:
+### 6.4 Coerência factual
 
-- `R$ 27,50` no HTML e `price=27.50`, `priceCurrency=BRL` no JSON-LD;
-- data textual no HTML e ISO-8601 no JSON-LD;
-- nome abreviado visível e nome jurídico completo quando a relação estiver sustentada.
+Structured Data pode normalizar informação observada, nunca inventar:
 
-Exemplos inválidos:
+- preço;
+- rating/review;
+- autoria;
+- data;
+- produto/serviço;
+- claim;
+- entidade.
 
-- preço divergente;
-- produto/serviço não apresentado;
-- review/rating inexistente;
-- autoria, data, benefício ou claim não sustentado;
-- entidade diferente da observada.
+## 7. Formatos cobertos
 
-## 6. Formato estruturado coberto pelo baseline
+O parser operacional atual é orientado a JSON-LD em `script[type="application/ld+json"]`.
 
-O parser Structured Data do baseline atual é orientado a JSON-LD em `script[type="application/ld+json"]`.
+Microdata/RDFa não devem ser declarados como plenamente cobertos até haver implementação/testes equivalentes.
 
-Google também aceita Microdata e RDFa, mas esses formatos não devem ser declarados como plenamente cobertos pelo SearchGEO enquanto não houver implementação/testes equivalentes. Essa limitação deve permanecer explícita na documentação.
+## 8. Premissas mínimas/contextuais
 
-## 7. Premissas mínimas para uma URL GEO funcional
-
-As premissas abaixo não são promessa de ranking/citação. Elas representam o mínimo operacional para a URL poder ser analisada e potencialmente recuperada por sistemas de busca/IA.
-
-| Tópico | Classe | Efeito no SearchGEO |
-| --- | --- | --- |
+| Tópico | Classe | Efeito SearchGEO |
+|---|---|---|
 | URL tecnicamente recuperável | MÍNIMO | Falha material compromete readiness técnico. |
-| Resposta HTML/conteúdo analisável | MÍNIMO | Sem documento/conteúdo utilizável, dimensões dependentes não podem consolidar. |
-| Conteúdo essencial disponível após rendering | MÍNIMO quando há JS | Conteúdo dependente de JS precisa permanecer recuperável. |
-| Conteúdo principal identificável e significativo | MÍNIMO | Sem conteúdo principal não há base semântica/answerability confiável. |
-| Conteúdo textual importante disponível | MÍNIMO | Informação crítica somente visual/oculta reduz recuperabilidade. |
-| Indexabilidade compatível com a intenção pública da URL | MÍNIMO para presença em busca pública | `noindex`/bloqueios intencionais podem tornar a URL inelegível para experiências públicas. |
-| Tópico/intenção principal identificável | MÍNIMO semântico | Necessário para interpretar o que a URL responde. |
-| Claims e valores materialmente coerentes | MÍNIMO de confiança | Contradições factuais comprometem citation/evidence readiness. |
-| JSON-LD | OPCIONAL / REFORÇO | Quando presente, entra no score e deve ser válido/coerente. Ausência legítima não penaliza. |
-| Sitemap XML | OPCIONAL / DESCOBERTA | Ajuda descoberta/freshness; ausência isolada não é FAIL. |
-| Canonical | CONTEXTUALMENTE RECOMENDADO | Importante quando há duplicidade/URL preferencial; ausência isolada não é blocker universal. |
-| robots.txt | OPCIONAL COMO ARQUIVO | Ausência não significa bloqueio; políticas presentes precisam ser interpretáveis. |
-| Autor/publisher explícito | CONTEXTUAL | Aplicabilidade depende do tipo de página e claims. |
-| Data de publicação/atualização | CONTEXTUAL | Relevante para conteúdo temporal/editorial; não universal. |
-| `llms.txt` ou arquivo específico para IA | NÃO OBRIGATÓRIO | Não impacta score automaticamente. |
-| GPTBot liberado | NÃO OBRIGATÓRIO para Search readiness | GPTBot e OAI-SearchBot têm finalidades distintas; bloqueio de treinamento não equivale a bloqueio de search. |
+| Documento/conteúdo analisável | MÍNIMO | Sem base utilizável, dimensões dependentes não consolidam. |
+| Conteúdo essencial após rendering | MÍNIMO quando há JS | Informação principal deve permanecer recuperável. |
+| Conteúdo principal identificável | MÍNIMO | Base para análise semântica/answerability. |
+| Informação importante em texto recuperável | MÍNIMO | Informação somente visual/oculta limita extração. |
+| Indexabilidade coerente com intenção pública | CONTEXTUAL/MÍNIMO para Search público | Bloqueios intencionais podem tornar URL inelegível à busca pública. |
+| Intenção/tópico identificável | MÍNIMO semântico | Necessário para avaliar o que a URL responde. |
+| Claims/valores coerentes | MÍNIMO de confiança factual | Contradições comprometem evidence/citation readiness. |
+| JSON-LD | OPCIONAL / REFORÇO | Quando presente, deve ser válido e coerente. |
+| Sitemap XML | OPCIONAL / DESCOBERTA | Útil à descoberta; ausência isolada não é FAIL. |
+| Canonical | CONTEXTUALMENTE RECOMENDADO | Importante em duplicidade/preferência de URL; não blocker universal isolado. |
+| robots.txt | OPCIONAL COMO ARQUIVO | Ausência não significa bloqueio; regras presentes devem ser interpretadas. |
+| Autor/publisher | CONTEXTUAL | Depende do tipo de página/claims. |
+| Data publicação/atualização | CONTEXTUAL | Relevante a conteúdo temporal/editorial. |
+| `llms.txt` | NÃO OBRIGATÓRIO | Google declara que não é necessário para seus recursos generativos e não o usa como sinal de Search. |
+| GPTBot liberado | NÃO OBRIGATÓRIO para Search readiness | GPTBot e OAI-SearchBot têm finalidades distintas. |
+| markup GEO/AEO especial | NÃO OBRIGATÓRIO | Não existe requisito oficial correspondente no Google. |
+| chunking artificial para IA | NÃO OBRIGATÓRIO | Não deve ser introduzido como regra artificial. |
 
-## 8. Obrigatório versus recomendado
+## 9. Confidence
 
-O relatório e a documentação devem evitar a frase "obrigatório para GEO" quando o requisito for apenas recomendação de um mecanismo, enriquecimento opcional ou aplicável somente a determinados tipos de página.
+Confidence representa a força da conclusão do auditor, não uma nota da qualidade do texto.
 
-Usar as classes:
+`LOW` isoladamente não autoriza finding/recommendation de conteúdo. Qualquer ação de conteúdo precisa ser sustentada por RuleExecution/finding e evidência específica.
 
-- `MÍNIMO`;
-- `CONTEXTUAL`;
-- `OPCIONAL / REFORÇO`;
-- `NÃO OBRIGATÓRIO`.
+## 10. Linguagem de requisitos
 
-## 9. Relatório
+Evitar “obrigatório para GEO” quando o item for apenas:
 
-O relatório deve distinguir:
+- recomendação de mecanismo;
+- reforço opcional;
+- aplicável a tipo específico de página;
+- heurística SearchGEO.
 
-- `NÃO DETERMINADO`: deveria haver conclusão, mas a análise não consolidou;
-- `NÃO APLICÁVEL`: o tópico está fora do universo aplicável;
-- score `0.0`: avaliação efetivamente calculada como zero.
+Classes preferenciais:
 
-Quando houver dimensão `NOT_APPLICABLE`, o Overall pode ser calculado e deve registrar a exclusão na rastreabilidade.
+```text
+MÍNIMO
+CONTEXTUAL
+OPCIONAL / REFORÇO
+NÃO OBRIGATÓRIO
+```
 
-## 10. Reprodutibilidade
+## 11. Report site
 
-BR-GEO-054 deve usar `SCORE-GEO-002`.
+`report/references.html` deve apresentar fontes e natureza das regras. `report/index.html` deve distinguir:
 
-Dadas as mesmas RuleExecutions e metadados, a decisão de aplicabilidade, os scores de dimensão, Overall, Coverage, Confidence e limitations devem ser reproduzíveis sem reexecutar website ou IA.
+- score calculado;
+- Coverage;
+- Confidence;
+- `NOT_APPLICABLE`;
+- `NOT_CONSOLIDATED`.
 
-## 11. Testes mínimos
+Faixas visuais de Score são internas e devem ser rotuladas como tal.
 
-Obrigatório validar:
+## 12. Reprodutibilidade
 
-1. dimensão sem RuleExecutions continua bloqueando Overall;
-2. dimensão com todas as regras legitimamente `NOT_APPLICABLE` não bloqueia Overall;
-3. dimensão `NOT_APPLICABLE` por pré-requisito bloqueado continua bloqueando Overall;
-4. JSON-LD/Structured Data presente torna `STRUCTURED_DATA` aplicável;
-5. PASS/WARNING/FAIL em Structured Data entra no cálculo;
-6. ausência legítima de Structured Data não recebe zero nem cem;
+BR-GEO-054 usa `SCORE-GEO-002`.
+
+Dadas as mesmas RuleExecutions/metadados, aplicabilidade, Score, Overall, Coverage, Confidence e limitations devem ser reconstruíveis sem website/IA.
+
+## 13. Testes mínimos
+
+Validar:
+
+1. sem RuleExecutions bloqueia Overall;
+2. dimensão legitimamente `NOT_APPLICABLE` não bloqueia;
+3. `PREREQUISITE_BLOCKED` continua bloqueando;
+4. Structured Data presente torna dimensão aplicável;
+5. PASS/WARNING/FAIL entram no cálculo;
+6. Structured Data ausente legítimo não recebe 0/100;
 7. Overall registra dimensões excluídas;
-8. BR-GEO-054 permanece reproduzível.
+8. BR-GEO-054 é reproduzível;
+9. report não apresenta Confidence LOW como baixa qualidade textual;
+10. report distingue heurística interna de fonte oficial.
