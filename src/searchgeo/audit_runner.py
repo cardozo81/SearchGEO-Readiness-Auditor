@@ -33,6 +33,8 @@ from searchgeo.m14_linking import link_findings_to_elements
 from searchgeo.m14_persistence import M14Persistence
 from searchgeo.m18_persistence import persist_provider_runtime
 from searchgeo.m18_reporting import enrich_written_reports
+from searchgeo.m20 import execute_m20
+from searchgeo.m20_reporting import enrich_m20_report_site
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
 from searchgeo.pre_scoring_rules import execute_pre_scoring_rules
 from searchgeo.report_site import materialize_report_site
@@ -60,6 +62,7 @@ def run_audit(
     market: str = "BR",
     max_pages: int = 100,
     semantic_provider: SemanticAnalysisProvider | None = None,
+    content_remediation: bool = False,
     discovery_engine: Any | None = None,
     renderer: Any | None = None,
     lazy_probe: Any | None = None,
@@ -70,6 +73,10 @@ def run_audit(
     sequence always means URL_SET, even when normalization/deduplication leaves
     a single unique URL. This prevents an explicit set from silently falling
     back to ordinary crawl-expansion behavior.
+
+    ``content_remediation`` enables M20 exact-text suggestions. It is OFF by
+    default. M20 always materializes deterministic JSON-LD guidance, even when
+    AI remediation is disabled, and never changes score/findings.
     """
 
     explicit_url_set = not isinstance(target, str)
@@ -106,7 +113,10 @@ def run_audit(
         "visual_snapshot",
         "dom_element_observation",
         "static_report_site",
+        "jsonld_remediation_guidance",
     ]
+    if content_remediation:
+        capabilities.append("optional_ai_content_remediation")
     if target_type is TargetType.URL_SET:
         capabilities.append("url_set")
     audit = Audit(
@@ -250,21 +260,29 @@ def run_audit(
                 workspace=workspace,
             )
 
+            # M20 is strictly downstream of findings/scoring. It can only create
+            # auxiliary suggestions and telemetry; it cannot mutate evaluated
+            # entities or retroactively alter the audit result.
+            execute_m20(
+                audit_id=audit_id,
+                enabled=content_remediation,
+                semantic_provider=runtime_provider,
+                workspace=workspace,
+            )
+
             _set_status(persistence, audit_id, AuditStatus.REPORTING)
             m11 = execute_m11(
                 audit_id=audit_id,
                 persistence=persistence,
                 workspace=workspace,
             )
-            # M11/M18 keep their established intermediate HTML contracts. The
-            # final user-facing projection is then normalized into report/ with
-            # one shared external stylesheet and domain-specific pages.
             enrich_written_reports(audit_id=audit_id, workspace=workspace)
             report_path = materialize_report_site(
                 audit_id=audit_id,
                 workspace=workspace,
                 report_id=m11.report_id,
             )
+            enrich_m20_report_site(audit_id=audit_id, workspace=workspace)
 
             current = persistence.audits.get(audit_id)
             if current is None:
