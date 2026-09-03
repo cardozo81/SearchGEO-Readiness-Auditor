@@ -1,4 +1,4 @@
-"""M9 scoring, coverage, confidence and consolidation (SCORE-GEO-001)."""
+"""M9 scoring, coverage, confidence and consolidation (SCORE-GEO-002)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Iterable
 from searchgeo.domain import DeviceContext, RuleExecution, RuleResult, new_id, utc_now
 
 
-SCORING_VERSION = "SCORE-GEO-001"
+SCORING_VERSION = "SCORE-GEO-002"
 
 
 class ScoreConfidence(StrEnum):
@@ -24,6 +24,7 @@ class ConsolidationStatus(StrEnum):
     CONSOLIDATED = "CONSOLIDATED"
     PARTIAL = "PARTIAL"
     NOT_CONSOLIDATED = "NOT_CONSOLIDATED"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
 
 
 DIMENSIONS = (
@@ -86,7 +87,19 @@ class ScoringResult:
 
 
 class ScoringEngine:
-    """Reproducible score calculator; it never executes website or AI analysis."""
+    """Reproducible score calculator; it never executes website or AI analysis.
+
+    SCORE-GEO-002 separates three states that SCORE-GEO-001 previously mixed:
+
+    - no RuleExecution exists for a dimension -> evidence/execution gap, blocks Overall;
+    - RuleExecutions exist but applicability cannot be resolved because prerequisites
+      were blocked -> analysis gap, blocks Overall;
+    - RuleExecutions exist and every rule is legitimately NOT_APPLICABLE -> the
+      dimension is outside the applicable universe and is excluded from Overall.
+
+    A dimension that becomes applicable (for example STRUCTURED_DATA after JSON-LD
+    is observed) participates normally in score, coverage and consolidation.
+    """
 
     def score(self, *, audit_id: str, executions: Iterable[RuleExecution]) -> ScoringResult:
         execution_list = tuple(executions)
@@ -124,6 +137,25 @@ class ScoringEngine:
         executions: tuple[RuleExecution, ...],
     ) -> tuple[Score, tuple[ScoreContribution, ...]]:
         score_id = new_id("SCR")
+
+        if not executions:
+            return (
+                Score(
+                    score_id=score_id,
+                    audit_id=audit_id,
+                    dimension=dimension,
+                    device=device,
+                    value=None,
+                    coverage=0.0,
+                    confidence=ScoreConfidence.UNAVAILABLE,
+                    consolidation_status=ConsolidationStatus.NOT_CONSOLIDATED,
+                    scoring_version=SCORING_VERSION,
+                    calculated_at=utc_now(),
+                    limitations=("NO_RULE_EXECUTIONS",),
+                ),
+                (),
+            )
+
         # Correlated rules collapse through MAX_IMPACT within the same page/global scope.
         buckets: dict[tuple[str, str], list[RuleExecution]] = {}
         for execution in executions:
@@ -175,19 +207,41 @@ class ScoringEngine:
                 )
             )
 
-        coverage = evaluated_weight / applicable_weight if applicable_weight else 0.0
+        limitations: list[str] = []
+        if applicable_weight == 0:
+            if any(_not_applicable_is_prerequisite_blocked(item) for item in executions):
+                limitations.append("APPLICABILITY_UNRESOLVED:PREREQUISITE_BLOCKED")
+                consolidation = ConsolidationStatus.NOT_CONSOLIDATED
+            else:
+                limitations.append("NO_APPLICABLE_RULES")
+                consolidation = ConsolidationStatus.NOT_APPLICABLE
+            return (
+                Score(
+                    score_id=score_id,
+                    audit_id=audit_id,
+                    dimension=dimension,
+                    device=device,
+                    value=None,
+                    coverage=0.0,
+                    confidence=ScoreConfidence.UNAVAILABLE,
+                    consolidation_status=consolidation,
+                    scoring_version=SCORING_VERSION,
+                    calculated_at=utc_now(),
+                    limitations=tuple(limitations),
+                ),
+                tuple(contribution_rows),
+            )
+
+        coverage = evaluated_weight / applicable_weight
         value = (numerator / evaluated_weight * 100.0) if evaluated_weight else None
         confidence = _confidence(coverage, evidence_complete=evidence_complete, errors=errors)
         consolidation = _consolidation(coverage, confidence)
-        limitations: list[str] = []
         if unknowns:
             limitations.append(f"UNKNOWN_RULE_EXECUTIONS:{unknowns}")
         if errors:
             limitations.append(f"ERROR_RULE_EXECUTIONS:{errors}")
         if not evidence_complete:
             limitations.append("EVALUATED_EXECUTION_WITHOUT_EVIDENCE")
-        if applicable_weight == 0:
-            limitations.append("NO_APPLICABLE_RULES")
 
         return (
             Score(
@@ -201,21 +255,41 @@ class ScoringEngine:
         )
 
     def _overall(self, audit_id: str, device: DeviceContext, dimensions: tuple[Score, ...]) -> Score:
-        enough = len(dimensions) == len(DIMENSIONS) and all(
-            item.consolidation_status is not ConsolidationStatus.NOT_CONSOLIDATED and item.value is not None
-            for item in dimensions
+        applicable_dimensions = tuple(
+            item for item in dimensions
+            if item.consolidation_status is not ConsolidationStatus.NOT_APPLICABLE
         )
-        values = [item.value for item in dimensions if item.value is not None]
+        enough = (
+            len(dimensions) == len(DIMENSIONS)
+            and bool(applicable_dimensions)
+            and all(
+                item.consolidation_status is not ConsolidationStatus.NOT_CONSOLIDATED
+                and item.value is not None
+                for item in applicable_dimensions
+            )
+        )
+        values = [item.value for item in applicable_dimensions if item.value is not None]
         value = (sum(values) / len(values)) if enough and values else None
-        coverage = sum(item.coverage for item in dimensions) / len(DIMENSIONS) if dimensions else 0.0
+        coverage = (
+            sum(item.coverage for item in applicable_dimensions) / len(applicable_dimensions)
+            if applicable_dimensions else 0.0
+        )
         confidence = (
-            min((item.confidence for item in dimensions), key=_confidence_rank)
-            if dimensions else ScoreConfidence.UNAVAILABLE
+            min((item.confidence for item in applicable_dimensions), key=_confidence_rank)
+            if applicable_dimensions else ScoreConfidence.UNAVAILABLE
         )
         consolidation = ConsolidationStatus.CONSOLIDATED if enough else ConsolidationStatus.NOT_CONSOLIDATED
         limitations = tuple(
-            f"DIMENSION_NOT_CONSOLIDATED:{item.dimension}"
-            for item in dimensions if item.consolidation_status is ConsolidationStatus.NOT_CONSOLIDATED
+            [
+                f"DIMENSION_NOT_APPLICABLE:{item.dimension}"
+                for item in dimensions
+                if item.consolidation_status is ConsolidationStatus.NOT_APPLICABLE
+            ]
+            + [
+                f"DIMENSION_NOT_CONSOLIDATED:{item.dimension}"
+                for item in applicable_dimensions
+                if item.consolidation_status is ConsolidationStatus.NOT_CONSOLIDATED
+            ]
         )
         return Score(
             score_id=new_id("SCR"), audit_id=audit_id, dimension="OVERALL_READINESS", device=device,
@@ -224,6 +298,16 @@ class ScoringEngine:
             consolidation_status=consolidation, scoring_version=SCORING_VERSION,
             calculated_at=utc_now(), limitations=limitations,
         )
+
+
+def _not_applicable_is_prerequisite_blocked(execution: RuleExecution) -> bool:
+    if execution.result is not RuleResult.NOT_APPLICABLE:
+        return False
+    observed = execution.observed_value
+    if not isinstance(observed, dict):
+        return False
+    reason = observed.get("reason")
+    return isinstance(reason, str) and "PREREQUISITE_BLOCKED" in reason.upper()
 
 
 def _factor(result: RuleResult, warning_factor: float) -> float | None:

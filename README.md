@@ -4,7 +4,7 @@ Auditor local de **Search/GEO Readiness** para avaliar, com rastreabilidade téc
 
 ## Status atual
 
-**Baseline local estável até M18.** A aplicação executa auditoria ponta a ponta por CLI, separa Desktop e Mobile, persiste estado em SQLite + filesystem, gera `report.html` e `remediation.html` e possui integração opcional com múltiplos providers de IA semântica.
+**Baseline local estável até M18 + SCORE-GEO-002.** A aplicação executa auditoria ponta a ponta por CLI, separa Desktop e Mobile, persiste estado em SQLite + filesystem, gera `report.html` e `remediation.html`, possui integração opcional com múltiplos providers de IA semântica e distingue dimensões aplicáveis de dimensões legitimamente fora do universo aplicável.
 
 > Readiness não é promessa de ranking, tráfego, citação, presença ou visibilidade em mecanismos generativos.
 
@@ -26,6 +26,20 @@ Auditor local de **Search/GEO Readiness** para avaliar, com rastreabilidade téc
 | Docker / web server | não requeridos e não fornecidos |
 
 O contrato completo está em [Compatibilidade e Dependências](docs/COMPATIBILITY.md).
+
+## Premissas mínimas para GEO e JSON-LD
+
+O foco primário do baseline é **Google Search e seus recursos de IA**.
+
+JSON-LD **não é requisito universal para GEO funcional**. O SearchGEO classifica Structured Data como **OPCIONAL / REFORÇO**: ausência legítima não recebe zero nem impede, sozinha, uma Compatibilidade GEO mensurável. Quando JSON-LD existe, `BR-GEO-034..037` tornam-se aplicáveis e podem melhorar, manter ou reduzir o resultado conforme interpretabilidade e coerência com o conteúdo visível.
+
+`SCORE-GEO-002` mantém as dez dimensões, mas distingue:
+
+- dimensão sem execução ou com aplicabilidade não resolvida: `NOT_CONSOLIDATED`, podendo bloquear Overall;
+- dimensão integralmente e legitimamente fora do universo aplicável: `NOT_APPLICABLE`, fora do denominador do Overall, sem nota artificial 0 ou 100;
+- tópico opcional que passa a existir: volta automaticamente ao universo aplicável e entra no scoring.
+
+O `report.html` informa quantas dimensões foram efetivamente consideradas. Consulte [Premissas mínimas e reforços para GEO](docs/GEO_MINIMUM_REQUIREMENTS.md) e [Scoring e Reliability](docs/SCORING_GUIDE.md).
 
 ## Dependências obrigatórias
 
@@ -49,7 +63,7 @@ IA é opcional. Não é necessário instalar SDK Python de OpenAI, DeepSeek ou M
 - Extração de metadata, canonical, robots, headings, links, conteúdo principal e JSON-LD.
 - Evidence First: findings apontam para RuleExecution e Evidence persistidas.
 - Business Rules `BR-GEO-001..054`.
-- Scoring determinístico por dispositivo em 10 dimensões, com Coverage, Confidence e Consolidation.
+- Scoring determinístico `SCORE-GEO-002` por dispositivo em 10 dimensões, com Coverage, Confidence, Consolidation e aplicabilidade explícita.
 - Priorização, causa raiz, remediation groups e recomendações determinísticas.
 - IA opcional com `none`, OpenAI, DeepSeek, MiMo ou `auto` multi-provider.
 - Failover controlado, quarantine por audit e lock de provider por URL.
@@ -68,7 +82,7 @@ CLI
   -> JavaScript/SPA + Content Extractability
   -> Semantic Provider (none | single provider | AUTO)
   -> Desktop/Mobile Comparison
-  -> Scoring
+  -> Scoring + Applicability
   -> Prioritization + Root Cause + Recommendations
   -> report.html + remediation.html
 ```
@@ -297,6 +311,7 @@ Test-Path Env:MIMO_API_KEY
 
 # Documentação
 
+- [Premissas mínimas e reforços para GEO](docs/GEO_MINIMUM_REQUIREMENTS.md)
 - [Referência completa da CLI](docs/CLI_REFERENCE.md)
 - [Compatibilidade e dependências](docs/COMPATIBILITY.md)
 - [Instalação](docs/INSTALLATION.md)
@@ -323,4 +338,5 @@ A documentação operacional explica o uso da implementação. A fonte normativa
 - configuração TOML continua restrita ao escopo exposto pelo módulo de configuração; parâmetros de auditoria são CLI/environment;
 - providers externos exigem egress HTTPS, credencial e política de dados compatível;
 - DeepSeek e MiMo permanecem `PROVISIONAL` na política de qualificação SearchGEO até benchmark específico;
+- o parser de Structured Data do SearchGEO possui cobertura operacional específica para JSON-LD; Microdata/RDFa ainda não devem ser tratados como equivalentes no auditor;
 - smoke live de M18 com providers reais depende de credenciais disponíveis no ambiente de homologação.
