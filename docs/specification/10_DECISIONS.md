@@ -178,6 +178,25 @@ JSON-LD/Structured Data é classificado como **OPCIONAL / REFORÇO**, não como 
 
 O foco primário desta classificação é Google Search e seus recursos de IA. Outros mecanismos podem ser documentados como sinais complementares sem alterar a regra de scoring.
 
+### D-038 — M21 Web Performance externo e preservação do SCORE-GEO-002
+
+Core Web Vitals/CrUX e Lighthouse entram como **evidência externa complementar** e não como substituição, calibração implícita ou nova fórmula do `SCORE-GEO-002`.
+
+Decisão aprovada:
+
+1. `SCORE-GEO-002` permanece baseline oficial interna do SearchGEO para Readiness;
+2. Lighthouse Performance, Accessibility, Best Practices e SEO permanecem scores do Lighthouse e devem ser rotulados como tais;
+3. LCP, INP e CLS de CrUX representam experiência real agregada quando houver amostra suficiente e não constituem automaticamente RuleExecution/ScoreContribution do SearchGEO;
+4. ausência/erro de PageSpeed ou CrUX é limitação de coleta, nunca website FAIL por si só;
+5. coleta externa M21 é default OFF, com limite de páginas e timeout parametrizáveis;
+6. M21 adiciona zero chamadas LLM e não pode aumentar consumo OpenAI/DeepSeek/MiMo por efeito colateral;
+7. PageSpeed/CrUX possuem credenciais isoladas e opcionais conforme o serviço;
+8. M21 é enrichment pós-auditoria e fail-open em relação ao resultado principal;
+9. resultados M21 são persistidos em tabelas/artifacts auxiliares e apresentados em `report/web-performance.html`;
+10. qualquer futura incorporação de métrica M21 ao scoring exigirá decisão humana explícita, novo contrato/versionamento de scoring, documentação de fundamento e regressão comparativa; não pode ocorrer silenciosamente.
+
+D-038 complementa D-037; não a supersede.
+
 ## PENDING ENVIRONMENT VALIDATION
 
 ### D-028
@@ -237,4 +256,5 @@ Essas pendências não bloqueiam desenvolvimento local do MVP.
 - GPTBot e OAI-SearchBot possuem papéis distintos;
 - findings devem ser evidence-backed;
 - LLM nunca é scoring engine;
-- cascading failures devem ser controladas.
+- cascading failures devem ser controladas;
+- métricas PageSpeed/CrUX/Lighthouse não alteram `SCORE-GEO-002` sem nova decisão/versionamento explícito.
