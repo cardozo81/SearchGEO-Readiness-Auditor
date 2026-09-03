@@ -5,17 +5,24 @@ from __future__ import annotations
 from contextlib import nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
+import re
 from typing import Protocol
 
 from searchgeo.domain import DeviceContext, Evidence, EvidenceType, PageSnapshot, new_id, utc_now
 from searchgeo.m14_persistence import ElementObservation, M14Persistence
 from searchgeo.m2 import M2ExecutionResult
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
-from searchgeo.rendering import BrowserRenderResult, BrowserRenderer, RenderErrorKind
+from searchgeo.rendering import (
+    BrowserRenderResult,
+    BrowserRenderer,
+    RenderErrorKind,
+    RenderedElementObservation,
+)
 
 
 _RENDERING_MODE = "PLAYWRIGHT_CHROMIUM"
 _DEVICES = (DeviceContext.DESKTOP, DeviceContext.MOBILE)
+_TITLE_ELEMENT_RE = re.compile(r"<title\b[^>]*>.*?</title\s*>", re.IGNORECASE | re.DOTALL)
 
 
 class Renderer(Protocol):
@@ -152,7 +159,13 @@ def execute_m3(
                         )
                     )
 
-                for observed in render_result.element_observations:
+                observations = _align_title_observation_to_rendered_artifact(render_result)
+                for observed in observations:
+                    observation_artifact_ref = (
+                        rendered_artifact_ref
+                        if observed.tag_name.casefold() == "title" and rendered_artifact_ref is not None
+                        else visual_artifact_ref
+                    )
                     m14.add_element_observation(
                         ElementObservation(
                             element_observation_id=new_id("ELM"),
@@ -168,7 +181,7 @@ def execute_m3(
                             outer_html=observed.outer_html,
                             text_excerpt=observed.text_excerpt,
                             bounding_box=observed.bounding_box,
-                            artifact_reference=visual_artifact_ref,
+                            artifact_reference=observation_artifact_ref,
                             captured_at=captured_at,
                         )
                     )
@@ -189,6 +202,43 @@ def execute_m3(
         failures=tuple(failures),
         visual_artifact_refs=visual_artifact_refs,
     )
+
+
+def _align_title_observation_to_rendered_artifact(
+    render_result: BrowserRenderResult,
+) -> tuple[RenderedElementObservation, ...]:
+    """Bind title evidence to the serialized DOM consumed by M4/M7.
+
+    Chromium pages may mutate document.title after ``page.content()`` is
+    captured but before the live observation pass runs. In that case a later
+    live ``<title>`` must not be linked as exact evidence for a semantic result
+    computed from the earlier persisted DOM. Other live observations remain
+    unchanged because this hotfix only resolves the demonstrated title race.
+    """
+
+    if render_result.rendered_html is None:
+        return render_result.element_observations
+
+    non_title = tuple(
+        observation
+        for observation in render_result.element_observations
+        if observation.tag_name.casefold() != "title"
+    )
+    match = _TITLE_ELEMENT_RE.search(render_result.rendered_html)
+    if match is None:
+        return non_title
+
+    outer_html = match.group(0)[:4096]
+    title = RenderedElementObservation(
+        selector="title",
+        tag_name="title",
+        element_id=None,
+        classes=(),
+        outer_html=outer_html,
+        text_excerpt=None,
+        bounding_box=None,
+    )
+    return (title, *non_title)
 
 
 def _write_rendered_artifact(
