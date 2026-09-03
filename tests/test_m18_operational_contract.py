@@ -10,7 +10,7 @@ from unittest.mock import patch
 from searchgeo.acquisition import HttpClient
 from searchgeo.audit_runner import run_audit
 from searchgeo.discovery import DiscoveryEngine
-from searchgeo.m18_ai import OpenAIProvider
+from searchgeo.m18_ai import DeepSeekProvider, MiMoProvider, OpenAIProvider
 from searchgeo.m18_persistence import _resolve_session_status
 from tests.test_m12_stable_baseline import _FixtureRenderer, _server
 
@@ -51,6 +51,21 @@ class M18OperationalContractTests(unittest.TestCase):
         )
         self.assertEqual(status, "CHAIN_EXHAUSTED")
         self.assertTrue(exhausted)
+
+    def test_provider_credentials_are_isolated_from_openai_environment(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "OPENAI_API_KEY": "ambient-openai-key",
+                "DEEPSEEK_API_KEY": "",
+                "MIMO_API_KEY": "",
+            },
+            clear=False,
+        ):
+            self.assertEqual(OpenAIProvider().api_key, "ambient-openai-key")
+            self.assertFalse(OpenAIProvider(api_key="").api_key)
+            self.assertFalse(DeepSeekProvider().api_key)
+            self.assertFalse(MiMoProvider().api_key)
 
     def test_explicit_provider_without_token_is_visible_in_persistence_and_ai_page(self) -> None:
         # This test must never inherit a developer's real API credential. Besides
