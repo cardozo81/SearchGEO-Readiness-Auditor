@@ -84,6 +84,25 @@ Quando omitida, o renderer usa o browser provisionado pelo Playwright conforme a
 
 # IA
 
+## Timeout de chamada externa
+
+A CLI aplica um timeout operacional mais amplo às chamadas semânticas externas para evitar falsos `TIMEOUT_ERROR` em respostas estruturadas com reasoning.
+
+| Variável | Função | Default |
+|---|---|---:|
+| `SEARCHGEO_AI_TIMEOUT_SECONDS` | timeout por chamada externa de IA, em segundos, aplicado a provider explícito e a todos os candidatos elegíveis de `auto` | `180` |
+
+O valor deve ser numérico, finito e maior que zero. Quando `--ai-provider none` é usado, essa variável é ignorada porque nenhuma chamada externa é feita.
+
+Exemplo:
+
+```powershell
+$env:SEARCHGEO_AI_TIMEOUT_SECONDS = "240"
+searchgeo audit https://example.com --ai-provider openai
+```
+
+O timeout não cria retry automático. Se a chamada expirar, a falha continua sendo classificada como `TIMEOUT_ERROR`, preservando a política de quarantine/failover sem duplicar requisições automaticamente.
+
 ## Desabilitada
 
 ```powershell
@@ -195,7 +214,8 @@ Regras de configuração:
 - provider com token mas model/reasoning inválido é excluído como configuração inválida;
 - cadeia é ordenada uma vez no início pelo rank SearchGEO do model;
 - a cadeia não muda para reintroduzir provider quarantined;
-- chamadas são sequenciais, não paralelas.
+- chamadas são sequenciais, não paralelas;
+- o primeiro resultado válido encerra a tentativa de outros providers naquele contexto e fixa o provider da URL para os demais devices.
 
 Se nenhum token elegível existir, nenhuma chamada externa é feita.
 
@@ -266,7 +286,6 @@ Test-Path Env:MIMO_API_KEY
 
 A menos que sejam adicionadas explicitamente à CLI/configuração em versão futura, não há flags públicas para:
 
-- timeout HTTP customizado;
 - viewport customizado;
 - lista customizada de crawlers;
 - pesos de scoring;
