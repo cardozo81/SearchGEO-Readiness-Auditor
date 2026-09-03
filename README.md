@@ -1,95 +1,58 @@
 # SearchGEO Readiness Auditor
 
-Auditor local de **Search/GEO Readiness** para avaliar, com rastreabilidade técnica, quão acessível, extraível, semanticamente compreensível e reutilizável um site é para mecanismos de busca e sistemas generativos.
+Auditor local de **Search/GEO Readiness** com evidência persistida, scoring reprodutível e análise opcional por IA. O objetivo é avaliar acessibilidade técnica, extraibilidade, estrutura semântica, clareza, answerability, citation readiness e outros sinais úteis para Search e sistemas generativos sem prometer ranking, tráfego, citação ou presença em respostas de IA.
 
 ## Status atual
 
-**Baseline local estável até M18 + SCORE-GEO-002.** A aplicação executa auditoria ponta a ponta por CLI, separa Desktop e Mobile, persiste estado em SQLite + filesystem, gera `report.html` e `remediation.html`, possui integração opcional com múltiplos providers de IA semântica e distingue dimensões aplicáveis de dimensões legitimamente fora do universo aplicável.
+**Baseline funcional: M18 + SCORE-GEO-002, com report site estático e seleção de contexto de dispositivo.**
 
-> Readiness não é promessa de ranking, tráfego, citação, presença ou visibilidade em mecanismos generativos.
+A aplicação:
 
-## Compatibilidade — leia antes de instalar
+- executa auditoria ponta a ponta por CLI;
+- usa **Mobile como contexto padrão** na CLI para evitar rendering e chamadas de IA de Desktop sem necessidade;
+- permite `mobile`, `desktop` ou `both`;
+- persiste `audit.db` + artifacts;
+- gera um mini-site estático em `report/`, com CSS compartilhado externo;
+- separa visão geral, Mobile, Desktop, remediações, telemetria de IA e referências/metodologia;
+- suporta IA opcional com OpenAI, DeepSeek, Xiaomi MiMo ou roteamento `auto`;
+- mantém Desktop e Mobile independentes quando ambos são selecionados.
+
+> O Score SearchGEO é um modelo interno de readiness. Não existe um score GEO/AEO normativo universal publicado por Google, OpenAI, Schema.org, WHATWG ou IETF.
+
+## Base técnica GEO/AEO/SEO
+
+A página `report/references.html` gerada em cada auditoria documenta fontes e regras de cálculo. Entre as fontes primárias está o guia oficial do Google de 2026, **Optimizing your website for generative AI features on Google Search**:
+
+<https://developers.google.com/search/docs/fundamentals/ai-optimization-guide>
+
+O próprio Google esclarece nesse guia que AEO/GEO são termos de mercado e que, para os recursos generativos do Google Search, os fundamentos continuam sendo SEO. O SearchGEO, portanto, **não trata como requisito oficial**:
+
+- markup especial de GEO/AEO;
+- `llms.txt` como requisito de ranking/visibilidade no Google;
+- “chunking” artificial obrigatório;
+- reescrita de conteúdo apenas para agradar modelos de IA;
+- Structured Data como requisito universal para recursos generativos.
+
+As heurísticas semânticas BR-GEO continuam úteis como modelo de readiness, mas são identificadas como heurísticas internas quando não existe norma externa equivalente.
+
+## Compatibilidade
 
 | Item | Estado |
 |---|---|
 | Windows + PowerShell | target operacional de handoff |
 | CPython 3.13.x | obrigatório; `>=3.13,<3.14` |
-| Python 3.12 ou 3.14+ | incompatível pelo contrato atual do package |
+| Python 3.12 ou 3.14+ | incompatível com o package atual |
 | Playwright `>=1.57,<2` | obrigatório |
-| Chromium | obrigatório para rendering real Desktop/Mobile |
-| Ubuntu `ubuntu-latest` | validado por suíte automatizada; não é target formal de distribuição |
-| macOS | não homologado |
-| SQLite | embarcado/local; nenhum database server necessário |
-| OpenAI | opcional; provider semântico suportado |
-| DeepSeek | opcional; provider semântico suportado, qualificação SearchGEO `PROVISIONAL` |
-| Xiaomi MiMo | opcional; provider semântico suportado, qualificação SearchGEO `PROVISIONAL` |
-| Docker / web server | não requeridos e não fornecidos |
+| Chromium | obrigatório para rendering real |
+| SQLite | embarcado/local |
+| OpenAI | opcional |
+| DeepSeek | opcional; qualificação SearchGEO `PROVISIONAL` |
+| Xiaomi MiMo | opcional; qualificação SearchGEO `PROVISIONAL` |
+| Docker / web server | não requeridos |
 
-O contrato completo está em [Compatibilidade e Dependências](docs/COMPATIBILITY.md).
+Detalhes: [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
 
-## Premissas mínimas para GEO e JSON-LD
-
-O foco primário do baseline é **Google Search e seus recursos de IA**.
-
-JSON-LD **não é requisito universal para GEO funcional**. O SearchGEO classifica Structured Data como **OPCIONAL / REFORÇO**: ausência legítima não recebe zero nem impede, sozinha, uma Compatibilidade GEO mensurável. Quando JSON-LD existe, `BR-GEO-034..037` tornam-se aplicáveis e podem melhorar, manter ou reduzir o resultado conforme interpretabilidade e coerência com o conteúdo visível.
-
-`SCORE-GEO-002` mantém as dez dimensões, mas distingue:
-
-- dimensão sem execução ou com aplicabilidade não resolvida: `NOT_CONSOLIDATED`, podendo bloquear Overall;
-- dimensão integralmente e legitimamente fora do universo aplicável: `NOT_APPLICABLE`, fora do denominador do Overall, sem nota artificial 0 ou 100;
-- tópico opcional que passa a existir: volta automaticamente ao universo aplicável e entra no scoring.
-
-O `report.html` informa quantas dimensões foram efetivamente consideradas. Consulte [Premissas mínimas e reforços para GEO](docs/GEO_MINIMUM_REQUIREMENTS.md) e [Scoring e Reliability](docs/SCORING_GUIDE.md).
-
-## Dependências obrigatórias
-
-- CPython 3.13;
-- `pip`;
-- package do projeto;
-- Playwright `>=1.57,<2`;
-- Chromium funcional para rendering real;
-- filesystem local gravável;
-- acesso HTTP/HTTPS ao target.
-
-IA é opcional. Não é necessário instalar SDK Python de OpenAI, DeepSeek ou MiMo: os adapters usam HTTP.
-
-## Capacidades principais
-
-- Discovery por seed, `robots.txt`, sitemap e links internos, limitado por `max_pages`.
-- Auditoria de uma URL, múltiplas URLs posicionais ou `--urls-file` em um mesmo `audit_id`.
-- Aquisição HTTP com redirects, headers, body e erros de rede rastreáveis.
-- Rendering real com Playwright/Chromium para Desktop e Mobile independentes.
-- Screenshots e observações de elementos DOM quando determináveis.
-- Extração de metadata, canonical, robots, headings, links, conteúdo principal e JSON-LD.
-- Evidence First: findings apontam para RuleExecution e Evidence persistidas.
-- Business Rules `BR-GEO-001..054`.
-- Scoring determinístico `SCORE-GEO-002` por dispositivo em 10 dimensões, com Coverage, Confidence, Consolidation e aplicabilidade explícita.
-- Priorização, causa raiz, remediation groups e recomendações determinísticas.
-- IA opcional com `none`, OpenAI, DeepSeek, MiMo ou `auto` multi-provider.
-- Failover controlado, quarantine por audit e lock de provider por URL.
-- Telemetria de IA persistida e exibida no relatório.
-- `report.html` orientado à auditoria e `remediation.html` orientado aos problemas.
-
-## Arquitetura resumida
-
-```text
-CLI
-  -> AuditRunner
-  -> Discovery + HTTP
-  -> Rendering Desktop/Mobile
-  -> Extraction + Evidence
-  -> Deterministic Rules
-  -> JavaScript/SPA + Content Extractability
-  -> Semantic Provider (none | single provider | AUTO)
-  -> Desktop/Mobile Comparison
-  -> Scoring + Applicability
-  -> Prioritization + Root Cause + Recommendations
-  -> report.html + remediation.html
-```
-
-Os dados primários ficam em `audit.db` e nos artifacts. Os HTMLs são projeções para leitura humana.
-
-# Instalação rápida — PowerShell
+## Instalação rápida — PowerShell
 
 ```powershell
 py -3.13 -m venv .venv
@@ -99,15 +62,34 @@ python -m playwright install chromium
 searchgeo --version
 ```
 
-# Execução rápida
+## Execução rápida
 
-Sem IA, que é o default:
+### Default: Mobile, sem IA
 
 ```powershell
 searchgeo audit https://example.com --project "Exemplo"
 ```
 
-Com várias URLs:
+Equivale ao contexto:
+
+```text
+--device-context mobile
+--ai-provider none
+```
+
+### Desktop apenas
+
+```powershell
+searchgeo audit https://example.com --device-context desktop
+```
+
+### Mobile + Desktop
+
+```powershell
+searchgeo audit https://example.com --device-context both
+```
+
+### Várias URLs
 
 ```powershell
 searchgeo audit `
@@ -117,70 +99,75 @@ searchgeo audit `
   --project "Exemplo"
 ```
 
-Por arquivo:
+### Arquivo de URLs
 
 ```powershell
 searchgeo audit --urls-file .\urls.txt --project "Exemplo"
 ```
 
-Defaults relevantes:
+## Contexto de dispositivo e custo
 
-- idioma: `pt-BR`;
-- mercado: `BR`;
-- limite: `100` páginas;
-- raiz de saída: `audits`;
-- IA: `none`.
+A seleção pode ser feita pela CLI ou por ambiente:
 
-Ao concluir, a CLI informa o ID da auditoria, status, páginas auditadas, quantidade de problemas/recomendações e paths dos relatórios.
+```powershell
+$env:SEARCHGEO_DEVICE_CONTEXT = "mobile"   # mobile | desktop | both
+```
 
-Estrutura principal:
+Precedência:
+
+1. `--device-context`, quando informado;
+2. `SEARCHGEO_DEVICE_CONTEXT`;
+3. default da CLI: `mobile`.
+
+A seleção controla os snapshots produzidos por M3 e, consequentemente, os contextos enviados ao provider semântico. Em uma página auditada com IA, `mobile` evita a chamada correspondente a Desktop; `both` executa os dois contextos quando disponíveis.
+
+Chamadas internas diretas a M3 sem variável preservam o comportamento legado de ambos os dispositivos para compatibilidade de testes/API interna.
+
+## Estrutura de saída
 
 ```text
 audits/<AUD-ID>/
-  audit.db
-  report.html
-  remediation.html
-  artifacts/
+├─ audit.db
+├─ artifacts/
+└─ report/
+   ├─ index.html
+   ├─ mobile.html          # quando Mobile foi auditado
+   ├─ desktop.html         # quando Desktop foi auditado
+   ├─ remediation.html
+   ├─ ai-usage.html
+   ├─ references.html
+   └─ css/
+      └─ site.css
 ```
 
-# Referência completa da linha de comando
+`report/index.html` é o ponto de entrada. Os HTMLs usam o mesmo menu e o mesmo `report/css/site.css`; não dependem de servidor web nem de CSS inline/embutido.
 
-A lista de **todos os parâmetros expostos**, defaults, regras de combinação, formatos de target e exemplos fica em:
+Os dados primários continuam sendo `audit.db` e os artifacts. O report site é uma projeção para leitura humana.
 
-**[Referência completa da CLI](docs/CLI_REFERENCE.md)**
+## Como interpretar Score, Coverage e Confidence
 
-Resumo do `audit`:
+Esses indicadores respondem perguntas diferentes:
 
-```text
-searchgeo [--config PATH] audit [target ...]
-  [--urls-file PATH]
-  [--project TEXT]
-  [--language CODE]
-  [--market CODE]
-  [--max-pages N]
-  [--audits-root PATH]
-  [--ai-provider none|openai|deepseek|mimo|auto]
-  [--ai-model MODEL_ID]
-```
+- **Score / Readiness:** qualidade observada nas regras efetivamente avaliadas;
+- **Coverage:** proporção do universo aplicável que realmente pôde ser avaliado;
+- **Confidence:** força da conclusão do auditor, considerando coverage, evidências e erros de execução;
+- **Consolidation:** se existe base suficiente para publicar aquela dimensão/Overall como consolidada.
 
-Use também:
+**Confidence LOW não significa que o texto do site é ruim ou não aderente a GEO.** Ela significa que a conclusão do auditor possui base limitada. O conteúdo é avaliado pelos RuleExecutions, findings e Score. Um score alto com Confidence LOW exige ressalva e não deve ser comunicado como aprovação sem restrições.
 
-```powershell
-searchgeo --help
-searchgeo audit --help
-```
+As classificações visuais `Excelente / Alta / Moderada / Baixa / Crítica` são faixas internas do SearchGEO, não thresholds oficiais dos mantenedores.
 
-# Como configurar IA
+Detalhes: [docs/SCORING_GUIDE.md](docs/SCORING_GUIDE.md) e [docs/REPORT_GUIDE.md](docs/REPORT_GUIDE.md).
 
-## 1. Não usar IA
+## IA opcional
+
+### Sem IA
 
 ```powershell
 searchgeo audit https://example.com --ai-provider none
 ```
 
-`none` é o default. A auditoria continua com regras determinísticas. Regras semantic-only sem base suficiente ficam `UNKNOWN`; ausência de IA não é `FAIL` do website.
-
-## 2. Usar somente um provider
+`none` é o default. Regras semantic-only sem evidência suficiente ficam `UNKNOWN`; isso reduz Coverage/Consolidation quando aplicável, mas não transforma ausência de IA em `FAIL` do website.
 
 ### OpenAI
 
@@ -207,43 +194,22 @@ $env:MIMO_API_KEY = "<chave>"
 searchgeo audit https://example.com --ai-provider mimo
 ```
 
-Default: `mimo-v2.5-pro` / `HIGH`, normalizado no relatório como `THINKING_ENABLED`.
+Default: `mimo-v2.5-pro` / `THINKING_ENABLED`.
 
-Um provider explícito **não faz fallback para outro fornecedor**. Após falha qualificadora ele entra em `QUARANTINED_FOR_AUDIT` e não é chamado novamente dentro daquele audit. A ausência das chaves dos outros providers não interfere na execução explícita escolhida.
-
-## Timeout das chamadas de IA
-
-A CLI usa `180` segundos por chamada semântica externa. O valor pode ser alterado por ambiente:
-
-```powershell
-$env:SEARCHGEO_AI_TIMEOUT_SECONDS = "240"
-searchgeo audit https://example.com --ai-provider openai
-```
-
-O valor deve ser numérico, finito e maior que zero. Timeout não dispara retry automático, evitando uma segunda cobrança potencial quando a primeira chamada expirou localmente mas pode ter continuado no provider.
-
-## 3. Usar vários providers com fallback
-
-Configure duas ou três chaves e selecione `auto`:
+### Multi-provider
 
 ```powershell
 $env:OPENAI_API_KEY = "<chave-openai>"
 $env:DEEPSEEK_API_KEY = "<chave-deepseek>"
 $env:MIMO_API_KEY = "<chave-mimo>"
-searchgeo audit --urls-file .\urls.txt --project "Exemplo" --ai-provider auto
+searchgeo audit https://example.com --ai-provider auto
 ```
 
-`AUTO` monta uma cadeia imutável no início do audit com apenas providers que possuem token e configuração válida. As chamadas são sequenciais, não paralelas. O primeiro resultado válido encerra a cadeia naquele contexto; providers posteriores não são chamados para sobrescrever o resultado.
+`AUTO` monta uma cadeia imutável somente com providers configurados e válidos. As chamadas são sequenciais. O primeiro resultado válido encerra a cadeia naquele contexto; providers posteriores não sobrescrevem o resultado aceito.
 
-Para os modelos default, a ordem atual é:
+Um provider explícito não faz fallback para outro fornecedor. Chaves ausentes de providers não selecionados não interferem no provider explícito.
 
-1. OpenAI `gpt-5.6-terra`;
-2. DeepSeek `deepseek-v4-pro`;
-3. MiMo `mimo-v2.5-pro`.
-
-A política completa inclui também OpenAI Sol/Luna, DeepSeek Flash e MiMo V2.5 conforme o model configurado. A classificação é uma política de adequação ao contrato SearchGEO, não um benchmark científico universal.
-
-## Modelos aceitos pelo código
+Modelos aceitos pelo código:
 
 ```text
 OPENAI:   gpt-5.6-sol | gpt-5.6-terra | gpt-5.6-luna
@@ -251,70 +217,74 @@ DEEPSEEK: deepseek-v4-pro | deepseek-v4-flash
 MIMO:     mimo-v2.5-pro | mimo-v2.5
 ```
 
-`--ai-model` é permitido somente para provider explícito. Em `auto`, configure o model via variável específica do provider.
+## Timeout de IA
 
-## Provider selecionado sem token
+Default da CLI: `180` segundos por chamada.
 
-- provider explícito: fica `NOT_CONFIGURED`, nenhuma chamada externa ocorre e a auditoria segue sem IA efetiva;
-- `auto`: o provider sem token não entra na cadeia;
-- se nenhum provider for elegível em `auto`, nenhuma chamada externa é feita.
-
-Isso reduz capacidade semântica/cobertura quando aplicável, mas não transforma o website em `FAIL`.
-
-## Erro, quota, sem créditos ou timeout
-
-O runtime classifica falhas como autenticação, quota/crédito, rate limit, modelo/permissão, rede/timeout/server ou contrato/resposta inválida.
-
-- provider explícito: sessão semântica fica `DEGRADED`; não há cross-provider fallback;
-- `auto`: provider falho fica `QUARANTINED_FOR_AUDIT` e o próximo provider saudável pode ser usado;
-- se todos os providers do `auto` falharem, o estado operacional fica `CHAIN_EXHAUSTED` e a auditoria registra `AI_PROVIDER_CHAIN_EXHAUSTED`.
-
-## Lock de provider por URL
-
-Quando uma URL recebe a primeira análise válida, o provider fica fixado para Desktop/Mobile dessa URL. Se ele falhar no segundo device, outro provider **não** completa a mesma URL; o provider é quarantined para URLs seguintes e o contexto faltante permanece degradado/`UNKNOWN` quando aplicável.
-
-# Relatório, persistência e log de uso da IA
-
-O `report.html` contém a seção **Uso de IA — execução e telemetria**, com:
-
-- estratégia;
-- provider/model inicial e efetivo;
-- profundidade/reasoning;
-- cadeia inicial;
-- status e failover;
-- cobertura por URL/device;
-- tentativa por tentativa;
-- tokens reportados;
-- duração;
-- `ESTIMATED_COST` quando calculável;
-- erro sanitizado.
-
-A seção de telemetria é inserida dentro de `<main>`. Quando a tabela excede a largura disponível, a rolagem horizontal ocorre dentro do próprio bloco, sem invadir a sidebar fixa.
-
-No `audit.db`, M18 persiste:
-
-```text
-ai_audit_sessions
-ai_provider_attempts
-provider_pricing_catalog
+```powershell
+$env:SEARCHGEO_AI_TIMEOUT_SECONDS = "240"
 ```
 
-A execução também emite logging sanitizado conforme `log_level`, sem API key, Authorization ou corpo integral da requisição. A baseline **não materializa `audit.log` automaticamente**; o registro persistente de uso é `audit.db` + `report.html`.
+O valor deve ser numérico, finito e maior que zero. Timeout não dispara retry automático para evitar consumo duplicado quando a chamada já chegou ao provider.
 
-`ESTIMATED_COST` é estimativa local versionada e não equivale a billing/invoice do provider nem participa do score.
+## Telemetria de IA
 
-# Segurança das chaves
+A telemetria operacional fica isolada em:
 
-Não grave API keys em:
+```text
+report/ai-usage.html
+```
 
-- repositório;
-- TOML versionado;
-- artifacts;
-- HTML;
-- scripts compartilhados;
-- logs.
+A página apresenta, quando disponíveis:
 
-Valide presença sem imprimir o segredo:
+- estratégia;
+- provider/model efetivo;
+- status;
+- cadeia configurada;
+- tentativas por URL/device;
+- tokens;
+- duração;
+- custo estimado local;
+- erros sanitizados.
+
+`ESTIMATED_COST` é estimativa do catálogo versionado local e não equivale à invoice/billing do provider. Falha de IA é limitação da auditoria, não finding do website.
+
+## Remediação
+
+`report/remediation.html` concentra causas e ações, com materialização M16/M17 quando disponível:
+
+- causa raiz;
+- reason code;
+- selector observado;
+- alvo técnico e localização esperada;
+- observado versus esperado;
+- mudança recomendada;
+- critério de aceite;
+- passos de revalidação;
+- decisão humana quando necessária.
+
+Uma evolução futura para **sugestão opcional de texto por IA**, desligada por padrão e sem alterar score/findings, está registrada separadamente no backlog. Ela deverá propor conteúdo apenas quando houver evidência semântica suficiente e nunca gerar “texto para IA” sem valor real ao usuário.
+
+## Referência completa da CLI
+
+```text
+searchgeo [--config PATH] audit [target ...]
+  [--urls-file PATH]
+  [--project TEXT]
+  [--language CODE]
+  [--market CODE]
+  [--max-pages N]
+  [--audits-root PATH]
+  [--device-context mobile|desktop|both]
+  [--ai-provider none|openai|deepseek|mimo|auto]
+  [--ai-model MODEL_ID]
+```
+
+Glossário completo: [docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md).
+
+## Segurança
+
+Não grave API keys em repositório, TOML versionado, artifacts, HTML ou logs. Para validar somente presença:
 
 ```powershell
 Test-Path Env:OPENAI_API_KEY
@@ -322,15 +292,14 @@ Test-Path Env:DEEPSEEK_API_KEY
 Test-Path Env:MIMO_API_KEY
 ```
 
-# Documentação
+## Documentação
 
-- [Premissas mínimas e reforços para GEO](docs/GEO_MINIMUM_REQUIREMENTS.md)
 - [Referência completa da CLI](docs/CLI_REFERENCE.md)
 - [Compatibilidade e dependências](docs/COMPATIBILITY.md)
 - [Instalação](docs/INSTALLATION.md)
 - [Guia do usuário](docs/USER_GUIDE.md)
 - [Configuração](docs/CONFIGURATION.md)
-- [Interpretação do relatório](docs/REPORT_GUIDE.md)
+- [Interpretação do report site](docs/REPORT_GUIDE.md)
 - [Business Rules](docs/RULES_GUIDE.md)
 - [Scoring e Reliability](docs/SCORING_GUIDE.md)
 - [IA, routing e fallback](docs/AI_GUIDE.md)
@@ -338,18 +307,6 @@ Test-Path Env:MIMO_API_KEY
 - [Guia técnico](docs/TECHNICAL_GUIDE.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Smoke test humano](docs/SMOKE_TEST.md)
+- [Premissas mínimas GEO](docs/GEO_MINIMUM_REQUIREMENTS.md)
 
-## Fonte normativa
-
-A documentação operacional explica o uso da implementação. A fonte normativa permanece em [`docs/specification`](docs/specification/00_SPEC_INDEX.md). Em caso de conflito, `docs/specification` prevalece.
-
-## Limitações atuais
-
-- não existe executável standalone/portátil; Python 3.13 continua necessário;
-- não existe interface web/backend HTTP do produto;
-- logging é do processo; não existe `audit.log` persistido automaticamente por auditoria;
-- configuração TOML continua restrita ao escopo exposto pelo módulo de configuração; parâmetros de auditoria são CLI/environment;
-- providers externos exigem egress HTTPS, credencial e política de dados compatível;
-- DeepSeek e MiMo permanecem `PROVISIONAL` na política de qualificação SearchGEO até benchmark específico;
-- o parser de Structured Data do SearchGEO possui cobertura operacional específica para JSON-LD; Microdata/RDFa ainda não devem ser tratados como equivalentes no auditor;
-- smoke live de M18 com providers reais depende de credenciais disponíveis no ambiente de homologação.
+A fonte normativa permanece em [`docs/specification`](docs/specification/00_SPEC_INDEX.md). Em caso de conflito com documentação operacional, a especificação aprovada deve ser atualizada ou prevalece até a reconciliação explícita.
