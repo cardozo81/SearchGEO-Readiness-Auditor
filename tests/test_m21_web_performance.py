@@ -50,9 +50,12 @@ class M21WebPerformanceTests(unittest.TestCase):
             )
             self.assertEqual(result.status, "DISABLED")
             self.assertEqual(psi.calls, [])
-            with sqlite3.connect(workspace.database) as connection:
+            connection = sqlite3.connect(workspace.database)
+            try:
                 row = connection.execute("SELECT enabled,status FROM web_performance_runs").fetchone()
                 self.assertEqual(row, (0, "DISABLED"))
+            finally:
+                connection.close()
 
     def test_cli_disabled_ignores_inactive_m21_tuning_environment(self) -> None:
         parser = build_parser()
@@ -156,9 +159,12 @@ class M21WebPerformanceTests(unittest.TestCase):
                 pagespeed_client=_PageSpeed(payload),
             )
             self.assertEqual(result.status, "SUCCESS")
-            with sqlite3.connect(workspace.database) as connection:
+            connection = sqlite3.connect(workspace.database)
+            try:
                 assessment = connection.execute("SELECT cwv_assessment FROM web_performance_observations").fetchone()[0]
                 self.assertEqual(assessment, "INCOMPLETE")
+            finally:
+                connection.close()
 
     def test_report_keeps_external_metrics_separate_from_score_geo_002(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
