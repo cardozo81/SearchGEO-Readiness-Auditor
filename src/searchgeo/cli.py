@@ -367,11 +367,12 @@ def main(argv: list[str] | None = None) -> int:
                     semantic_provider=provider,
                     content_remediation=content_remediation,
                 )
-                # M21 is strictly opt-in. With the default OFF, the CLI does
-                # not reopen the workspace or perform any extra post-processing.
-                # Once the core audit is complete, an unexpected M21 problem is
-                # fail-open with respect to the already valid SearchGEO result.
-                if web_performance.enabled:
+                # Real audit workspaces materialize the M21 state even when
+                # external collection is OFF, so the report can explain the
+                # opt-in status. Mocked/internal callers that return no actual
+                # workspace retain the legacy default-OFF path without failure.
+                # Any M21 problem after core completion remains fail-open.
+                if web_performance.enabled or result.audit_root.is_dir():
                     try:
                         workspace = AuditWorkspace.open(result.audit_root)
                         web_result = execute_m21(
