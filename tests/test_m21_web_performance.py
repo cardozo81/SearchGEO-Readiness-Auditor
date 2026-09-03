@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import os
 from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 
+from searchgeo.cli import _configured_web_performance, build_parser
 from searchgeo.domain import Audit, AuditTarget, DeviceContext, DiscoverySource, Page, PageSnapshot, TargetType
 from searchgeo.m21_reporting import enrich_m21_report_site
 from searchgeo.m21_web_performance import HttpJsonResult, WebPerformanceConfig, execute_m21
@@ -50,6 +53,22 @@ class M21WebPerformanceTests(unittest.TestCase):
             with sqlite3.connect(workspace.database) as connection:
                 row = connection.execute("SELECT enabled,status FROM web_performance_runs").fetchone()
                 self.assertEqual(row, (0, "DISABLED"))
+
+    def test_cli_disabled_ignores_inactive_m21_tuning_environment(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["audit", "https://example.test", "--no-web-performance"])
+        noisy_env = {
+            "SEARCHGEO_WEB_PERFORMANCE_MAX_PAGES": "-999",
+            "SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS": "not-a-number",
+            "SEARCHGEO_WEB_PERFORMANCE_FIELD_SOURCE": "crux",
+            "SEARCHGEO_LIGHTHOUSE_CATEGORIES": "not-a-category",
+        }
+        with patch.dict(os.environ, noisy_env, clear=False):
+            config = _configured_web_performance(args)
+        self.assertFalse(config.enabled)
+        self.assertEqual(config.max_pages, 10)
+        self.assertEqual(config.field_source, "auto")
+        self.assertEqual(config.categories, ("performance", "accessibility", "best-practices", "seo"))
 
     def test_pagespeed_persists_lighthouse_and_cwv_without_touching_score(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
