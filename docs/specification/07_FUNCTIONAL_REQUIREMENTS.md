@@ -1,6 +1,6 @@
 # FUNCTIONAL_REQUIREMENTS.md
 
-**Status:** APPROVED — extended by M13 Actionable GEO Report + SCORE-GEO-002
+**Status:** APPROVED — M18 + SCORE-GEO-002 + REPORT-SITE-GEO-001
 
 ## Requisitos Funcionais
 
@@ -23,7 +23,7 @@ Descobrir URLs por seed, links internos e sitemap.
 Limitar universo a max_pages de forma determinística e informar limitação.
 
 ### FR-GEO-007
-Avaliar Desktop e Mobile separadamente.
+Avaliar Desktop e Mobile separadamente quando esses contextos forem selecionados; nunca misturar resultados dos dispositivos em uma única nota.
 
 ### FR-GEO-008
 Capturar HTTP, headers, redirects, final URL, status e erros.
@@ -80,7 +80,7 @@ Funcionar sem IA.
 Possuir fallback determinístico/heurístico seguro.
 
 ### FR-GEO-026
-Permitir múltiplos providers; MVP implementa NONE + OpenAI.
+Permitir múltiplos providers, preservando NONE e provider explícito.
 
 ### FR-GEO-027
 Validar schema e evidence_ids da saída da IA.
@@ -104,7 +104,7 @@ Avaliar evidência e confiança.
 Avaliar 1 primary intent + até 5 secondary intents.
 
 ### FR-GEO-034
-Comparar Desktop × Mobile.
+Comparar Desktop × Mobile quando ambos os snapshots estiverem no universo selecionado; ausência intencional de um contexto não deve ser apresentada como defeito do website.
 
 ### FR-GEO-035
 Criar findings estruturados.
@@ -122,7 +122,7 @@ Informar Confidence.
 Informar Consolidation Status.
 
 ### FR-GEO-040
-Calcular Overall Desktop e Overall Mobile somente com cobertura suficiente das dimensões aplicáveis.
+Calcular Overall Desktop e Overall Mobile somente quando o respectivo contexto possuir cobertura suficiente das dimensões aplicáveis.
 
 ### FR-GEO-041
 Evitar dupla penalização via scoring groups.
@@ -140,85 +140,106 @@ Consolidar recomendações repetitivas por causa raiz.
 Gerar recomendações técnicas mesmo sem IA.
 
 ### FR-GEO-046
-Gerar `report.html` estático.
+Gerar report site HTML estático em `report/`, com `report/index.html` como ponto de entrada.
 
 ### FR-GEO-047
-Produzir relatório autocontido sempre que viável.
+Produzir report site local e navegável sem servidor web, usando dependências relativas internas ao workspace.
 
 ### FR-GEO-048
 Utilizar português na camada de apresentação.
 
 ### FR-GEO-049
-Fornecer legenda e glossário.
+Fornecer legenda, explicações e glossário/metodologia.
 
 ### FR-GEO-050
-Explicar limitações provocadas por indisponibilidade de IA.
+Explicar limitações provocadas por indisponibilidade de IA sem atribuí-las ao website.
 
 ### FR-GEO-051
 Preservar termos técnicos quando tradução prejudicar precisão.
 
 ### FR-GEO-052
-Produzir relatório profissional com resumo, scorecard, findings, evidence, prioridades, recomendações, limitações e detalhes técnicos.
+Produzir apresentação profissional com resumo, scorecard, findings, evidências, prioridades, remediações, limitações e detalhes técnicos distribuídos pelos domínios apropriados do report site.
 
 ### FR-GEO-053
-Exibir `COMPATIBILIDADE GEO: NÃO DETERMINADA` quando `OVERALL_READINESS` não possuir valor consolidado; nunca substituir o score por Coverage.
+Exibir readiness geral como não determinado/não consolidado quando `OVERALL_READINESS` não possuir valor consolidado; nunca substituir o Score por Coverage.
 
 ### FR-GEO-054
-Exibir e explicar separadamente Compatibilidade GEO, Coverage e Confidence.
+Exibir e explicar separadamente Compatibilidade/Readiness, Coverage e Confidence.
 
 ### FR-GEO-055
-Aplicar classificação textual e semântica visual a scores válidos: 90–100 Excelente, 75–89 Alta, 60–74 Moderada, 40–59 Baixa, 0–39 Crítica; estado sem resultado válido permanece Não Determinado.
+Aplicar classificação visual interna a scores válidos: 90–100 Excelente, 75–89 Alta, 60–74 Moderada, 40–59 Baixa, 0–39 Crítica; estado sem resultado válido permanece Não Determinado. Essas faixas são internas e não podem ser apresentadas como standard oficial GEO/AEO.
 
 ### FR-GEO-056
-Produzir seção de principais oportunidades derivada somente de findings e prioridades persistidos, sem transformar UNKNOWN em problema.
+Produzir principais oportunidades somente de findings/prioridades persistidos, sem transformar UNKNOWN em problema.
 
 ### FR-GEO-057
 Associar findings aplicáveis a `RemediationRecipe` determinística por `rule_id`, contendo alvo, ação, descrição, aceite e validação e, quando seguro, elemento/localização/exemplo.
 
 ### FR-GEO-058
-Distinguir no relatório HTML efetivamente observado de exemplo recomendado. Se o trecho original não estiver persistido na Evidence, exibir explicitamente `Trecho HTML original não persistido para esta evidência.`
+Distinguir efetivamente observado de exemplo recomendado. Se trecho original não estiver persistido, declarar a ausência em vez de inventá-lo.
 
 ### FR-GEO-059
-Para canonical ausente/conflitante, fornecer remediação acionável sem inventar URL preferencial. Quando a URL preferencial não for determinável pelas evidências, exigir decisão humana antes de preencher `href`.
+Para canonical ausente/conflitante, fornecer remediação sem inventar URL preferencial. Se não determinável pelas evidências, exigir decisão humana.
 
 ### FR-GEO-060
 Reutilizar SemanticAssessment, reasoning_summary, entidades, intents e evidence_ids persistidos para enriquecer remediação sem executar segunda chamada livre de IA.
 
 ### FR-GEO-061
-Preservar segurança factual das recomendações: não inventar autor, fonte, freshness, claim, preço, cobertura comercial, structured data ou outra informação ausente das evidências.
+Preservar segurança factual: não inventar autor, fonte, freshness, claim, preço, cobertura comercial, structured data ou informação ausente das evidências.
 
 ### FR-GEO-062
-Gerar diagnóstico de crawl reabrível a partir do estado persistido, incluindo URLs descobertas/auditadas, max_pages, limite atingido, fontes de descoberta, robots, sitemaps e redirects quando disponíveis.
+Gerar diagnóstico de crawl reabrível a partir do estado persistido.
 
 ### FR-GEO-063
-Manter scorecard Desktop e Mobile independentes, exibindo por dimensão score, classificação, Coverage, Confidence e Consolidation.
+Manter scorecards Mobile e Desktop independentes; o report final só deve expor como auditado o dispositivo que possui snapshot no universo executado.
 
 ### FR-GEO-064
-Ordenar o relatório com resultado executivo antes de metodologia, seguido de oportunidades, scorecards e plano de correção.
+Ordenar a apresentação por domínio de informação: visão executiva, dispositivo, remediação, telemetria de IA e fundamentação técnica.
 
 ### FR-GEO-065
-Identificar explicitamente recipes de fallback quando ainda não houver recipe específica para uma regra.
+Identificar recipes de fallback quando não houver recipe específica.
 
 ### FR-GEO-066
 Preservar IDs de Evidence e rastreabilidade no fluxo `evidence → finding → priority → remediation → report`.
 
 ### FR-GEO-067
-Distinguir dimensão sem RuleExecutions, dimensão com aplicabilidade não resolvida e dimensão integralmente `NOT_APPLICABLE`.
+Distinguir dimensão sem RuleExecutions, com aplicabilidade não resolvida e integralmente `NOT_APPLICABLE`.
 
 ### FR-GEO-068
-Excluir do Overall somente dimensões integralmente e legitimamente `NOT_APPLICABLE`, sem atribuir score 0 ou 100 e sem reduzir Overall Coverage.
+Excluir do Overall somente dimensões integralmente e legitimamente `NOT_APPLICABLE`, sem atribuir score 0/100 nem reduzir Overall Coverage.
 
 ### FR-GEO-069
-Quando um tópico opcional passa a existir na URL, suas regras devem tornar-se aplicáveis e participar normalmente de Score, Coverage, Confidence e Consolidation. Para Structured Data, JSON-LD observado torna BR-GEO-034..037 parte do fluxo aplicável.
+Quando tópico opcional passa a existir, suas regras tornam-se aplicáveis. JSON-LD observado torna BR-GEO-034..037 parte do fluxo aplicável.
 
 ### FR-GEO-070
-Exibir no `report.html` dimensões legitimamente excluídas como `NÃO APLICÁVEL`, diferenciando-as de `NÃO DETERMINADO`, e indicar quantas dimensões foram efetivamente consideradas no Overall.
+Exibir no report site dimensões legitimamente excluídas como `NÃO APLICÁVEL`, diferentes de `NÃO DETERMINADO`, e informar o universo efetivamente considerado no Overall.
 
 ### FR-GEO-071
-Documentar de forma explícita premissas classificadas como `MÍNIMO`, `CONTEXTUAL`, `OPCIONAL / REFORÇO` e `NÃO OBRIGATÓRIO`, com foco primário em Google Search/AI features e sem transformar recomendações externas em requisitos artificiais de score.
+Documentar premissas `MÍNIMO`, `CONTEXTUAL`, `OPCIONAL / REFORÇO` e `NÃO OBRIGATÓRIO`, sem transformar recomendações externas em requisitos artificiais de score.
 
 ### FR-GEO-072
-Classificar JSON-LD/Structured Data como `OPCIONAL / REFORÇO` no baseline geral: ausência legítima isolada não é FAIL nem impede Overall; quando presente, deve ser interpretável, factual e coerente com o conteúdo visível.
+Classificar JSON-LD/Structured Data como `OPCIONAL / REFORÇO`: ausência legítima isolada não é FAIL nem impede Overall; quando presente, deve ser interpretável, factual e coerente com o conteúdo visível.
+
+### FR-GEO-073
+Expor `--device-context mobile|desktop|both` e `SEARCHGEO_DEVICE_CONTEXT`, com precedência flag → ambiente → default `mobile` na CLI.
+
+### FR-GEO-074
+O contexto de dispositivo selecionado deve controlar rendering e, por consequência, os contextos enviados ao provider semântico; nenhum provider deve ser chamado para dispositivo que não possui snapshot selecionado.
+
+### FR-GEO-075
+Separar `report/mobile.html` e `report/desktop.html`; gerar cada página somente quando o respectivo contexto foi auditado.
+
+### FR-GEO-076
+Separar telemetria operacional em `report/ai-usage.html` e fundamentação técnica em `report/references.html`, evitando confundir erro de provider com qualidade do website.
+
+### FR-GEO-077
+Todos os HTMLs finais devem usar estrutura de navegação consistente e stylesheet compartilhado `report/css/site.css`; CSS inline/embutido não deve compor o report site final.
+
+### FR-GEO-078
+Explicar explicitamente que Confidence é força da conclusão do auditor e que `LOW` não significa, isoladamente, baixa qualidade ou não aderência do texto.
+
+### FR-GEO-079
+A fundamentação deve distinguir norma/standard externo de heurística interna e declarar que o SearchGEO não representa suas faixas de score como standard GEO/AEO oficial.
 
 ## Requisitos Não Funcionais
 
@@ -229,7 +250,7 @@ Executar em Windows.
 Preferencialmente sem privilégios administrativos.
 
 ### NFR-GEO-003
-Não exigir banco server, web server, Docker, IA ou GitHub.
+Não exigir database server, web server, Docker, IA ou GitHub para runtime local.
 
 ### NFR-GEO-004
 Priorizar distribuição portátil.
@@ -241,7 +262,7 @@ Resultados determinísticos devem ser reproduzíveis.
 Toda conclusão deve ser rastreável.
 
 ### NFR-GEO-007
-Versionar auditor, ruleset, prompts, rendering policy, scoring, prioritization e template do relatório.
+Versionar auditor, ruleset, prompts, rendering policy, scoring, prioritization e contrato do relatório.
 
 ### NFR-GEO-008
 Falhas localizadas não devem encerrar toda auditoria quando for possível continuar.
@@ -253,10 +274,13 @@ Dados permanecem locais, exceto conteúdo explicitamente enviado a provider conf
 Resultado com cobertura/confiabilidade insuficiente não pode ser apresentado como conclusivo.
 
 ### NFR-GEO-011
-O relatório acionável deve permanecer autocontido, responsivo, imprimível e sem dependências externas obrigatórias.
+O report site deve ser responsivo, imprimível, navegável localmente e sem dependências externas obrigatórias de runtime.
 
 ### NFR-GEO-012
-RemediationRecipe e apresentação do relatório devem ser determinísticas e reproduzíveis a partir do estado persistido e da versão do código/ruleset.
+RemediationRecipe e apresentação devem ser determinísticas/reprodutíveis a partir do estado persistido e versão do código/ruleset.
 
 ### NFR-GEO-013
-A decisão de aplicabilidade de dimensão e a exclusão do Overall devem ser reproduzíveis exclusivamente a partir das RuleExecutions persistidas e da versão do scoring.
+Aplicabilidade e exclusão do Overall devem ser reproduzíveis a partir das RuleExecutions e versão do scoring.
+
+### NFR-GEO-014
+A projeção final não deve recalcular score/finding nem chamar IA; `audit.db` e artifacts permanecem fonte de verdade.
