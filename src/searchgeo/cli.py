@@ -15,8 +15,7 @@ from searchgeo import __version__
 from searchgeo.audit_runner import run_audit
 from searchgeo.config import load_config
 from searchgeo.logging_config import configure_logging
-from searchgeo.openai_provider import OpenAIProvider
-from searchgeo.semantic import NoneProvider
+from searchgeo.m18_ai import build_semantic_provider
 
 _LOGGER = logging.getLogger(__name__)
 _DOMAIN_LABEL = re.compile(r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)$")
@@ -94,19 +93,24 @@ def build_parser() -> argparse.ArgumentParser:
     audit_parser.add_argument("--market", default="BR", help="market context")
     audit_parser.add_argument("--max-pages", type=int, default=100, help="deterministic maximum number of audited pages")
     audit_parser.add_argument("--audits-root", default="audits", help="local directory that will contain audit workspaces")
-    audit_parser.add_argument("--ai-provider", choices=("none", "openai"), default="none", help="optional semantic analysis provider")
-    audit_parser.add_argument("--ai-model", help="OpenAI model when --ai-provider=openai; can also use SEARCHGEO_OPENAI_MODEL")
+    audit_parser.add_argument(
+        "--ai-provider",
+        choices=("none", "openai", "deepseek", "mimo", "auto"),
+        default="none",
+        help="semantic analysis provider or deterministic AUTO routing",
+    )
+    audit_parser.add_argument(
+        "--ai-model",
+        help="model override for an explicit provider; AUTO uses SEARCHGEO_<PROVIDER>_MODEL",
+    )
 
     return parser
 
 
 def _semantic_provider(args: argparse.Namespace):
-    if args.ai_provider == "none":
-        return NoneProvider()
-    model = (args.ai_model or os.environ.get("SEARCHGEO_OPENAI_MODEL") or "").strip()
-    if not model:
-        raise ValueError("--ai-model or SEARCHGEO_OPENAI_MODEL is required when --ai-provider=openai")
-    return OpenAIProvider(model=model)
+    if args.ai_provider == "auto" and args.ai_model:
+        raise ValueError("--ai-model cannot be used with --ai-provider=auto; configure per-provider SEARCHGEO_*_MODEL variables")
+    return build_semantic_provider(args.ai_provider, model_override=args.ai_model)
 
 
 def _audit_targets(args: argparse.Namespace) -> tuple[str, ...]:
