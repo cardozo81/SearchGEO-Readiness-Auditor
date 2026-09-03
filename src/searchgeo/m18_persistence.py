@@ -4,15 +4,35 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import logging
 import sqlite3
 from typing import Any
 
 from searchgeo.m18_ai import PRICING_CATALOG, ProviderAttempt
 from searchgeo.persistence import AuditWorkspace
 
+_LOGGER = logging.getLogger(__name__)
+
 
 def _dump(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+def _resolve_session_status(*, strategy: str, enabled: bool, audit_mode: str, provider_states: dict[str, str]) -> tuple[str, bool]:
+    """Resolve operational AI session status without confusing explicit-provider failure with AUTO chain exhaustion."""
+
+    chain_exhausted = (
+        strategy == "AUTO"
+        and bool(provider_states)
+        and all(value == "QUARANTINED_FOR_AUDIT" for value in provider_states.values())
+    )
+    if not enabled:
+        return "DISABLED", chain_exhausted
+    if chain_exhausted:
+        return "CHAIN_EXHAUSTED", chain_exhausted
+    if audit_mode == "FULL":
+        return "SUCCESS", chain_exhausted
+    return "DEGRADED", chain_exhausted
 
 
 @dataclass(frozen=True, slots=True)
@@ -309,19 +329,36 @@ def persist_provider_runtime(*, audit_id: str, provider: Any, workspace: AuditWo
                 device=str(row["device"]),
                 attempt=attempt,
             )
+            diagnostic = attempt.diagnostic
+            usage = attempt.usage
+            _LOGGER.info(
+                "AI attempt audit_id=%s url=%s device=%s provider=%s model=%s depth=%s status=%s duration_ms=%s input_tokens=%s cached_input_tokens=%s output_tokens=%s reasoning_tokens=%s estimated_cost=%s currency=%s error_class=%s",
+                audit_id,
+                str(row["normalized_url"]),
+                str(row["device"]),
+                attempt.provider,
+                attempt.model,
+                attempt.reasoning_profile,
+                attempt.status.value,
+                attempt.duration_ms,
+                usage.input_tokens if usage else None,
+                usage.cached_input_tokens if usage else None,
+                usage.output_tokens if usage else None,
+                usage.reasoning_tokens if usage else None,
+                attempt.estimated_cost,
+                attempt.cost_currency,
+                diagnostic.error_class.value if diagnostic and diagnostic.error_class else None,
+            )
 
         successes = [item for item in history if item.status.value == "SUCCESS"]
         strategy = str(snapshot.get("strategy") or "NONE")
         states = dict(snapshot.get("provider_states") or {})
-        chain_exhausted = bool(states) and all(value == "QUARANTINED_FOR_AUDIT" for value in states.values())
-        if not snapshot.get("enabled"):
-            status = "DISABLED"
-        elif chain_exhausted:
-            status = "CHAIN_EXHAUSTED"
-        elif audit_mode == "FULL":
-            status = "SUCCESS"
-        else:
-            status = "DEGRADED"
+        status, chain_exhausted = _resolve_session_status(
+            strategy=strategy,
+            enabled=bool(snapshot.get("enabled")),
+            audit_mode=audit_mode,
+            provider_states=states,
+        )
 
         effective_provider = snapshot.get("effective_provider")
         effective_model = snapshot.get("effective_model")
@@ -348,6 +385,16 @@ def persist_provider_runtime(*, audit_id: str, provider: Any, workspace: AuditWo
             successful_urls=dict(snapshot.get("successful_urls") or {}),
         )
         store.upsert_session(session)
+        _LOGGER.info(
+            "AI session audit_id=%s strategy=%s status=%s effective_provider=%s effective_model=%s attempts=%s successful_attempts=%s",
+            audit_id,
+            session.strategy,
+            session.status,
+            session.effective_provider,
+            session.effective_model,
+            len(history),
+            len(successes),
+        )
 
         if chain_exhausted:
             audit_row = store._connection.execute(
