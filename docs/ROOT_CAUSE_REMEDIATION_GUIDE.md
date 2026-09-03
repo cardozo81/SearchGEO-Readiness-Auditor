@@ -1,167 +1,110 @@
-# Guia de Causa Raiz e Remediação por Elemento
+# ROOT_CAUSE_REMEDIATION_GUIDE.md
 
-M16 adiciona uma camada de diagnóstico técnico sobre os findings já persistidos. Ela não recalcula Business Rules, Score, Coverage, Confidence, Consolidation, prioridade ou actionability.
+## Objetivo
 
-## Onde aparece
+M16/M17 transformam um finding evidence-backed em diagnóstico acionável sem alterar o resultado original da regra.
 
-Os dois relatórios do audit utilizam a mesma materialização `root_cause_analyses`:
-
-- `report.html` — diagnóstico dentro de cada finding da página;
-- `remediation.html` — diagnóstico por ocorrência dentro de cada problema agrupado.
-
-## Como interpretar a localização
-
-### ELEMENTO EXATO
-
-Existe um único `ElementObservation` associado com segurança ao finding.
-
-O relatório pode mostrar:
-
-- selector CSS observado;
-- tag/id/classes;
-- `outer_html` observado;
-- snapshot/device;
-- mudança exata recomendada.
-
-Exemplo conceitual:
+A projeção final fica em:
 
 ```text
-Escopo: EXACT_ELEMENT
-Selector: title
-Elemento: title
-Relação: EXACT
+report/remediation.html
 ```
 
-### CONJUNTO DE ELEMENTOS
+## Separação de conceitos
 
-A condição pertence ao conjunto/estrutura, não a um nó isolado.
+- **finding:** problema/alerta comprovado pela RuleExecution;
+- **root cause:** causa técnica materializada sobre as evidências existentes;
+- **precision:** reason code, elemento observado e alvo técnico preciso;
+- **recommendation:** ação priorizada;
+- **actionability:** se a evidência justifica ação, revisão, melhoria opcional ou nenhuma ação.
 
-Exemplos:
+Nenhum desses conceitos deve ser derivado apenas de `Confidence LOW` do score.
 
-- hierarquia de headings;
-- vários blocos JSON-LD igualmente relacionados à regra.
+## Dados M16
 
-O relatório lista os elementos observados relevantes com `relation=SET_MEMBER` e não escolhe um elemento arbitrário como causa única.
+`root_cause_analyses` registra, conforme disponível:
 
-### REGIÃO CONTEXTUAL
+- `finding_id`;
+- `rule_id`;
+- `cause_type`;
+- `affected_scope`;
+- `cause_summary`;
+- `evidence_basis`;
+- elementos afetados;
+- selector status;
+- observed value;
+- expected condition;
+- exact change;
+- example after;
+- acceptance criteria;
+- revalidation steps;
+- human decision required;
+- diagnostic confidence.
 
-A regra é semântica/editorial e o elemento observado apenas delimita onde o conteúdo foi avaliado.
+## Dados M17
 
-Exemplo:
+`root_cause_precision` complementa sem reescrever M16:
 
-```text
-Escopo: CONTENT_REGION
-Selector: main
-Relação: CONTEXT_REGION
-```
+- `reason_code`;
+- `precise_cause_summary`;
+- `observed_element_status`;
+- `observed_selector`;
+- `target_selector`;
+- `target_element`;
+- `target_location`.
 
-Isso **não** significa que a tag `<main>` esteja tecnicamente defeituosa. Significa que o conteúdo dentro dessa região sustenta a avaliação semântica.
+## Elemento observado × alvo técnico
 
-### DOCUMENTO / RECURSO GLOBAL
+Não confundir:
 
-HTTP, headers, `robots.txt`, sitemap e outras condições não DOM não recebem selector artificial.
+- **selector observado:** nó que realmente foi encontrado na evidência;
+- **target selector:** local/estrutura onde a correção deve ocorrer.
 
-```text
-Escopo: DOMAIN_RESOURCE
-Selector: NÃO APLICÁVEL
-```
+Quando o problema é ausência de um elemento, pode não existir selector observado, mas pode existir alvo técnico recomendado.
 
-Quando a causa é documental/conteúdo mas não há nó comprovável:
+## `report/remediation.html`
 
-```text
-Selector: NÃO DETERMINADO
-```
+A página final agrupa remediation groups e permite abrir cada ocorrência. Quando a materialização existe, mostra:
 
-## Causa raiz
-
-A causa raiz é materializada a partir de:
-
-```text
-RuleExecution.observed_value
-+ Finding
-+ Evidence
-+ ElementObservation(s), quando houver
-+ expected_condition da Business Rule
-+ RemediationRecipe
-```
-
-O texto não deve declarar fatos que não estejam sustentados por esse conjunto.
-
-## Observado versus esperado
-
-Cada diagnóstico mostra separadamente:
-
-- **Observado** — estado persistido pela execução da regra;
-- **Esperado** — condição que a Business Rule exige;
-- **Evidências-base** — IDs rastreáveis usados no diagnóstico.
-
-Essa distinção ajuda a equipe a verificar a causa antes de alterar o site.
-
-## Mudança exata recomendada
-
-A recomendação deriva da recipe determinística da regra e pode combinar:
-
-- tipo da ação;
+- causa precisa;
+- reason code;
+- escopo;
+- selector observado;
 - alvo técnico;
-- elemento/estrutura;
-- localização;
-- descrição da mudança;
-- exemplo pós-correção quando seguro;
-- decisão humana obrigatória quando necessária.
+- local esperado;
+- precisão diagnóstica;
+- mudança recomendada;
+- observado versus esperado;
+- exemplo pós-correção;
+- decisão humana;
+- critérios de aceite;
+- passos de revalidação.
 
-Exemplo conceitual para canonical ausente:
+## UNKNOWN / evidência insuficiente
 
-```text
-Ação: ADD_OR_CORRECT
-Alvo: Documento HTML
-Elemento/estrutura: <link rel="canonical">
-Local: <head>
-```
+`UNKNOWN` ou `ERROR` não devem gerar correção fictícia.
 
-A URL preferencial não é inventada pelo auditor. Quando a decisão depende da estratégia de canonicalização, o relatório exige decisão humana.
-
-## HTML observado
-
-`outer_html` aparece somente quando o elemento foi realmente persistido. O relatório escapa o HTML e não o executa.
-
-Quando não existe trecho capturado, a ferramenta não reconstrói um HTML fictício para parecer mais precisa.
-
-## Dados Estruturados
-
-Para `BR-GEO-034..037`, M16 prioriza os elementos:
-
-```css
-script[type="application/ld+json"]
-```
-
-Quando existe um único bloco relacionado, ele pode ser `EXACT`. Quando existem vários blocos igualmente relacionados, são mostrados como conjunto (`SET_MEMBER`). Essas regras não usam `<main>` como substituto genérico de localização.
-
-## Regras semânticas
-
-Regras de entidade, answerability, citation readiness, evidence/trust e intent coverage podem usar `<main>` como região contextual quando o snapshot contém esse elemento.
-
-O selector de contexto indica **onde a análise foi feita**, não necessariamente qual tag deve ser removida ou recriada.
-
-A correção vem da causa raiz + recipe e pode exigir alteração de conteúdo dentro da região.
-
-## Critério de aceite e revalidação
-
-Cada diagnóstico preserva:
-
-- critérios de aceite da recipe;
-- passos de revalidação;
-- decisão humana quando aplicável.
-
-A correção deve ser considerada concluída somente após nova auditoria confirmar que a condição da Business Rule foi satisfeita ou que a revisão contextual resultou em decisão intencional documentada.
-
-## Persistência
-
-M16 adiciona de forma aditiva a tabela SQLite:
+Actionability pode ficar:
 
 ```text
-root_cause_analyses
+INSUFFICIENT_EVIDENCE
 ```
 
-Há no máximo uma análise materializada por `finding_id`. Ela contém causa, escopo, elementos afetados, selector status, observado, esperado, mudança, exemplo, aceite, revalidação, decisão humana e confiança diagnóstica.
+Nesse caso a ação correta é melhorar a capacidade de diagnóstico, não inventar mudança no website.
 
-`diagnostic_confidence` mede a precisão da localização/causa do M16. Não é `Confidence` do modelo de scoring e não entra em `SCORE-GEO-001`.
+## Conteúdo semântico
+
+Quando uma regra semântica específica sustenta um finding, a remediação pode orientar clareza, contexto, atribuição, resposta à intenção etc.
+
+Isso não autoriza concluir que todo `Confidence LOW` requer reescrita. Confidence é reliability do auditor.
+
+Uma futura etapa opcional por IA poderá propor texto/local de inserção com base em findings e evidências, mas deve permanecer separada do scoring e desligada por padrão.
+
+## Fonte de verdade
+
+A página HTML não recalcula a causa. Ela projeta:
+
+```text
+audit.db
+└─ findings / root_cause_analyses / root_cause_precision / recommendations
+```
