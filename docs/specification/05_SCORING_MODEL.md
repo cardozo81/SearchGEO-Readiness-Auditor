@@ -3,6 +3,28 @@
 **Status:** APPROVED  
 **Scoring baseline:** SCORE-GEO-002
 
+## 0. Natureza metodológica e validade
+
+`SCORE-GEO-002` é um **índice proprietário e interno do SearchGEO Readiness Auditor**.
+
+O status `APPROVED` deste documento significa **aprovado como baseline normativo interno do projeto**. Não significa homologação, certificação, padronização ou validação por Google, OpenAI, Microsoft, Anthropic, NIST, W3C, schema.org ou qualquer outro mantenedor externo.
+
+As dimensões e regras do modelo são informadas por documentação pública de mecanismos de busca e IA, literatura técnica, práticas de Information Retrieval, SEO/GEO e requisitos observáveis dos produtos avaliados. Entretanto, na versão `SCORE-GEO-002`:
+
+- a fórmula de agregação é uma decisão metodológica interna;
+- os pesos entre dimensões são internos;
+- os fatores `PASS = 1.00`, `WARNING = 0.50` e `FAIL = 0.00` são heurísticos;
+- os thresholds de Coverage, Confidence e Consolidation são internos;
+- as faixas visuais 90/75/60/40 são internas;
+- o Overall Readiness 0–100 não deve ser apresentado como probabilidade de citação, ranking, tráfego, conversão ou inclusão em resposta generativa;
+- não existe, nesta versão, calibração estatística própria que demonstre que determinado Score corresponde a determinada probabilidade de presença/citação em mecanismos generativos.
+
+Portanto, o modelo deve ser descrito como **heurístico, determinístico, evidence-backed e reprodutível**, mas **não como score científico, padrão oficial de GEO/AEO ou índice externamente homologado**.
+
+Uma versão futura somente poderá ser descrita como `empiricamente calibrada` quando seus pesos, fatores e/ou thresholds forem derivados ou validados contra um conjunto observacional suficientemente representativo, com metodologia, amostra, métricas de validação, incerteza e limitações documentadas.
+
+Referências externas e alternativas de validação estão documentadas em `docs/SCORING_VALIDATION.md`.
+
 ## 1. Estrutura
 
 Todo resultado de score possui:
@@ -53,6 +75,8 @@ FAIL = 0.00
 
 warning_factor pode ser sobrescrito por regra e é versionado.
 
+Os fatores acima são parâmetros heurísticos do baseline interno, não coeficientes externamente calibrados.
+
 ## 5. Fórmula
 
 Dimension Score:
@@ -63,6 +87,8 @@ Dimension Score:
 × 100
 
 Apenas PASS, WARNING e FAIL participam do denominador do score.
+
+A forma matemática de média ponderada normalizada é convencional; a seleção das variáveis, dos pesos e dos fatores é específica do SearchGEO.
 
 ## 6. Coverage
 
@@ -146,6 +172,8 @@ Baseline algorítmica atual:
 - LOW: Coverage > 0 sem atender HIGH/MEDIUM;
 - UNAVAILABLE: Coverage <= 0.
 
+Os thresholds 90%/80% são parâmetros internos do `SCORE-GEO-002`; não representam thresholds oficiais de GEO/AEO definidos por mantenedor externo.
+
 `Confidence LOW` isoladamente **não pode gerar finding, recomendação nem ordem de reescrita de conteúdo**. Uma ação sobre conteúdo exige RuleExecution/finding evidence-backed que sustente a alteração.
 
 Confidence do LLM em uma SemanticAssessment não é automaticamente a Confidence final do auditor.
@@ -172,6 +200,8 @@ Confidence UNAVAILABLE
 Dimensão integralmente não aplicável:
 
 → NOT_APPLICABLE
+
+Os limites de consolidação constituem governança interna do auditor e devem permanecer versionados.
 
 ## 10. Sem IA
 
@@ -294,7 +324,7 @@ MVP:
 
 equal weight entre dimensões aplicáveis.
 
-Não inventar pesos “científicos” antes de calibração empírica.
+Pesos iguais são uma decisão de neutralidade do MVP, não resultado de calibração externa. Não atribuir pesos “científicos” antes de calibração empírica documentada.
 
 ## 21. Blockers
 
@@ -304,7 +334,7 @@ Um score relativamente alto não pode esconder um blocker crítico.
 
 ## 22. Classificação visual
 
-As faixas 90/75/60/40 usadas pela UI são **classificação interna de apresentação** do SearchGEO. Não constituem threshold oficial de GEO/AEO de qualquer mantenedor externo.
+As faixas 90/75/60/40 usadas pela UI são **classificação interna de apresentação** do SearchGEO. Não constituem threshold oficial de GEO/AEO de qualquer mantenedor externo e não devem ser convertidas em alegações de probabilidade de citação ou ranking.
 
 ## 23. Reprodutibilidade
 
@@ -318,3 +348,28 @@ Dadas:
 o score e a decisão de aplicabilidade devem poder ser recalculados sem reexecutar website ou IA.
 
 `BR-GEO-054` deve registrar `SCORE-GEO-002`.
+
+## 24. Evidência externa e calibração futura
+
+O SearchGEO deve diferenciar explicitamente três níveis de evidência:
+
+1. **Requisito/sinal externo oficial** — regra diretamente sustentada por documentação do mantenedor, por exemplo requisitos técnicos de elegibilidade do Google Search ou controles de crawler documentados.
+2. **Métrica externa calibrada/padronizada** — métrica cuja metodologia e referência quantitativa são externas, por exemplo Core Web Vitals, scoring de performance do Lighthouse ou métricas de Information Retrieval utilizadas por NIST/TREC.
+3. **Heurística SearchGEO** — agregação, peso ou threshold criado pelo produto e ainda não calibrado contra outcome externo.
+
+Métricas externas podem substituir ou complementar regras específicas quando medirem o mesmo fenômeno, mas não devem ser apresentadas como validação do Overall Readiness inteiro.
+
+Qualquer evolução para `SCORE-GEO-003` que altere pesos/fatores/thresholds com base empírica deve documentar, no mínimo:
+
+- outcome alvo, por exemplo presença, citação, posição/proeminência ou suporte factual;
+- engines e superfícies avaliadas;
+- conjunto de queries e critérios de amostragem;
+- repetições temporais e tratamento da variabilidade estocástica;
+- conjunto de treino/calibração separado do conjunto de validação;
+- métricas estatísticas e intervalos de confiança;
+- análise por domínio e por tipo de intenção;
+- prevenção de leakage e overfitting;
+- versão das engines/modelos e período de coleta;
+- limitações de generalização.
+
+Até essa calibração existir, `SCORE-GEO-002` permanece um índice interno de prontidão e não um estimador probabilístico de performance GEO observada.
