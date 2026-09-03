@@ -2,7 +2,7 @@
 
 Configuração operacional do SearchGEO Readiness Auditor.
 
-## Defaults da CLI
+## Defaults
 
 | Configuração | Default |
 |---|---|
@@ -12,68 +12,26 @@ Configuração operacional do SearchGEO Readiness Auditor.
 | `--audits-root` | `audits` |
 | `--device-context` | `mobile` |
 | `--ai-provider` | `none` |
+| `--ai-content-remediation` | `false` |
 | timeout IA | `180` s |
 
-## Contexto de dispositivo
+## Device context
 
-Variável:
+`SEARCHGEO_DEVICE_CONTEXT`: `mobile`, `desktop`, `both`. Precedência flag → ambiente → `mobile`.
 
-```text
-SEARCHGEO_DEVICE_CONTEXT
-```
+A seleção limita M3 e, por consequência, M7/M20 aos snapshots escolhidos. Chamada interna direta a M3 sem variável preserva `both` por compatibilidade interna.
 
-Valores:
+## Antes de configurar IA
 
-```text
-mobile
-desktop
-both
-```
+Não trate “tenho plano/créditos” como “tenho API utilizável”. Valide produto/plano, tipo de credencial, endpoint, saldo/quota/permissão/model access e termos do workload automatizado.
 
-Precedência:
-
-1. `--device-context`;
-2. `SEARCHGEO_DEVICE_CONTEXT`;
-3. `mobile`.
-
-Exemplos:
-
-```powershell
-searchgeo audit https://example.com --device-context mobile
-searchgeo audit https://example.com --device-context desktop
-searchgeo audit https://example.com --device-context both
-```
-
-```powershell
-$env:SEARCHGEO_DEVICE_CONTEXT = "mobile"
-searchgeo audit https://example.com
-```
-
-A seleção limita M3 aos snapshots escolhidos. M7 recebe apenas os snapshots existentes e, portanto, chamadas de IA são feitas somente para os dispositivos selecionados. `mobile` é o default para reduzir custo e tempo quando comparação Desktop × Mobile não é necessária.
-
-Chamadas internas diretas a M3 sem a variável continuam usando ambos os dispositivos por compatibilidade interna.
-
-## Configuração de IA
-
-### Regra antes de configurar uma chave
-
-Não trate “tenho plano/créditos no fornecedor” como equivalente a “tenho API utilizável pelo SearchGEO”. Valide sempre:
-
-1. produto/plano de API;
-2. tipo de credencial;
-3. endpoint correspondente;
-4. saldo/quota/permissão/model access;
-5. termos de uso aplicáveis ao workload automatizado.
-
-Resumo atual:
-
-| Provider | Configuração aceita no SearchGEO | Não confundir com |
+| Provider | Aceito | Não confundir |
 |---|---|---|
-| OpenAI | API key da OpenAI API Platform com billing/quota válidos | assinatura/créditos do ChatGPT, que possuem billing separado |
-| DeepSeek | API key da DeepSeek API com saldo concedido e/ou recarregado | existência da chave sem saldo disponível |
-| Xiaomi MiMo | chave Pay-as-you-go `sk-...` para `https://api.xiaomimimo.com/v1` | Token Plan `tp-...`, que usa Base URL dedicada e não é suportado/adequado ao auditor automatizado atual |
+| OpenAI | API key da API Platform com billing/quota | ChatGPT/Créditos ChatGPT, billing separado |
+| DeepSeek | DeepSeek API com saldo | chave sem saldo disponível |
+| MiMo | PAYG `sk-...` para `https://api.xiaomimimo.com/v1` | Token Plan `tp-...` com Base URL/créditos separados |
 
-Detalhes e fontes oficiais: [AI_GUIDE.md](AI_GUIDE.md).
+Detalhes: [AI_GUIDE.md](AI_GUIDE.md).
 
 ### Desabilitada
 
@@ -81,7 +39,7 @@ Detalhes e fontes oficiais: [AI_GUIDE.md](AI_GUIDE.md).
 searchgeo audit https://example.com --ai-provider none
 ```
 
-Nenhuma API externa é chamada.
+Nenhuma chamada externa; JSON-LD determinístico M20 continua disponível.
 
 ### OpenAI
 
@@ -90,9 +48,7 @@ $env:OPENAI_API_KEY = "<chave-da-API-Platform>"
 searchgeo audit https://example.com --ai-provider openai
 ```
 
-Default: `gpt-5.6-terra`.
-
-A assinatura ChatGPT, inclusive paga, não substitui billing da API Platform. A chave deve pertencer à organização/projeto de API com saldo/quota, limites de gasto e acesso ao modelo compatíveis.
+Default `gpt-5.6-terra`.
 
 ### DeepSeek
 
@@ -101,52 +57,50 @@ $env:DEEPSEEK_API_KEY = "<chave-da-DeepSeek-API>"
 searchgeo audit https://example.com --ai-provider deepseek
 ```
 
-Default: `deepseek-v4-pro`.
+Default `deepseek-v4-pro`.
 
-O saldo total da API pode incluir `granted_balance` e `topped_up_balance`. `HTTP 402` representa saldo insuficiente da conta de API.
-
-### Xiaomi MiMo
-
-Modo suportado atualmente:
+### MiMo
 
 ```powershell
 $env:MIMO_API_KEY = "<chave-sk-PAYG>"
 searchgeo audit https://example.com --ai-provider mimo
 ```
 
-Default: `mimo-v2.5-pro`.
-
-O adapter atual usa:
-
-```text
-https://api.xiaomimimo.com/v1/responses
-```
-
-Portanto `MIMO_API_KEY` deve ser uma credencial MiMo Pay-as-you-go `sk-...` com saldo PAYG.
-
-**Não configure uma chave Token Plan `tp-...` em `MIMO_API_KEY`.** O Token Plan usa Base URL dedicada por região, possui créditos independentes do PAYG e não é suportado pelo SearchGEO atual. A documentação oficial da MiMo também restringe esse pacote a ferramentas de programação e proíbe automated scripts/custom application backends fora desse escopo.
+Default `mimo-v2.5-pro`; adapter PAYG em `https://api.xiaomimimo.com/v1/responses`. Não configure Token Plan `tp-...`.
 
 ### AUTO
 
-```powershell
-$env:OPENAI_API_KEY = "<chave-da-API-Platform>"
-$env:DEEPSEEK_API_KEY = "<chave-da-DeepSeek-API>"
-$env:MIMO_API_KEY = "<chave-sk-PAYG>"
-searchgeo audit https://example.com --ai-provider auto
-```
+Somente providers elegíveis/configurados entram na cadeia imutável. Primeiro resultado válido encerra contexto; falha qualificadora pode quarantinar provider.
 
-O AUTO:
+## Isolamento de credenciais
 
-- considera somente providers com token e configuração válida;
-- fixa a cadeia no início do audit;
-- chama sequencialmente;
-- para no primeiro resultado válido do contexto;
-- não permite que provider posterior sobrescreva o resultado aceito;
-- quarantina provider após falha qualificadora.
+Cada adapter usa exclusivamente a credencial do próprio provider. `OPENAI_API_KEY` não pode preencher ausência de `DEEPSEEK_API_KEY`/`MIMO_API_KEY`, e vice-versa.
 
-O runtime atual não valida preventivamente todos os produtos/planos comerciais externos. Em especial, uma chave MiMo `tp-...` pode existir na variável e ainda assim ser incompatível com o endpoint atual. Por isso a validação de plano acima é requisito operacional do usuário.
+## M20 textual
 
-## Modelos suportados
+`SEARCHGEO_AI_CONTENT_REMEDIATION`, default `false`; aceita `true/false`, `1/0`, `yes/no`, `on/off`.
+
+Precedência: flags `--ai-content-remediation`/`--no-ai-content-remediation` → ambiente → `false`.
+
+M20:
+
+- roda depois de findings/scoring;
+- não altera RuleExecution/Finding/Score/Coverage/Confidence;
+- não é disparado por Confidence LOW isolado;
+- usa apenas findings contentuais/semânticos elegíveis + evidências;
+- exige revisão humana;
+- não aplica/publica texto;
+- reutiliza provider/model/reasoning/timeout e respeita quarantine.
+
+Com `--ai-provider none`, M20 textual fica `NOT_CONFIGURED` sem abortar; JSON-LD determinístico permanece.
+
+## JSON-LD
+
+Para cada snapshot auditado, M20 revisa Structured Data. Se ausente, pode propor `WebPage` com URL, idioma, title e description efetivamente observados. Se existente, aponta problemas verificáveis sem reescrever destrutivamente o graph.
+
+JSON-LD é opcional/reforço, não requisito universal GEO nem garantia de rich result.
+
+## Modelos
 
 ```text
 OPENAI:   gpt-5.6-sol | gpt-5.6-terra | gpt-5.6-luna
@@ -154,89 +108,17 @@ DEEPSEEK: deepseek-v4-pro | deepseek-v4-flash
 MIMO:     mimo-v2.5-pro | mimo-v2.5
 ```
 
-`--ai-model` funciona somente para provider explícito. Em `auto`, use as variáveis de modelo específicas.
+Model ID aceito não garante acesso da conta/plano.
 
-Model ID suportado pelo SearchGEO não garante que a conta/plano externo possua acesso operacional ao modelo. Permissões, tiers, quotas e limites do provider podem variar.
+## Timeout
 
-## Variáveis de provider
+`SEARCHGEO_AI_TIMEOUT_SECONDS`, default 180 s, número finito > 0. Sem retry automático. M20 reutiliza o timeout do provider.
 
-```text
-OPENAI_API_KEY
-DEEPSEEK_API_KEY
-MIMO_API_KEY
+## Provider sem credencial
 
-SEARCHGEO_OPENAI_MODEL
-SEARCHGEO_DEEPSEEK_MODEL
-SEARCHGEO_MIMO_MODEL
-```
+Provider explícito: `NOT_CONFIGURED`, zero chamada; chaves de outros providers não interferem. AUTO exclui provider sem chave. Credencial de produto incompatível não é configuração operacional válida.
 
-Nunca versionar as chaves.
-
-## Timeout de IA
-
-```text
-SEARCHGEO_AI_TIMEOUT_SECONDS
-```
-
-Default da CLI:
-
-```text
-180
-```
-
-Exemplo:
-
-```powershell
-$env:SEARCHGEO_AI_TIMEOUT_SECONDS = "240"
-```
-
-Deve ser número finito > 0. Com `--ai-provider none`, não existe chamada externa e o timeout não tem efeito prático. Timeout não gera retry automático.
-
-## Provider selecionado sem credencial
-
-Provider explícito:
-
-- fica `NOT_CONFIGURED`;
-- nenhuma chamada externa é realizada;
-- a auditoria segue com capacidade semântica reduzida;
-- ausência das chaves dos outros providers não interfere.
-
-AUTO:
-
-- provider sem chave não entra na cadeia;
-- se nenhum for elegível, nenhuma chamada externa é feita.
-
-Uma variável existente com credencial do produto errado não equivale a configuração válida do ponto de vista comercial/operacional. Exemplo: `MIMO_API_KEY=tp-...` não é configuração suportada pelo SearchGEO atual.
-
-## Dispositivo × IA
-
-Para uma auditoria de uma página:
-
-```text
-mobile  -> no máximo um contexto semântico externo da página
-desktop -> no máximo um contexto semântico externo da página
-both    -> até dois contextos, Mobile e Desktop
-```
-
-O número real depende de snapshots disponíveis, provider habilitado, quarantine, URL lock e resultados anteriores.
-
-Essa seleção é a principal configuração para evitar custo de IA de um dispositivo que não precisa ser analisado.
-
-## Logging
-
-O `--config PATH` aponta para `searchgeo.toml` usado pelo módulo atual de logging. API keys e Authorization não devem ser gravados.
-
-A baseline não materializa `audit.log` automaticamente. Os dados persistentes da auditoria ficam em:
-
-```text
-audit.db
-artifacts/
-report/
-```
-
-## Report site
-
-Estrutura:
+## Report
 
 ```text
 report/
@@ -244,27 +126,12 @@ report/
 ├─ mobile.html
 ├─ desktop.html
 ├─ remediation.html
+├─ content-suggestions.html
 ├─ ai-usage.html
 ├─ references.html
-└─ css/
-   └─ site.css
+└─ css/site.css
 ```
 
-`mobile.html` e `desktop.html` somente são materializados quando o dispositivo correspondente foi auditado.
+## Fora do contrato público
 
-A telemetria de IA fica em `ai-usage.html`; não é misturada aos findings do website.
-
-## Configurações não expostas como promessa de produto
-
-Não há atualmente configuração pública para:
-
-- serviço web/backend;
-- banco remoto;
-- Docker daemon;
-- execução distribuída;
-- retry automático de IA;
-- geração automática de conteúdo por IA;
-- Base URL customizada de provider pela CLI;
-- uso do Xiaomi MiMo Token Plan `tp-...`.
-
-A futura sugestão opcional de conteúdo por IA está fora do baseline atual e deve permanecer desligada por padrão quando implementada.
+Sem web/backend, banco remoto, Docker daemon, execução distribuída, retry automático, publicação automática de conteúdo, criação automática de JSON-LD no website, Base URL customizada por CLI ou MiMo Token Plan `tp-...`.

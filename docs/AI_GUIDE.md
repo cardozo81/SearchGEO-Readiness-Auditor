@@ -1,79 +1,49 @@
 # AI_GUIDE.md
 
-Guia de uso da camada semântica opcional do SearchGEO.
+Guia da análise semântica M18/M7 e da remediação textual opcional M20.
 
 ## Princípio
 
-IA externa é capacidade complementar. O auditor permanece funcional sem IA.
+IA externa é complementar. Falha, quota, timeout, credencial ausente ou provider indisponível é limitação operacional do auditor; **não é finding do website**.
 
-Falha, indisponibilidade, quota, timeout ou credencial ausente de um provider é limitação operacional da auditoria; **não é finding do website**.
+Há duas finalidades distintas:
 
-A compatibilidade do SearchGEO é definida pela combinação **provider + produto/plano de API + tipo de credencial + endpoint + modelo**, e não apenas pelo nome comercial da IA. Ter uma assinatura, créditos ou acesso interativo a um produto do fornecedor não significa automaticamente possuir saldo ou autorização para uso via API no SearchGEO.
+1. **M18/M7:** análise semântica que pode materializar assessments/entidades/intents usados pelas regras;
+2. **M20:** remediação textual advisory, executada depois de findings/scoring e incapaz de alterar retroativamente a avaliação.
+
+A revisão/proposta JSON-LD de M20 é determinística e não depende de API externa.
 
 ## Compatibilidade de produto, plano e credencial
 
-Estado documentado em 2026-09-03:
+Compatibilidade = **provider + produto/plano de API + credencial + endpoint + modelo**.
 
-| Provider | Produto/plano do fornecedor | Credencial / cobrança | SearchGEO atual | Limitação principal |
-|---|---|---|---|---|
-| OpenAI | API Platform — prepaid, pay-as-you-go/automatic card ou contrato Enterprise API/Scale Tier quando aplicável | API key da organização/projeto; faturamento da API | **Suportado**, desde que a organização/projeto tenha acesso ao modelo, saldo/quota e limites de gasto compatíveis | ChatGPT e API possuem faturamento separado; limites de organização/projeto/modelo continuam valendo |
-| OpenAI | ChatGPT Free/Go/Plus/Pro/Business/Enterprise/Edu e créditos de recursos do ChatGPT/Codex | assinatura/créditos do produto ChatGPT | **Não são saldo de API para o SearchGEO** | assinatura ou crédito do ChatGPT não substitui billing da API Platform |
-| DeepSeek | DeepSeek API | API key; saldo concedido (`granted`) e/ou recarregado (`topped-up`) | **Suportado** | 402 indica saldo total insuficiente; limites de concorrência são aplicados no nível da conta |
-| Xiaomi MiMo | Pay-as-you-go API | chave `sk-...`; Base URL padrão `https://api.xiaomimimo.com/v1` | **Suportado** | requer saldo PAYG e acesso ao modelo; créditos de Token Plan não financiam esta chave |
-| Xiaomi MiMo | Token Plan | chave `tp-...`; Base URL dedicada por região (`token-plan-...`) | **Não suportado pelo SearchGEO atual e não deve ser usado** | é um produto separado; a MiMo restringe o pacote a ferramentas de programação e proíbe uso em automated scripts/custom application backends fora desse escopo |
+| Provider | Produto/plano | SearchGEO atual | Limitação principal |
+|---|---|---|---|
+| OpenAI | API Platform com API key da organização/projeto e billing/quota/model access | **Suportado** | billing de ChatGPT e API é separado |
+| OpenAI | ChatGPT Free/Go/Plus/Pro/Business/Enterprise/Edu e créditos do produto ChatGPT/Codex | **Não são saldo de API** | assinatura/crédito interativo não substitui billing da API |
+| DeepSeek | DeepSeek API com `granted_balance` e/ou `topped_up_balance` | **Suportado** | `402` indica saldo insuficiente |
+| Xiaomi MiMo | PAYG, chave `sk-...`, `https://api.xiaomimimo.com/v1` | **Suportado** | exige saldo PAYG e acesso ao modelo |
+| Xiaomi MiMo | Token Plan `tp-...`, Base URL `token-plan-...` | **Não suportado / não usar** | produto, endpoint e créditos independentes; termos/restrições próprios |
 
-### Regra operacional
+Antes de habilitar um provider, confirme produto/plano, credencial, endpoint, saldo/quota/permissões e acesso ao modelo. Não altere endpoint/credencial para contornar restrições comerciais ou de uso.
 
-Antes de habilitar um provider, confirme quatro itens:
+Fontes oficiais de plano/billing:
 
-1. o produto/plano comprado realmente cobre **API programática** para o caso de uso do SearchGEO;
-2. a credencial pertence a esse produto/plano;
-3. o endpoint usado pelo SearchGEO corresponde à credencial;
-4. saldo, quota, permissões, limites de gasto e acesso ao modelo estão disponíveis.
+- OpenAI: <https://help.openai.com/en/articles/9039756-managing-billing-settings-on-chatgpt-web-and-platform>
+- OpenAI API limits: <https://help.openai.com/en/articles/6614457>
+- DeepSeek pricing: <https://api-docs.deepseek.com/quick_start/pricing/>
+- DeepSeek balance: <https://api-docs.deepseek.com/api/get-user-balance/>
+- MiMo Token Plan: <https://mimo.mi.com/docs/en-US/tokenplan/Token%20Plan/subscription>
+- MiMo `tp-...` × `sk-...`: <https://mimo.mi.com/docs/en-US/tokenplan/Token%20Plan/quick-access>
+- MiMo errors: <https://mimo.mi.com/docs/en-US/api/guidance/error-codes>
 
-O SearchGEO não tenta converter automaticamente uma assinatura interativa em acesso de API e não deve contornar restrições comerciais ou de uso do fornecedor.
-
-### Fontes oficiais de plano/billing
-
-- OpenAI — billing de ChatGPT e API são separados: <https://help.openai.com/en/articles/9039756-managing-billing-settings-on-chatgpt-web-and-platform>
-- OpenAI — diagnóstico de saldo/limites de API: <https://help.openai.com/en/articles/6614457>
-- DeepSeek — pricing e regras de dedução: <https://api-docs.deepseek.com/quick_start/pricing/>
-- DeepSeek — saldo de API: <https://api-docs.deepseek.com/api/get-user-balance/>
-- Xiaomi MiMo — Token Plan e restrições de uso: <https://mimo.mi.com/docs/en-US/tokenplan/Token%20Plan/subscription>
-- Xiaomi MiMo — diferenças entre `tp-...` e `sk-...`: <https://mimo.mi.com/docs/en-US/tokenplan/Token%20Plan/quick-access>
-- Xiaomi MiMo — códigos 401/402/429: <https://mimo.mi.com/docs/en-US/api/guidance/error-codes>
-
-Planos, preços, limites e termos externos podem mudar. A documentação oficial do provider prevalece sobre exemplos históricos do SearchGEO.
+Planos/termos externos podem mudar; a documentação do provider prevalece.
 
 ## Dispositivo e custo
 
-A CLI usa Mobile por padrão:
+Default CLI: `mobile`. Valores: `mobile`, `desktop`, `both`.
 
-```text
---device-context mobile
-```
-
-Valores:
-
-```text
-mobile
-desktop
-both
-```
-
-A seleção acontece antes do rendering. M7 analisa somente snapshots existentes. Consequência prática:
-
-- `mobile`: nenhuma chamada semântica Desktop;
-- `desktop`: nenhuma chamada semântica Mobile;
-- `both`: os dois contextos quando disponíveis.
-
-Para auditoria inicial com IA, `mobile` é a opção de menor custo entre os modos que executam análise de página.
-
-Variável equivalente:
-
-```powershell
-$env:SEARCHGEO_DEVICE_CONTEXT = "mobile"
-```
+M7 e M20 só trabalham em snapshots materializados. Logo `mobile` não gera chamada Desktop e vice-versa; `both` pode gerar dois contextos por página/finalidade.
 
 ## Sem IA
 
@@ -81,13 +51,7 @@ $env:SEARCHGEO_DEVICE_CONTEXT = "mobile"
 searchgeo audit https://example.com --ai-provider none
 ```
 
-Com `none`:
-
-- nenhuma chamada externa;
-- regras determinísticas continuam;
-- regras semantic-only sem base suficiente ficam `UNKNOWN`;
-- Coverage/Consolidation podem reduzir;
-- o website não recebe FAIL por ausência de provider.
+Nenhuma chamada externa. Regras semânticas sem base suficiente podem ficar `UNKNOWN`; isso não vira FAIL. A revisão JSON-LD determinística continua em `report/content-suggestions.html`.
 
 ## OpenAI
 
@@ -96,35 +60,9 @@ $env:OPENAI_API_KEY = "<chave-da-API-Platform>"
 searchgeo audit https://example.com --ai-provider openai
 ```
 
-Default:
+Default: `gpt-5.6-terra` / `HIGH`. Modelos: `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`.
 
-```text
-model: gpt-5.6-terra
-reasoning: HIGH
-```
-
-Modelos aceitos:
-
-```text
-gpt-5.6-sol
-gpt-5.6-terra
-gpt-5.6-luna
-```
-
-### Limitações de plano OpenAI
-
-O SearchGEO usa a **OpenAI API Platform**. Uma assinatura ChatGPT, inclusive paga, não transfere automaticamente saldo para a API. Créditos adquiridos para recursos do ChatGPT/Codex também não devem ser tratados como créditos de API.
-
-Mesmo com billing de API ativo, uma chamada pode falhar por:
-
-- saldo pré-pago esgotado;
-- limite de gasto da organização;
-- limite de gasto do projeto;
-- limite de uso aprovado;
-- rate limit;
-- ausência de acesso/permissão ao modelo configurado.
-
-Portanto, validar apenas que “há uma assinatura OpenAI” é insuficiente; é necessário validar o billing e os limites da **organização/projeto de API** associados à chave usada pelo SearchGEO.
+Uma assinatura ChatGPT não transfere saldo para a API. Mesmo com billing ativo, a chamada pode falhar por saldo, limites da organização/projeto, rate limit ou ausência de acesso ao modelo.
 
 ## DeepSeek
 
@@ -133,244 +71,110 @@ $env:DEEPSEEK_API_KEY = "<chave-da-DeepSeek-API>"
 searchgeo audit https://example.com --ai-provider deepseek
 ```
 
-Modelos:
-
-```text
-deepseek-v4-pro
-deepseek-v4-flash
-```
-
-Default `deepseek-v4-pro` / `HIGH`.
-
-A qualificação SearchGEO permanece `PROVISIONAL`.
-
-### Limitações de plano DeepSeek
-
-O SearchGEO usa a DeepSeek API padrão. O saldo disponível pode conter `granted_balance` e `topped_up_balance`; a documentação oficial informa que ambos compõem o saldo total e que o saldo concedido é consumido primeiro quando disponível.
-
-`HTTP 402` significa saldo insuficiente da conta de API. A existência de uma API key, isoladamente, não garante saldo disponível. Limites de concorrência são aplicados no nível da conta, independentemente de qual API key seja usada.
-
-Não há no contrato atual do SearchGEO um modo alternativo de assinatura DeepSeek com endpoint próprio. Se o fornecedor introduzir produto/plano com credencial ou Base URL diferente, ele deve ser tratado como **não homologado** até documentação e validação específicas.
+Default `deepseek-v4-pro` / `HIGH`; `deepseek-v4-flash` também é aceito. Qualificação SearchGEO `PROVISIONAL`.
 
 ## Xiaomi MiMo
 
-### Pay-as-you-go — modo suportado
+Modo suportado:
 
 ```powershell
-$env:MIMO_API_KEY = "<chave-sk-...>"
+$env:MIMO_API_KEY = "<chave-sk-PAYG>"
 searchgeo audit https://example.com --ai-provider mimo
 ```
 
-Modelos:
+Default `mimo-v2.5-pro` / `THINKING_ENABLED`; `mimo-v2.5` também é aceito. Endpoint atual: `https://api.xiaomimimo.com/v1/responses`.
 
-```text
-mimo-v2.5-pro
-mimo-v2.5
-```
+**Não use Token Plan `tp-...`.** Ele possui Base URL e créditos separados. `tp-...` no endpoint PAYG pode resultar em `401`; `sk-...` com saldo PAYG insuficiente pode resultar em `402`.
 
-Default `mimo-v2.5-pro` / `THINKING_ENABLED`.
+## Isolamento de credenciais
 
-A qualificação SearchGEO permanece `PROVISIONAL`.
+Cada provider usa somente sua própria credencial. Ausência de `DEEPSEEK_API_KEY` ou `MIMO_API_KEY` nunca autoriza fallback para `OPENAI_API_KEY`. O mesmo princípio vale para testes: fixtures de ausência de token neutralizam credenciais reais do ambiente para impedir chamadas pagas acidentais.
 
-O adapter atual usa o endpoint Pay-as-you-go:
+## Provider explícito e AUTO
 
-```text
-https://api.xiaomimimo.com/v1/responses
-```
+Provider explícito não faz cross-provider fallback. Uma falha qualificadora pode colocar o provider em `QUARANTINED_FOR_AUDIT`.
 
-Logo, a credencial operacional esperada é uma chave MiMo Pay-as-you-go no formato `sk-...`, com saldo PAYG disponível.
+`auto` cria uma cadeia imutável com providers elegíveis/configurados. O primeiro resultado válido encerra o contexto; provider falho pode ser quarantined. URL lock evita completar a mesma URL com provedores diferentes depois de pinning válido.
 
-### Token Plan `tp-...` — não usar no SearchGEO atual
-
-O MiMo Token Plan é um produto separado. Ele usa:
-
-```text
-API key: tp-...
-Base URL: https://token-plan-<região>.xiaomimimo.com/v1
-```
-
-A MiMo informa que `tp-...` e `sk-...` são independentes e não podem ser misturados. O Token Plan também possui Base URL dedicada por região.
-
-**O SearchGEO atual não implementa seleção desse Base URL e não deve receber uma chave `tp-...`.** Além da incompatibilidade técnica atual, a documentação oficial do Token Plan restringe o pacote a ferramentas de programação e proíbe chamadas de automated scripts/custom application backends fora desse escopo. O SearchGEO é um auditor automatizado; portanto o Token Plan não deve ser usado como forma de financiar as chamadas do produto sem autorização explícita do fornecedor que cubra esse caso de uso.
-
-Consequências práticas:
-
-- `tp-...` no endpoint PAYG pode retornar `401` por mistura de Token Plan e Pay-as-you-go;
-- `sk-...` no endpoint PAYG pode retornar `402` quando o saldo PAYG estiver insuficiente;
-- créditos exibidos no Token Plan não são saldo da chave PAYG `sk-...`;
-- mudar apenas a chave sem mudar o produto de billing não transfere créditos entre os dois modos.
-
-Não alterar endpoint/credencial para contornar restrição de plano.
-
-## Provider explícito
-
-Quando um provider é selecionado explicitamente:
-
-- somente ele pode atender a análise;
-- ausência das chaves dos outros providers não interfere;
-- não existe cross-provider fallback;
-- após falha qualificadora, o provider pode ficar `QUARANTINED_FOR_AUDIT`;
-- não há retries sucessivos em novas URLs após quarantine.
-
-Provider explícito sem token fica `NOT_CONFIGURED` e não realiza chamada.
-
-## AUTO
-
-```powershell
-searchgeo audit https://example.com --ai-provider auto
-```
-
-A cadeia é construída uma vez com providers elegíveis. Providers sem token ou configuração inválida são excluídos.
-
-Default de preferência para os modelos default:
-
-```text
-OpenAI gpt-5.6-terra
-→ DeepSeek deepseek-v4-pro
-→ MiMo mimo-v2.5-pro
-```
-
-A ordem é política SearchGEO, não benchmark científico universal.
-
-No caso MiMo, “configurado” deve ser entendido operacionalmente como credencial PAYG `sk-...` adequada ao endpoint suportado. O runtime atual não faz validação preventiva do prefixo da chave; por isso a documentação deve ser seguida antes de configurar `MIMO_API_KEY`.
-
-### Fluxo de uma tentativa
-
-1. selecionar primeiro provider saudável da cadeia;
-2. fazer uma chamada estruturada;
-3. validar resposta/contrato/evidências;
-4. se válida, aceitar e encerrar o contexto;
-5. se falhar de forma qualificadora, quarantinar e tentar próximo provider quando permitido.
-
-**Um resultado válido não é sobrescrito por providers posteriores.**
-
-## URL lock
-
-Quando uma URL recebe primeiro resultado válido, o provider fica associado àquela URL para consistência entre contextos.
-
-Se o mesmo provider falhar no segundo dispositivo da mesma URL em `both`, outro provider não completa essa URL com semântica de fornecedor diferente. O contexto faltante permanece degradado/UNKNOWN e o provider pode ser quarantined para URLs seguintes.
-
-Em modo `mobile` ou `desktop`, existe apenas um contexto por URL e esse caso não ocorre dentro da mesma execução.
+Preferência default: OpenAI `gpt-5.6-terra` → DeepSeek `deepseek-v4-pro` → MiMo `mimo-v2.5-pro`.
 
 ## Timeout
 
-Variável:
+`SEARCHGEO_AI_TIMEOUT_SECONDS`, default CLI `180`. Deve ser número finito > 0. Não há retry automático após timeout, evitando consumo potencialmente duplicado.
 
-```text
-SEARCHGEO_AI_TIMEOUT_SECONDS
-```
+## M20 — remediação textual opcional
 
-Default CLI:
-
-```text
-180
-```
-
-Exemplo:
+Default **OFF**.
 
 ```powershell
-$env:SEARCHGEO_AI_TIMEOUT_SECONDS = "240"
+searchgeo audit https://example.com `
+  --ai-provider openai `
+  --ai-content-remediation
 ```
 
-Número finito > 0.
+ou:
 
-Não há retry automático após timeout. A API pode ter recebido/processado a chamada mesmo quando o cliente local expirou; repetir automaticamente poderia duplicar consumo.
+```powershell
+$env:SEARCHGEO_AI_CONTENT_REMEDIATION = "true"
+```
 
-## Classes operacionais de erro
+Precedência: flag CLI → ambiente → `false`.
 
-O runtime normaliza falhas como, conforme o caso:
+M20 recebe somente estado persistido da página/snapshot/device: URL, title, conteúdo principal limitado, findings contentuais/semânticos elegíveis, observed/expected e suas evidências.
 
-- autenticação;
-- quota/crédito;
-- rate limit;
-- modelo/permissão;
-- rede;
-- timeout;
-- servidor;
-- contrato/resposta inválida/vazia.
+`Confidence LOW` isolado **não é gatilho**.
 
-Mensagem sensível do provider não deve ser copiada integralmente ao report.
+Uma sugestão aceita contém `finding_id`, objetivo, local sugerido, texto exato proposto, `evidence_ids`, confidence da sugestão, review note e provider/model.
 
-Antes de interpretar um erro como “sem créditos”, confirme também produto/plano, tipo de chave e endpoint. Em especial, no MiMo, `401` pode indicar mistura Token Plan/PAYG e `402` representa saldo insuficiente do modo de cobrança efetivamente chamado.
+### Segurança factual
 
-## Evidência
+O contrato proíbe keyword stuffing, word count arbitrário, reescrita só “para IA”, chunking artificial, fake freshness e claims/preços/datas/estatísticas/garantias/credenciais/experiência/fontes inventadas.
 
-A resposta do provider só é aceita se satisfizer o contrato estruturado e referenciar evidências válidas do contexto fornecido. Evidência inventada degrada a análise para estado semântico inválido/UNKNOWN; não é usada para criar FAIL.
+A validação local rejeita finding/evidence IDs fora do universo fornecido e novos tokens numéricos não sustentados pelo conteúdo/evidência. Isso é contenção adicional; revisão humana continua obrigatória.
+
+Falha M20 não altera Score/findings e não invalida o audit. M20 não reativa provider quarantined.
+
+## JSON-LD por página
+
+### Ausente
+
+M20 pode propor um baseline conservador:
+
+```json
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "url": "<canonical-ou-url-normalizada>",
+  "inLanguage": "pt-BR",
+  "name": "<title-observado>",
+  "description": "<description-observada>"
+}
+```
+
+Campos sem evidência são omitidos. `mainEntity` só é usado quando sustentado de forma inequívoca.
+
+### Existente
+
+Não há substituição destrutiva. A revisão pode apontar parse errors, blocos idênticos duplicados, ausência global de `@context`, nós sem `@type`, propriedades genéricas ausentes de `WebPage` quando seus valores já são conhecidos e necessidade de validar propriedades específicas do tipo.
+
+JSON-LD é **opcional/reforço**, não requisito universal GEO nem garantia de rich result. Structured Data deve corresponder ao conteúdo visível.
+
+Referências: Google structured data policies/introduction, Schema.org e Google AI optimization guide.
 
 ## Confidence
 
-A confidence retornada pelo provider em uma avaliação semântica individual **não é automaticamente a Confidence do SCORE-GEO-002**.
-
-Da mesma forma, `Confidence LOW` no score não deve disparar, sozinha, uma recomendação para reescrever conteúdo. Alteração de conteúdo deve ser sustentada por RuleExecution/finding e evidência específica.
+Confidence do SCORE-GEO-002 é força da conclusão do auditor, não qualidade textual. Confidence de assessment do provider é outra grandeza. Nenhuma delas, sozinha, autoriza reescrita.
 
 ## Telemetria
 
-A saída final fica em:
+`report/ai-usage.html` separa tentativas M18 e M20. Quando disponíveis mostra provider/model, URL/device, status, tokens, duração, custo estimado e erro sanitizado.
 
-```text
-report/ai-usage.html
-```
+SQLite M18: `ai_audit_sessions`, `ai_provider_attempts`, `provider_pricing_catalog`.
 
-A página pode mostrar:
+SQLite M20: `content_remediation_runs`, `content_remediation_attempts`, `content_remediation_suggestions`, `jsonld_remediation_suggestions`.
 
-- IA habilitada;
-- estratégia;
-- provider/model efetivo;
-- status;
-- cadeia inicial;
-- URL/device por tentativa;
-- input/output/reasoning tokens;
-- duração;
-- custo estimado;
-- erro sanitizado.
-
-No SQLite:
-
-```text
-ai_audit_sessions
-ai_provider_attempts
-provider_pricing_catalog
-```
-
-O `ESTIMATED_COST` não é invoice e não identifica automaticamente qual produto/plano comercial externo está financiando a chamada.
-
-## Separação do readiness
-
-`report/index.html`, `mobile.html` e `desktop.html` apresentam qualidade/readiness do website.
-
-`report/ai-usage.html` apresenta funcionamento do provider.
-
-Essa separação é deliberada: provider indisponível reduz o que o auditor consegue concluir, mas não é defeito do conteúdo auditado.
+`ESTIMATED_COST` não é invoice.
 
 ## Segurança
 
-Nunca persistir:
-
-- API key;
-- Authorization;
-- body integral com segredo;
-- resposta de erro não sanitizada quando puder conter informação sensível.
-
-Validação de presença:
-
-```powershell
-Test-Path Env:OPENAI_API_KEY
-Test-Path Env:DEEPSEEK_API_KEY
-Test-Path Env:MIMO_API_KEY
-```
-
-Presença da variável não prova compatibilidade do plano. Para MiMo, valide também que a chave destinada ao SearchGEO é PAYG (`sk-...`) e não Token Plan (`tp-...`). Não imprima a chave completa para diagnosticar prefixo ou existência.
-
-## Conteúdo gerado por IA
-
-O baseline atual **não gera texto para publicação**.
-
-Uma evolução posterior está no backlog para, opcionalmente e com default OFF, sugerir texto/local de inserção com base em findings semânticos. Essa capacidade não deve:
-
-- alterar automaticamente o site;
-- recalcular score retrospectivamente;
-- transformar sugestão em finding;
-- ser acionada apenas por Confidence LOW;
-- produzir texto artificial “para IA” sem benefício real ao usuário.
-
-Isso também mantém alinhamento com o guia do Google de 2026, que não exige reescrever conteúdo especificamente para sistemas generativos.
+Nunca persistir API key, Authorization ou erro bruto sensível. Presença da variável não prova compatibilidade do plano.

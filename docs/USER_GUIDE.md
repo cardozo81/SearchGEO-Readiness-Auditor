@@ -3,264 +3,100 @@
 ## Fluxo recomendado
 
 1. instalar Python 3.13, package, Playwright e Chromium;
-2. escolher o universo de URLs;
-3. escolher o contexto de dispositivo;
-4. decidir se IA será usada;
+2. escolher URLs;
+3. escolher `mobile`, `desktop` ou `both`;
+4. decidir se análise semântica por IA será usada;
 5. se usar IA, confirmar produto/plano, credencial, endpoint, saldo/quota e acesso ao modelo;
-6. executar a auditoria;
-7. abrir `report/index.html`;
-8. navegar para Mobile/Desktop, remediações, IA ou referências conforme a necessidade.
+6. decidir se M20 textual será habilitado — default OFF;
+7. executar;
+8. abrir `report/index.html` e navegar pelos domínios do report.
 
-## Execução padrão
+## Default
 
 ```powershell
 searchgeo audit https://example.com --project "Exemplo"
 ```
 
-Defaults relevantes:
-
-```text
-device = mobile
-AI = none
-language = pt-BR
-market = BR
-max-pages = 100
-audits-root = audits
-```
+Defaults: Mobile, IA `none`, M20 textual OFF, `pt-BR`, `BR`, `max-pages=100`.
 
 ## Dispositivo
 
-### Mobile — padrão
-
 ```powershell
 searchgeo audit https://example.com --device-context mobile
-```
-
-Gera somente contexto Mobile. É a opção recomendada para análise inicial e reduz custo/tempo quando IA está habilitada.
-
-### Desktop
-
-```powershell
 searchgeo audit https://example.com --device-context desktop
-```
-
-### Ambos
-
-```powershell
 searchgeo audit https://example.com --device-context both
 ```
 
-Use `both` quando a comparação Desktop × Mobile for requisito da auditoria.
-
-Também é possível:
-
-```powershell
-$env:SEARCHGEO_DEVICE_CONTEXT = "mobile"
-```
-
-A flag `--device-context` tem precedência sobre a variável.
+`both` é necessário para comparação Desktop × Mobile completa.
 
 ## Múltiplas URLs
 
 ```powershell
-searchgeo audit `
-  https://example.com/ `
-  https://example.com/produto `
-  https://example.com/faq `
-  --project "Exemplo" `
-  --max-pages 3
+searchgeo audit https://example.com/ https://example.com/produto --max-pages 2
 ```
 
-Ou:
+ou `--urls-file .\urls.txt`. Todas devem pertencer à mesma origem normalizada.
 
-```powershell
-searchgeo audit --urls-file .\urls.txt --project "Exemplo"
-```
+## IA
 
-Todas as URLs de um `URL_SET` devem pertencer à mesma origem normalizada.
-
-## Sem IA
+Sem IA:
 
 ```powershell
 searchgeo audit https://example.com --ai-provider none
 ```
 
-A auditoria continua com regras determinísticas. Regras semânticas sem evidência suficiente ficam `UNKNOWN`; isso não equivale a FAIL do site.
+OpenAI usa API Platform; ChatGPT não é saldo de API. DeepSeek usa a DeepSeek API. MiMo atual usa PAYG `sk-...`; não use Token Plan `tp-...`.
 
-## Antes de usar IA
-
-Ter um plano pago ou créditos no fornecedor não garante acesso de API compatível com o SearchGEO.
-
-- **OpenAI:** o SearchGEO usa a API Platform. ChatGPT e API possuem billing separado; uma assinatura ChatGPT não substitui saldo/quota da API.
-- **DeepSeek:** o SearchGEO usa a DeepSeek API; saldo concedido e recarregado podem compor o saldo total, e `402` indica saldo insuficiente.
-- **Xiaomi MiMo:** o SearchGEO atual suporta Pay-as-you-go com chave `sk-...`. Token Plan `tp-...` usa Base URL e créditos separados e não deve ser usado no auditor automatizado atual.
-
-Veja a matriz e as fontes oficiais em [AI_GUIDE.md](AI_GUIDE.md).
-
-## Com OpenAI
+## M20 textual
 
 ```powershell
 $env:OPENAI_API_KEY = "<chave-da-API-Platform>"
 searchgeo audit https://example.com `
-  --device-context mobile `
-  --ai-provider openai
+  --ai-provider openai `
+  --ai-content-remediation
 ```
 
-O default OpenAI é `gpt-5.6-terra`.
+M20 só tenta sugerir texto para findings elegíveis/evidence-backed. `Confidence LOW` sozinho não aciona M20. Sugestões exigem revisão humana e nunca são aplicadas automaticamente.
 
-## Com DeepSeek
+## JSON-LD
 
-```powershell
-$env:DEEPSEEK_API_KEY = "<chave-da-DeepSeek-API>"
-searchgeo audit https://example.com --ai-provider deepseek
-```
+`report/content-suggestions.html` é produzido mesmo com M20 textual OFF. Se JSON-LD estiver ausente, pode existir proposta conservadora `WebPage` baseada em URL/idioma/title/description observados. Se já existir, o relatório aponta melhorias sem substituir o graph.
 
-## Com Xiaomi MiMo
-
-```powershell
-$env:MIMO_API_KEY = "<chave-sk-PAYG>"
-searchgeo audit https://example.com --ai-provider mimo
-```
-
-Não configure uma chave `tp-...` em `MIMO_API_KEY` no SearchGEO atual.
-
-## Com AUTO multi-provider
-
-```powershell
-$env:OPENAI_API_KEY = "<chave-da-API-Platform>"
-$env:DEEPSEEK_API_KEY = "<chave-da-DeepSeek-API>"
-$env:MIMO_API_KEY = "<chave-sk-PAYG>"
-searchgeo audit https://example.com --ai-provider auto
-```
-
-Providers sem token/configuração válida são excluídos. O primeiro resultado válido encerra a cadeia naquele contexto.
-
-A presença de uma variável não prova que o plano seja compatível. Exemplo: uma chave MiMo `tp-...` continua sendo incompatível com o endpoint PAYG usado pelo SearchGEO atual.
-
-## Saída esperada
+## Saída
 
 ```text
-Auditoria concluída: AUD-...
-Status: ...
-Páginas auditadas: ...
-Contexto de dispositivo: MOBILE
-Problemas identificados: ...
-Recomendações: ...
-Relatório: audits\AUD-...\report\index.html
-Relatório por problemas: audits\AUD-...\report\remediation.html
-```
-
-## Abrindo o relatório
-
-Abra diretamente:
-
-```text
-audits/<AUD-ID>/report/index.html
-```
-
-O report site não precisa de servidor.
-
-Menu:
-
-- **Visão geral** — dashboard executivo;
-- **Relatório Mobile** — aparece quando Mobile foi auditado;
-- **Relatório Desktop** — aparece quando Desktop foi auditado;
-- **Remediações** — causas e ações agrupadas;
-- **Uso de IA** — telemetria operacional;
-- **Referências e metodologia** — fontes e fórmulas.
-
-## Como interpretar a visão geral
-
-Não leia somente o número do Score.
-
-### Score
-
-Qualidade observada nas regras efetivamente avaliadas.
-
-### Coverage
-
-Quanto do universo aplicável realmente foi avaliado.
-
-Coverage baixa significa análise incompleta, não site ruim.
-
-### Confidence
-
-Força da conclusão do auditor.
-
-**Confidence LOW não significa que o texto não é válido para GEO.** Pode ocorrer por baixa Coverage, evidência incompleta ou erros de execução. Uma mudança de conteúdo só deve ser recomendada quando um finding/RuleExecution sustenta essa alteração.
-
-### Consolidation
-
-Indica se a base é suficiente para publicar o resultado como consolidado.
-
-## Mobile × Desktop
-
-Com `both`, leia os relatórios separadamente. Uma diferença entre dispositivos não é automaticamente problema.
-
-A página Mobile nunca mistura finding exclusivamente Desktop, e vice-versa.
-
-## Remediações
-
-Abra:
-
-```text
+report/index.html
+report/mobile.html ou desktop.html
 report/remediation.html
-```
-
-A página agrupa causas e, quando disponível, apresenta:
-
-- reason code;
-- selector observado;
-- alvo técnico;
-- mudança recomendada;
-- observado versus esperado;
-- critérios de aceite;
-- passos de revalidação;
-- decisão humana necessária.
-
-## IA
-
-Abra:
-
-```text
+report/content-suggestions.html
 report/ai-usage.html
-```
-
-Essa página é operacional. Timeout, quota, auth ou provider ausente não são problemas GEO do site.
-
-O custo mostrado é estimativa local, não fatura e não substitui a verificação do plano/billing real do provider.
-
-## Referências
-
-Abra:
-
-```text
 report/references.html
 ```
 
-Ali estão fontes oficiais e a distinção entre norma/standard e heurística interna.
+### Visão geral
 
-O SearchGEO não promete uma “nota oficial GEO”. O guia atual do Google para recursos generativos reforça fundamentos de SEO e não exige markup GEO/AEO especial, chunking artificial ou conteúdo reescrito apenas para IA.
+Leia Score, Coverage, Confidence e Consolidation separadamente. Confidence LOW é força reduzida da conclusão, não nota textual.
+
+### Remediações
+
+`remediation.html`: causa, reason code, alvo técnico, observado/esperado, aceite e revalidação.
+
+### Conteúdo e JSON-LD
+
+`content-suggestions.html`: sugestões M20 advisory, provider/model/evidence e revisão/proposta JSON-LD.
+
+### IA
+
+`ai-usage.html`: tentativas M18/M20, tokens, duração, custo estimado e erros sanitizados. Erro de provider não é finding do site.
+
+### Referências
+
+`references.html`: fontes oficiais, metodologia, fórmula e distinção entre standards e heurísticas.
 
 ## Segurança
 
-Nunca salve API keys em HTML, Git ou scripts compartilhados.
-
-Valide somente presença:
-
-```powershell
-Test-Path Env:OPENAI_API_KEY
-Test-Path Env:DEEPSEEK_API_KEY
-Test-Path Env:MIMO_API_KEY
-```
-
-Presença não significa compatibilidade do produto/plano. Não imprima a chave completa apenas para conferir prefixo ou configuração.
+Nunca salve chaves em Git/HTML/scripts compartilhados. Presença de variável não prova compatibilidade do plano e nenhuma credencial deve ser reutilizada implicitamente por outro provider.
 
 ## Próximas leituras
 
-- [CLI_REFERENCE.md](CLI_REFERENCE.md)
-- [CONFIGURATION.md](CONFIGURATION.md)
-- [REPORT_GUIDE.md](REPORT_GUIDE.md)
-- [SCORING_GUIDE.md](SCORING_GUIDE.md)
-- [AI_GUIDE.md](AI_GUIDE.md)
-- [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+[CLI_REFERENCE.md](CLI_REFERENCE.md), [CONFIGURATION.md](CONFIGURATION.md), [REPORT_GUIDE.md](REPORT_GUIDE.md), [AI_GUIDE.md](AI_GUIDE.md), [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

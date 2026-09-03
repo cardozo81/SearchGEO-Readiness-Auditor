@@ -73,7 +73,26 @@ def hardened_semantic_output_schema() -> dict[str, Any]:
 
 
 class OpenAIProvider(_BaseOpenAIProvider):
-    """Production CLI adapter with complete-rule and diagnostic hardening."""
+    """Production CLI adapter with complete-rule and diagnostic hardening.
+
+    The legacy base adapter reads ``OPENAI_API_KEY`` when ``api_key`` is null.
+    M18 subclasses this class for DeepSeek and MiMo as well, so allowing that
+    fallback in subclasses could accidentally attach an OpenAI credential to a
+    different provider endpoint.  Exact direct construction of this hardened
+    OpenAI class keeps the legacy environment fallback; subclasses receive only
+    the credential explicitly resolved by their own provider configuration.
+    """
+
+    def __init__(self, *args: Any, api_key: str | None = None, **kwargs: Any) -> None:
+        if self.__class__ is OpenAIProvider and api_key is None:
+            super().__init__(*args, api_key=None, **kwargs)
+            return
+
+        # The base class treats an empty string as permission to consult
+        # OPENAI_API_KEY. Use a temporary non-empty sentinel, then restore the
+        # provider-specific value before any request can be made.
+        super().__init__(*args, api_key=api_key or "__SEARCHGEO_NO_PROVIDER_KEY__", **kwargs)
+        self.api_key = api_key
 
     def analyze(self, semantic_input: SemanticInput) -> ProviderCallResult:
         if not self.api_key:

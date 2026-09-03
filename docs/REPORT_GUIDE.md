@@ -17,9 +17,10 @@ Não é necessário servidor web. Os arquivos usam links relativos e um CSS comp
 ```text
 report/
 ├─ index.html
-├─ mobile.html          # quando Mobile foi auditado
-├─ desktop.html         # quando Desktop foi auditado
+├─ mobile.html             # quando Mobile foi auditado
+├─ desktop.html            # quando Desktop foi auditado
 ├─ remediation.html
+├─ content-suggestions.html
 ├─ ai-usage.html
 ├─ references.html
 └─ css/
@@ -38,10 +39,11 @@ Cada página responde a um domínio diferente:
 | `mobile.html` | evidência, findings e semântica do contexto Mobile |
 | `desktop.html` | evidência, findings e semântica do contexto Desktop |
 | `remediation.html` | causa raiz, prioridade, alvo de correção, aceite e revalidação |
-| `ai-usage.html` | telemetria operacional dos providers de IA |
+| `content-suggestions.html` | sugestões textuais M20 opcionais e revisão JSON-LD por página/device |
+| `ai-usage.html` | telemetria operacional M18/M20, separada por finalidade |
 | `references.html` | fontes oficiais, natureza das regras e fórmulas do auditor |
 
-A separação evita dois problemas do HTML monolítico anterior: navegação excessivamente longa e mistura entre falha operacional da IA e qualidade do website.
+A separação evita navegação excessivamente longa e mistura entre falha operacional da IA, sugestões advisory e qualidade do website.
 
 ## `index.html`
 
@@ -105,7 +107,7 @@ No SCORE-GEO-002 atual ela considera principalmente Coverage, completude de evid
 
 Ela significa que o auditor não possui base suficiente para sustentar uma conclusão forte. O conteúdo do site é avaliado por RuleExecutions, findings e Score; Confidence qualifica a conclusão.
 
-Também não deve ser confundida com o campo de confidence devolvido por um provider de IA em uma avaliação semântica individual.
+Também não deve ser confundida com o campo de confidence devolvido por um provider de IA em uma avaliação semântica individual ou com a confiança de uma sugestão M20.
 
 ## Consolidation
 
@@ -135,6 +137,8 @@ Quando `desktop`, vale o inverso.
 Quando `both`, existem as duas páginas e a comparação entre contextos pode ser interpretada.
 
 Diferença Mobile × Desktop não é automaticamente defeito. A regra BR-GEO-052 distingue diferença material de falha.
+
+M20 trabalha sobre os mesmos snapshots existentes, portanto não gera chamada/sugestão para device não selecionado.
 
 ## Página por dispositivo
 
@@ -172,9 +176,69 @@ Quando M16/M17 conseguiu materializar a causa, a ocorrência pode exibir:
 
 Uma condição `UNKNOWN`/evidência insuficiente não deve ser transformada artificialmente em ordem de alteração do site.
 
+`remediation.html` contém link para a página M20 quando o usuário quiser revisar propostas textuais/JSON-LD separadamente.
+
+## Conteúdo e JSON-LD
+
+`content-suggestions.html` é advisory e não participa do score.
+
+### Sugestões textuais
+
+Quando M20 textual está desabilitado, a página declara explicitamente o estado e não apresenta conteúdo como se tivesse sido gerado por IA.
+
+Quando habilitado e houver findings elegíveis/evidência suficiente, cada proposta pode mostrar:
+
+- URL/device;
+- `rule_id`/finding;
+- objetivo;
+- local sugerido;
+- texto exato proposto;
+- evidence IDs;
+- provider/model;
+- confidence da sugestão;
+- aviso de revisão humana obrigatória.
+
+`Confidence LOW` do auditor, sozinha, nunca é gatilho da seção.
+
+A proposta não é aplicada automaticamente e não altera Score, Coverage, Confidence ou Finding.
+
+### JSON-LD ausente
+
+Quando o snapshot não possui JSON-LD persistido, a página pode exibir um baseline conservador `WebPage`, por exemplo:
+
+```json
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "url": "https://example.com/pagina",
+  "inLanguage": "pt-BR",
+  "name": "Título observado",
+  "description": "Description observada"
+}
+```
+
+Somente valores persistidos/observados são usados. Campos inexistentes devem ser omitidos; propriedades específicas não devem ser inventadas.
+
+### JSON-LD existente
+
+Quando markup já existe, o report não o substitui integralmente. Pode apontar:
+
+- parse errors;
+- blocos idênticos duplicados;
+- ausência de `@context` no documento/graph;
+- nós sem `@type`;
+- propriedades genéricas ausentes de um `WebPage` quando o valor já é conhecido;
+- necessidade de conferir requisitos/recomendações do tipo específico.
+
+JSON-LD é reforço opcional. Não existe markup especial GEO/AEO obrigatório e markup correto não garante rich result.
+
 ## Uso de IA
 
-`ai-usage.html` é operacional. Pode exibir:
+`ai-usage.html` é operacional e separa finalidades.
+
+### M18 — análise semântica
+
+Pode exibir:
 
 - IA habilitada ou não;
 - estratégia;
@@ -182,6 +246,19 @@ Uma condição `UNKNOWN`/evidência insuficiente não deve ser transformada arti
 - status da sessão;
 - cadeia inicial;
 - chamadas;
+- tokens;
+- custo estimado;
+- duração;
+- erro sanitizado.
+
+### M20 — remediação textual
+
+Pode exibir:
+
+- se M20 estava habilitado;
+- status M20;
+- tentativas por URL/device;
+- provider/model;
 - tokens;
 - custo estimado;
 - duração;
@@ -204,6 +281,8 @@ Falha, quota, timeout ou provider não configurado **não é finding GEO do webs
 - limites das classificações internas.
 
 A página inclui o guia oficial do Google de 2026 sobre recursos generativos. O posicionamento adotado pelo SearchGEO é compatível com esse material: práticas fundamentais de SEO continuam relevantes, não há markup GEO/AEO especial obrigatório, nem necessidade de reescrever conteúdo apenas para IA.
+
+Para JSON-LD, `content-suggestions.html` também aponta Google General Structured Data Guidelines e Schema.org. Validação de rich result deve usar documentação específica da feature/tipo.
 
 ## Cores
 
@@ -236,4 +315,4 @@ audit.db
 artifacts/
 ```
 
-O report site não recalcula score, finding ou recommendation.
+O report site não recalcula score, finding ou recommendation. Chamadas M20, quando habilitadas, terminam e persistem antes da projeção HTML final.

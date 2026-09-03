@@ -156,9 +156,18 @@ class M2DiscoveryHttpTests(unittest.TestCase):
         probe.close()
         refused = HttpClient(timeout=0.5).acquire(f"http://127.0.0.1:{unused_port}/")
         self.assertIsNotNone(refused.network_error)
+        # A closed localhost port is normally CONNECTION/PROTOCOL, but some
+        # Windows firewall/network stacks silently drop the SYN and surface a
+        # timeout instead. All three are valid localized network failures; the
+        # contract under test is that acquisition records the failure without
+        # converting it into an HTTP response.
         self.assertIn(
             refused.network_error.kind,
-            {NetworkErrorKind.CONNECTION, NetworkErrorKind.PROTOCOL},
+            {
+                NetworkErrorKind.CONNECTION,
+                NetworkErrorKind.PROTOCOL,
+                NetworkErrorKind.TIMEOUT,
+            },
         )
 
     def test_discovery_is_deterministic_and_m2_persists_provenance_http_and_rules(self) -> None:

@@ -118,7 +118,10 @@ class M12StableBaselineTests(unittest.TestCase):
             self.assertTrue((result.audit_root / "audit.db").is_file())
             self.assertTrue((result.audit_root / "artifacts").is_dir())
             self.assertTrue((result.audit_root / "report" / "css" / "site.css").is_file())
-            for filename in ("mobile.html", "desktop.html", "remediation.html", "ai-usage.html", "references.html"):
+            for filename in (
+                "mobile.html", "desktop.html", "remediation.html",
+                "content-suggestions.html", "ai-usage.html", "references.html",
+            ):
                 self.assertTrue((result.audit_root / "report" / filename).is_file(), filename)
             self.assertFalse((result.audit_root / "report.html").exists())
             self.assertFalse((result.audit_root / "remediation.html").exists())
@@ -166,10 +169,25 @@ class M12StableBaselineTests(unittest.TestCase):
                     """
                 ).fetchone()[0]
                 self.assertEqual(invalid_findings, 0)
+
+                m20_run = connection.execute(
+                    "SELECT * FROM content_remediation_runs WHERE audit_id=?", (result.audit_id,)
+                ).fetchone()
+                self.assertIsNotNone(m20_run)
+                self.assertEqual(m20_run["status"], "DISABLED")
+                self.assertEqual(m20_run["generated_suggestions"], 0)
+                jsonld_rows = connection.execute(
+                    "SELECT device,status FROM jsonld_remediation_suggestions WHERE audit_id=? ORDER BY device",
+                    (result.audit_id,),
+                ).fetchall()
+                self.assertEqual(len(jsonld_rows), 2)
+                self.assertEqual({row["device"] for row in jsonld_rows}, {"DESKTOP", "MOBILE"})
             finally:
                 connection.close()
 
             report = result.report_path.read_text(encoding="utf-8")
+            content_report = (result.audit_root / "report" / "content-suggestions.html").read_text(encoding="utf-8")
+            ai_report = (result.audit_root / "report" / "ai-usage.html").read_text(encoding="utf-8")
             css = (result.audit_root / "report" / "css" / "site.css").read_text(encoding="utf-8")
             self.assertIn('lang="pt-BR"', report)
             self.assertIn("Visão geral da auditoria", report)
@@ -178,8 +196,14 @@ class M12StableBaselineTests(unittest.TestCase):
             self.assertIn("Relatório Mobile", report)
             self.assertIn("Relatório Desktop", report)
             self.assertIn("Referências e metodologia", report)
+            self.assertIn("Conteúdo e JSON-LD", report)
             self.assertIn('<link rel="stylesheet" href="css/site.css">', report)
             self.assertNotIn("<style", report.casefold())
+            self.assertIn("Conteúdo e JSON-LD", content_report)
+            self.assertIn("Structured Data", content_report)
+            self.assertIn("css/site.css", content_report)
+            self.assertNotIn("<style", content_report.casefold())
+            self.assertIn("m20-ai-telemetry", ai_report)
             self.assertIn("--nav:", css)
 
     def test_cli_audit_command_defaults_to_mobile_and_restores_environment(self) -> None:
@@ -219,9 +243,11 @@ class M12StableBaselineTests(unittest.TestCase):
             self.assertEqual(kwargs["project_name"], "Projeto CLI")
             self.assertEqual(kwargs["max_pages"], 2)
             self.assertIsInstance(kwargs["semantic_provider"], NoneProvider)
+            self.assertFalse(kwargs["content_remediation"])
             rendered = output.getvalue()
             self.assertIn("Auditoria concluída: AUD-TEST", rendered)
             self.assertIn("Contexto de dispositivo: MOBILE", rendered)
+            self.assertIn("Sugestões de conteúdo por IA: DESABILITADAS", rendered)
             self.assertIn("report", rendered)
             self.assertIn("index.html", rendered)
 

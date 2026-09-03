@@ -1,6 +1,6 @@
 # FUNCTIONAL_REQUIREMENTS.md
 
-**Status:** APPROVED — M18 + SCORE-GEO-002 + REPORT-SITE-GEO-001
+**Status:** APPROVED — M20 + M18 + SCORE-GEO-002 + REPORT-SITE-GEO-001
 
 ## Requisitos Funcionais
 
@@ -241,6 +241,45 @@ Explicar explicitamente que Confidence é força da conclusão do auditor e que 
 ### FR-GEO-079
 A fundamentação deve distinguir norma/standard externo de heurística interna e declarar que o SearchGEO não representa suas faixas de score como standard GEO/AEO oficial.
 
+### FR-GEO-080
+Expor remediação textual M20 por `--ai-content-remediation`, `--no-ai-content-remediation` e `SEARCHGEO_AI_CONTENT_REMEDIATION`, com default público `false`.
+
+### FR-GEO-081
+Executar M20 textual somente depois de findings, scoring e priorização; M20 não pode alterar retrospectivamente RuleExecution, Finding, Recommendation, Score, Coverage, Confidence ou Consolidation.
+
+### FR-GEO-082
+Disparar M20 textual somente a partir de findings contentuais/semânticos elegíveis persistidos. `Confidence LOW`, isoladamente, nunca é gatilho.
+
+### FR-GEO-083
+Restringir cada request M20 a uma página/snapshot/device e aos findings/evidence_ids persistidos daquele contexto. Respostas com finding/evidence reference externa ao universo fornecido devem ser rejeitadas.
+
+### FR-GEO-084
+Cada sugestão textual M20 aceita deve informar objetivo, localização alvo, texto exato proposto, evidence_ids, confiança da sugestão, provider/model e aviso de revisão humana obrigatória.
+
+### FR-GEO-085
+Aplicar contrato people-first e anti-fabricação ao M20: não solicitar keyword stuffing, word count arbitrário, reescrita apenas para IA, chunking artificial, fake freshness, claims, preços, datas, estatísticas, experiência, credenciais ou fontes não sustentadas.
+
+### FR-GEO-086
+Reutilizar providers configurados/saudáveis do M18 para M20, sem credencial paralela; respeitar quarantine já ocorrido, execução sequencial, parada no primeiro resultado válido e URL provider pinning na finalidade M20.
+
+### FR-GEO-087
+Persistir telemetria M20 separadamente da telemetria semântica M18, incluindo provider/model, tokens, duração, erro sanitizado e custo estimado quando calculável.
+
+### FR-GEO-088
+Gerar revisão determinística de JSON-LD por snapshot/dispositivo auditado mesmo quando M20 textual estiver desabilitado ou nenhum provider externo estiver configurado.
+
+### FR-GEO-089
+Quando JSON-LD estiver ausente, propor somente um baseline Schema.org conservador sustentado por dados persistidos/observados, preferindo `WebPage` genérico e omissão a tipos/propriedades especulativos.
+
+### FR-GEO-090
+Quando JSON-LD estiver presente, não o sobrescrever integralmente; apontar problemas genéricos verificáveis, como parse errors, duplicação idêntica, ausência de `@context`, nós sem `@type` e propriedades genéricas ausentes cujo valor já seja conhecido.
+
+### FR-GEO-091
+Expor M20 em `report/content-suggestions.html`, com shared navigation/CSS, e exibir telemetria M20 em `report/ai-usage.html` separada da finalidade semântica M18.
+
+### FR-GEO-092
+Informar explicitamente que JSON-LD é reforço opcional, que não existe markup especial GEO/AEO obrigatório, que propriedades de rich result dependem do tipo/feature e que markup válido não garante exibição de rich result.
+
 ## Requisitos Não Funcionais
 
 ### NFR-GEO-001
@@ -283,4 +322,10 @@ RemediationRecipe e apresentação devem ser determinísticas/reprodutíveis a p
 Aplicabilidade e exclusão do Overall devem ser reproduzíveis a partir das RuleExecutions e versão do scoring.
 
 ### NFR-GEO-014
-A projeção final não deve recalcular score/finding nem chamar IA; `audit.db` e artifacts permanecem fonte de verdade.
+A projeção final não deve recalcular score/finding nem chamar IA; `audit.db` e artifacts permanecem fonte de verdade. A exceção arquitetural explícita é que M20 deve concluir chamadas antes da materialização final do report site; o renderer do report não chama provider.
+
+### NFR-GEO-015
+M20 deve ser fail-open em relação ao audit: indisponibilidade da finalidade de remediação textual não pode invalidar score/findings já concluídos.
+
+### NFR-GEO-016
+Sugestões M20 e JSON-LD devem permanecer advisory, reabríveis no `audit.db` e separadas dos objetos normativos de scoring.

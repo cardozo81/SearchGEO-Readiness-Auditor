@@ -23,6 +23,7 @@ _LOGGER = logging.getLogger(__name__)
 _DOMAIN_LABEL = re.compile(r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)$")
 _DEFAULT_AI_TIMEOUT_SECONDS = 180.0
 _AI_TIMEOUT_ENV = "SEARCHGEO_AI_TIMEOUT_SECONDS"
+_CONTENT_REMEDIATION_ENV = "SEARCHGEO_AI_CONTENT_REMEDIATION"
 
 
 def _valid_hostname(hostname: str) -> bool:
@@ -116,6 +117,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--ai-model",
         help="model override for an explicit provider; AUTO uses SEARCHGEO_<PROVIDER>_MODEL",
     )
+    audit_parser.add_argument(
+        "--ai-content-remediation",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "enable M20 evidence-bound exact-text content suggestions; default OFF, "
+            f"or {_CONTENT_REMEDIATION_ENV} when configured. JSON-LD guidance is generated deterministically regardless"
+        ),
+    )
 
     return parser
 
@@ -131,6 +141,22 @@ def _configured_ai_timeout_seconds() -> float:
     if not math.isfinite(value) or value <= 0:
         raise ValueError(f"{_AI_TIMEOUT_ENV} must be a positive finite number of seconds")
     return value
+
+
+def _configured_content_remediation(cli_value: bool | None) -> bool:
+    if cli_value is not None:
+        return bool(cli_value)
+    raw = os.environ.get(_CONTENT_REMEDIATION_ENV)
+    if raw is None or not raw.strip():
+        return False
+    normalized = raw.strip().casefold()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(
+        f"{_CONTENT_REMEDIATION_ENV} must be one of: true/false, 1/0, yes/no, on/off"
+    )
 
 
 def _apply_ai_timeout(provider, timeout: float):
@@ -187,11 +213,8 @@ def main(argv: list[str] | None = None) -> int:
             if args.max_pages <= 0:
                 raise ValueError("--max-pages must be greater than zero")
 
-            # Resolve once per run so rendering and semantic analysis share the
-            # same device universe. The environment value is scoped to this CLI
-            # invocation and restored afterward, which prevents state leakage in
-            # embedded/test processes that call main() more than once.
             device_context = configured_device_context(cli_value=args.device_context, default="mobile")
+            content_remediation = _configured_content_remediation(args.ai_content_remediation)
             previous_device_context = os.environ.get(DEVICE_CONTEXT_ENV)
             os.environ[DEVICE_CONTEXT_ENV] = device_context
             try:
@@ -209,6 +232,7 @@ def main(argv: list[str] | None = None) -> int:
                     market=args.market,
                     max_pages=args.max_pages,
                     semantic_provider=provider,
+                    content_remediation=content_remediation,
                 )
             finally:
                 if previous_device_context is None:
@@ -223,12 +247,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Status: {result.completion_status.value}")
         print(f"Páginas auditadas: {result.audited_pages}")
         print(f"Contexto de dispositivo: {device_context.upper()}")
+        print(f"Sugestões de conteúdo por IA: {'HABILITADAS' if content_remediation else 'DESABILITADAS'}")
         print(f"Problemas identificados: {result.finding_count}")
         print(f"Recomendações: {result.recommendation_count}")
         print(f"Relatório: {result.report_path}")
         remediation_path = result.audit_root / "report" / "remediation.html"
         if remediation_path.is_file():
             print(f"Relatório por problemas: {remediation_path}")
+        content_path = result.audit_root / "report" / "content-suggestions.html"
+        if content_path.is_file():
+            print(f"Conteúdo e JSON-LD: {content_path}")
         return 0
 
     parser.error(f"unsupported command: {args.command}")

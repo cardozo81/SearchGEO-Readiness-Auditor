@@ -29,6 +29,7 @@ searchgeo audit [target ...]
   [--device-context mobile|desktop|both]
   [--ai-provider none|openai|deepseek|mimo|auto]
   [--ai-model MODEL_ID]
+  [--ai-content-remediation | --no-ai-content-remediation]
 ```
 
 ### Glossário completo de argumentos
@@ -45,10 +46,12 @@ searchgeo audit [target ...]
 | `--device-context` | `mobile`, `desktop`, `both` | `mobile`* | Controla rendering e os contextos semânticos/IA. `*` Pode ser definido por `SEARCHGEO_DEVICE_CONTEXT` quando a flag não é passada. |
 | `--ai-provider` | `none`, `openai`, `deepseek`, `mimo`, `auto` | `none` | Provider semântico. A credencial deve pertencer ao produto/plano de API compatível. |
 | `--ai-model MODEL_ID` | model ID suportado | default do provider | Somente para provider explícito. Não pode ser combinado com `--ai-provider auto`. |
+| `--ai-content-remediation` | boolean flag | `false`* | Habilita M20 para sugerir texto exato com base em findings/evidências persistidos. `*` Pode ser definido por `SEARCHGEO_AI_CONTENT_REMEDIATION`. |
+| `--no-ai-content-remediation` | boolean flag | — | Força M20 textual desligado mesmo quando a variável de ambiente está habilitada. |
 
 ## Contexto de dispositivo
 
-A precedência é:
+Precedência:
 
 1. `--device-context`;
 2. `SEARCHGEO_DEVICE_CONTEXT`;
@@ -62,7 +65,7 @@ desktop
 both
 ```
 
-Forma recomendada:
+Exemplos:
 
 ```powershell
 searchgeo audit https://example.com --device-context mobile
@@ -70,17 +73,9 @@ searchgeo audit https://example.com --device-context desktop
 searchgeo audit https://example.com --device-context both
 ```
 
-Ou por ambiente:
+`mobile` produz apenas snapshots Mobile; `desktop`, apenas Desktop; `both`, ambos e habilita a comparação Desktop × Mobile completa. M7/M20 só podem chamar provider para snapshots realmente materializados.
 
-```powershell
-$env:SEARCHGEO_DEVICE_CONTEXT = "mobile"
-```
-
-`mobile` produz apenas snapshots Mobile. Com IA habilitada, somente esses snapshots entram no fluxo semântico, reduzindo chamadas e custo em comparação a `both`.
-
-`desktop` faz o mesmo para Desktop. `both` produz os dois contextos e habilita a comparação Desktop × Mobile completa.
-
-Chamadas internas diretas a M3 sem a variável preservam o comportamento legado `both`; essa exceção existe para compatibilidade de API interna/testes e não altera o default da CLI.
+Chamadas internas diretas a M3 sem a variável preservam `both` por compatibilidade interna/testes; isso não altera o default público da CLI.
 
 ## Exemplos de execução
 
@@ -89,6 +84,8 @@ Chamadas internas diretas a M3 sem a variável preservam o comportamento legado 
 ```powershell
 searchgeo audit https://example.com --project "Exemplo"
 ```
+
+Nenhuma chamada externa. A revisão determinística de JSON-LD continua disponível em `report/content-suggestions.html`.
 
 ### Mobile + OpenAI
 
@@ -100,17 +97,17 @@ searchgeo audit https://example.com `
   --ai-provider openai
 ```
 
-### Desktop apenas
+### Mobile + OpenAI + sugestões M20
 
 ```powershell
-searchgeo audit https://example.com --device-context desktop
+$env:OPENAI_API_KEY = "<chave-da-API-Platform>"
+searchgeo audit https://example.com `
+  --device-context mobile `
+  --ai-provider openai `
+  --ai-content-remediation
 ```
 
-### Comparação completa
-
-```powershell
-searchgeo audit https://example.com --device-context both
-```
+M20 é uma finalidade posterior à avaliação: não altera Score, Coverage, Confidence, RuleExecution ou Finding e exige revisão humana antes de qualquer publicação.
 
 ### URL_SET
 
@@ -129,13 +126,50 @@ searchgeo audit `
 searchgeo audit --urls-file .\urls.txt --project "Exemplo"
 ```
 
-## Providers de IA
+## M20 — remediação de conteúdo
 
-Antes de preencher uma variável de credencial, confirme o produto/plano. A referência detalhada está em [AI_GUIDE.md](AI_GUIDE.md).
+Precedência:
+
+1. `--ai-content-remediation` ou `--no-ai-content-remediation`;
+2. `SEARCHGEO_AI_CONTENT_REMEDIATION`;
+3. `false`.
+
+Valores aceitos para a variável:
+
+```text
+true / false
+1 / 0
+yes / no
+on / off
+```
+
+Regras operacionais:
+
+- `Confidence LOW` isoladamente nunca dispara sugestão;
+- entram somente findings contentuais/semânticos elegíveis já persistidos;
+- evidence IDs retornados precisam pertencer ao finding;
+- proposta não pode inventar claims, preços, datas, estatísticas, garantias, credenciais ou experiência;
+- novos tokens numéricos ausentes do conteúdo/evidência são rejeitados pelo contrato local;
+- provider/model/timeout seguem a configuração já selecionada;
+- quarantine é respeitada e provider não é reativado só para M20;
+- falha M20 não vira finding do website;
+- texto nunca é aplicado automaticamente.
+
+### JSON-LD
+
+A revisão JSON-LD é determinística e independe de habilitar M20 textual.
+
+Se JSON-LD não existe, o auditor pode propor um baseline `WebPage` com dados efetivamente observados/persistidos, como URL, idioma, `<title>` e meta description. Se existe, o auditor não sobrescreve o graph: aponta parse errors, duplicações e oportunidades estruturais verificáveis.
+
+JSON-LD é `OPCIONAL / REFORÇO`, não requisito universal GEO nem garantia de rich result.
+
+## Providers de IA e compatibilidade de plano
+
+Antes de preencher uma variável de credencial, confirme o produto/plano. Consulte [AI_GUIDE.md](AI_GUIDE.md).
 
 ### `none`
 
-Nenhuma chamada externa. Regras semantic-only sem evidência suficiente permanecem `UNKNOWN`. Isso pode reduzir Coverage/Consolidation, mas não é `FAIL` do website.
+Nenhuma chamada externa. Regras semantic-only sem evidência suficiente permanecem `UNKNOWN`. Se M20 textual estiver habilitado, ele registra `NOT_CONFIGURED` sem abortar; JSON-LD determinístico permanece disponível.
 
 ### `openai`
 
@@ -144,13 +178,9 @@ $env:OPENAI_API_KEY = "<chave-da-API-Platform>"
 searchgeo audit https://example.com --ai-provider openai
 ```
 
-Default:
+Default: `gpt-5.6-terra`.
 
-```text
-gpt-5.6-terra
-```
-
-Requisito comercial: billing/quota da **OpenAI API Platform**. Assinaturas e créditos do ChatGPT são separados da API e não substituem saldo/quota da organização/projeto de API.
+Requisito comercial: billing/quota da **OpenAI API Platform**. Assinaturas/créditos do ChatGPT são separados e não substituem saldo/quota da API.
 
 ### `deepseek`
 
@@ -159,13 +189,7 @@ $env:DEEPSEEK_API_KEY = "<chave-da-DeepSeek-API>"
 searchgeo audit https://example.com --ai-provider deepseek
 ```
 
-Default:
-
-```text
-deepseek-v4-pro
-```
-
-O saldo da API pode incluir saldo concedido e recarregado. `HTTP 402` indica saldo insuficiente.
+Default: `deepseek-v4-pro`. `HTTP 402` indica saldo insuficiente da DeepSeek API.
 
 ### `mimo`
 
@@ -174,15 +198,11 @@ $env:MIMO_API_KEY = "<chave-sk-PAYG>"
 searchgeo audit https://example.com --ai-provider mimo
 ```
 
-Default:
+Default: `mimo-v2.5-pro`.
 
-```text
-mimo-v2.5-pro
-```
+O adapter atual usa MiMo Pay-as-you-go em `https://api.xiaomimimo.com/v1/responses`; portanto a credencial esperada é `sk-...`.
 
-O adapter atual usa MiMo **Pay-as-you-go** em `https://api.xiaomimimo.com/v1/responses`; portanto a credencial esperada é `sk-...`.
-
-**MiMo Token Plan `tp-...` não é suportado pelo SearchGEO atual.** Ele usa Base URL dedicada por região e créditos independentes. A documentação oficial da MiMo restringe esse pacote a ferramentas de programação e proíbe automated scripts/custom application backends fora desse escopo.
+**MiMo Token Plan `tp-...` não é suportado pelo SearchGEO atual.** Ele usa Base URL e créditos separados e não deve ser configurado em `MIMO_API_KEY` para este adapter.
 
 ### `auto`
 
@@ -190,9 +210,11 @@ O adapter atual usa MiMo **Pay-as-you-go** em `https://api.xiaomimimo.com/v1/res
 searchgeo audit https://example.com --ai-provider auto
 ```
 
-A cadeia é formada uma vez por audit com providers que possuem token e configuração válida. Execução sequencial; primeiro resultado válido encerra o contexto. Providers posteriores não sobrescrevem o resultado aceito.
+A cadeia é formada uma vez com providers elegíveis/configurados. O primeiro resultado válido encerra o contexto. A existência da variável não prova compatibilidade comercial da credencial.
 
-A existência da variável não prova compatibilidade comercial da credencial. Em particular, não configure `MIMO_API_KEY` com `tp-...`.
+## Isolamento de credenciais
+
+Cada provider usa apenas sua própria credencial. `OPENAI_API_KEY` não pode preencher ausência de `DEEPSEEK_API_KEY` ou `MIMO_API_KEY`, e vice-versa. Essa regra também é coberta por teste de regressão para impedir chamadas externas acidentais com credencial ambiental.
 
 ## Modelos aceitos
 
@@ -211,95 +233,73 @@ MIMO
   mimo-v2.5
 ```
 
-Em `auto`, modelos são definidos pelas variáveis específicas de provider; `--ai-model` é rejeitado.
-
-Model ID aceito pelo SearchGEO não garante que toda conta/plano tenha acesso ao modelo. O provider pode aplicar permissões, tiers, quotas, limites de gasto ou rate limits próprios.
+Em `auto`, modelos são definidos pelas variáveis específicas do provider; `--ai-model` é rejeitado. Model ID aceito pelo código não garante acesso operacional da conta/plano.
 
 ## Variáveis de ambiente
 
 | Variável | Default | Uso |
 |---|---|---|
 | `SEARCHGEO_DEVICE_CONTEXT` | `mobile` na CLI | `mobile`, `desktop`, `both`. |
-| `SEARCHGEO_AI_TIMEOUT_SECONDS` | `180` | Timeout por chamada externa de IA; número finito > 0. |
+| `SEARCHGEO_AI_TIMEOUT_SECONDS` | `180` | Timeout por chamada externa; número finito > 0. |
+| `SEARCHGEO_AI_CONTENT_REMEDIATION` | `false` | Habilita/desabilita M20 textual quando a flag não é usada. |
 | `OPENAI_API_KEY` | — | Credencial da OpenAI API Platform. |
 | `DEEPSEEK_API_KEY` | — | Credencial da DeepSeek API. |
-| `MIMO_API_KEY` | — | Credencial MiMo Pay-as-you-go `sk-...`; Token Plan `tp-...` não suportado. |
-| `SEARCHGEO_OPENAI_MODEL` | `gpt-5.6-terra` | Model OpenAI no AUTO/configuração por env. |
+| `MIMO_API_KEY` | — | MiMo PAYG `sk-...`; Token Plan `tp-...` não suportado. |
+| `SEARCHGEO_OPENAI_MODEL` | `gpt-5.6-terra` | Model OpenAI no AUTO/env. |
 | `SEARCHGEO_DEEPSEEK_MODEL` | `deepseek-v4-pro` | Model DeepSeek. |
 | `SEARCHGEO_MIMO_MODEL` | `mimo-v2.5-pro` | Model MiMo. |
 
-Variáveis adicionais de reasoning/depth existentes no contrato M18 continuam documentadas em [AI_GUIDE.md](AI_GUIDE.md).
-
 ## Provider sem chave
 
-Provider explícito sem token:
+Provider explícito sem token fica `NOT_CONFIGURED`, não chama API e não é afetado por chaves ausentes/presentes de outros providers. Em `auto`, providers sem token são excluídos.
 
-- fica operacionalmente `NOT_CONFIGURED`;
-- não chama API;
-- auditoria continua em modo sem IA efetiva/degradado conforme o restante do pipeline;
-- outras chaves ausentes não interferem.
-
-Em `auto`, providers sem token são excluídos da cadeia.
-
-Uma credencial de produto/plano incompatível não deve ser tratada como configuração válida apenas porque a variável existe.
+Credencial de produto/plano incompatível não deve ser tratada como válida apenas porque a variável existe.
 
 ## Falha / quota / crédito / timeout
 
-Provider explícito:
+Provider explícito não faz cross-provider fallback. `auto` pode quarantinar provider falho e seguir para outro saudável conforme contrato. Não há retry automático de timeout.
 
-- não faz cross-provider fallback;
-- após falha qualificadora é quarantined para o restante do audit.
-
-`auto`:
-
-- provider falho é quarantined;
-- próximo provider saudável pode atender URLs/contextos elegíveis seguintes;
-- se a cadeia inteira falhar, estado operacional `CHAIN_EXHAUSTED`.
-
-Não há retry automático de timeout, evitando potencial duplicação de consumo.
-
-Antes de concluir que uma falha é “falta de crédito”, verifique também produto/plano, endpoint, tipo de chave, limite de gasto e acesso ao modelo. Para MiMo, `401` pode representar mistura Token Plan/PAYG e `402` no endpoint PAYG representa saldo PAYG insuficiente.
+Antes de concluir “sem crédito”, verifique produto/plano, endpoint, tipo de chave, limite de gasto e model access. No MiMo, `401` pode indicar mistura Token Plan/PAYG e `402` no endpoint PAYG representa saldo PAYG insuficiente.
 
 ## Saída da CLI
-
-Exemplo:
 
 ```text
 Auditoria concluída: AUD-...
 Status: COMPLETE_WITH_LIMITATIONS
 Páginas auditadas: ...
 Contexto de dispositivo: MOBILE
+Sugestões de conteúdo por IA: DESABILITADAS
 Problemas identificados: ...
 Recomendações: ...
 Relatório: audits\AUD-...\report\index.html
 Relatório por problemas: audits\AUD-...\report\remediation.html
+Conteúdo e JSON-LD: audits\AUD-...\report\content-suggestions.html
 ```
-
-O ponto de entrada é `report/index.html`.
 
 ## Estrutura do report site
 
 ```text
 report/
 ├─ index.html
-├─ mobile.html          # se Mobile foi auditado
-├─ desktop.html         # se Desktop foi auditado
+├─ mobile.html             # condicional
+├─ desktop.html            # condicional
 ├─ remediation.html
+├─ content-suggestions.html
 ├─ ai-usage.html
 ├─ references.html
 └─ css/
    └─ site.css
 ```
 
-A telemetria de IA fica em `ai-usage.html`, separada do readiness do website. Referências oficiais, metodologia e fórmulas ficam em `references.html`.
+M18/M20 telemetry fica em `ai-usage.html`; sugestões textuais e revisão JSON-LD ficam em `content-suggestions.html`.
 
 ## Regras de target
 
 - somente HTTP/HTTPS;
-- domínio sem scheme é aceito quando não contém path/query/fragment;
-- URL com path/query/fragment deve incluir `http://` ou `https://`;
-- credenciais embutidas na URL são rejeitadas;
-- URLs de um mesmo audit `URL_SET` devem pertencer à mesma origem normalizada.
+- domínio sem scheme é aceito sem path/query/fragment;
+- URL com path/query/fragment deve incluir scheme;
+- credenciais embutidas são rejeitadas;
+- URL_SET deve pertencer à mesma origem normalizada.
 
 ## Ajuda local
 
