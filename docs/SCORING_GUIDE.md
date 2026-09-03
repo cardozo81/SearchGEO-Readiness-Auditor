@@ -6,7 +6,31 @@ Guia operacional do baseline `SCORE-GEO-002`.
 
 Score, Coverage, Confidence e Consolidation são métricas diferentes. Nenhuma deve ser usada como sinônimo da outra.
 
-O modelo é interno ao SearchGEO e reprodutível a partir das RuleExecutions persistidas. Não é um score oficial de Google, OpenAI ou outro mantenedor.
+O modelo é interno ao SearchGEO e reprodutível a partir das RuleExecutions persistidas. Não é um score oficial de Google, OpenAI, Microsoft ou outro mantenedor.
+
+## Natureza metodológica e validade
+
+`SCORE-GEO-002` deve ser descrito como **índice proprietário, heurístico, determinístico, evidence-backed e reprodutível**.
+
+O fato de a especificação estar marcada como `APPROVED` significa apenas que ela foi aprovada como baseline normativo interno do projeto. Não significa homologação externa.
+
+As dimensões do modelo são informadas por documentação pública, literatura técnica e práticas consolidadas de Search/Information Retrieval. Porém, os seguintes elementos são decisões internas do SearchGEO e não foram calibrados externamente como um score GEO universal:
+
+- `PASS = 1.00`, `WARNING = 0.50`, `FAIL = 0.00`;
+- pesos iguais entre dimensões aplicáveis;
+- thresholds de Coverage, Confidence e Consolidation;
+- faixas visuais 90/75/60/40;
+- média simples das dimensões para o Overall;
+- interpretação do Overall como escala 0–100.
+
+Consequentemente:
+
+- `80/100` não significa `80% de chance de citação`;
+- `90/100` não garante presença em AI Overviews, AI Mode, ChatGPT, Copilot ou outro mecanismo;
+- diferenças pequenas de score não devem ser tratadas como diferenças estatisticamente significativas sem calibração própria;
+- o score não deve ser apresentado como certificação GEO/AEO.
+
+O projeto mantém uma referência específica sobre evidência externa, métricas calibradas e alternativas de evolução em `docs/SCORING_VALIDATION.md`.
 
 ## Dimensões
 
@@ -52,6 +76,8 @@ FAIL    = 0.00
 
 O `warning_factor` pode ser específico por regra e deve permanecer versionado.
 
+Esses fatores são heurísticos do SearchGEO; não são coeficientes oficiais ou externamente calibrados de GEO/AEO.
+
 ## Fórmula da dimensão
 
 ```text
@@ -59,6 +85,8 @@ O `warning_factor` pode ser específico por regra e deve permanecer versionado.
 ------------------------- × 100
 Σ(weight evaluated)
 ```
+
+A média ponderada normalizada é uma forma matemática convencional. Os pesos, fatores e regras que entram nela são específicos do SearchGEO.
 
 ## Coverage
 
@@ -110,6 +138,8 @@ No algoritmo atual:
 - `LOW`: existe alguma avaliação, mas os critérios acima não foram satisfeitos;
 - `UNAVAILABLE`: Coverage <= 0.
 
+Os limites 90% e 80% são internos e versionados; não representam thresholds oficiais de GEO/AEO.
+
 ### O que Confidence significa
 
 Confidence mede **a força da conclusão do auditor**.
@@ -140,6 +170,8 @@ CONSOLIDATED:     Coverage >= 0,80 e Confidence HIGH/MEDIUM
 PARTIAL:          demais estados avaliáveis
 NOT_APPLICABLE:   dimensão integralmente e legitimamente fora do universo aplicável
 ```
+
+Os thresholds de consolidação são governança interna do produto e não standard externo.
 
 Uma dimensão com pré-requisito bloqueado não deve ser promovida a `NOT_APPLICABLE` benigno.
 
@@ -205,6 +237,8 @@ Processo:
 
 Se uma dimensão aplicável necessária está `NOT_CONSOLIDATED`, o Overall não é publicado como consolidado.
 
+O Overall é um índice interno de prontidão. Não representa probabilidade calibrada de citação, ranking, tráfego ou conversão.
+
 ## Structured Data
 
 JSON-LD não é requisito universal para um Overall calculável.
@@ -262,9 +296,29 @@ A UI atual usa thresholds internos para comunicação de um Score consolidado:
 
 Essas faixas **não são padrão oficial GEO/AEO**. Alterá-las é decisão de produto/calibração do SearchGEO e não mudança em documentação externa.
 
+Não converter essas classes em percentuais de probabilidade ou garantia de performance externa.
+
 ## Critical blockers
 
 Blockers críticos são mostrados separadamente. Um score alto não deve ocultar um blocker comprovado.
+
+## Evidência externa
+
+O SearchGEO diferencia:
+
+1. **requisito/sinal oficial externo** — sustentado diretamente por documentação do mantenedor;
+2. **métrica externa calibrada/padronizada** — metodologia quantitativa externa, por exemplo Core Web Vitals, Lighthouse ou métricas NIST/TREC;
+3. **heurística SearchGEO** — peso, fator, threshold ou agregação criados pelo produto.
+
+Uma métrica externa validada para performance web ou Information Retrieval pode fortalecer uma dimensão específica, mas não valida automaticamente o `OVERALL_READINESS` como score GEO universal.
+
+## Calibração futura
+
+Uma versão futura poderá substituir parâmetros heurísticos por parâmetros empiricamente calibrados apenas depois de validação contra outcomes observáveis, como presença/citação em mecanismos generativos.
+
+A calibração deve usar conjunto de queries representativo, múltiplas engines, repetições, separação treino/validação, análise de variabilidade, métricas estatísticas e versionamento temporal das engines/modelos.
+
+Até esse processo existir, a nomenclatura correta permanece `índice interno de prontidão`, não `probabilidade GEO` nem `score científico`.
 
 ## Reprodutibilidade
 
