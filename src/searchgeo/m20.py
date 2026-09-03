@@ -54,21 +54,16 @@ def execute_m20(
     semantic_provider: Any,
     workspace: AuditWorkspace,
 ) -> M20ExecutionResult:
-    """Materialize optional suggestions without changing any scored entity."""
+    """Materialize auxiliary suggestions without changing scored entities."""
     jsonld_ids = _materialize_jsonld(audit_id=audit_id, workspace=workspace)
     router = build_content_remediation_router(semantic_provider)
 
     with M20Persistence(workspace) as store:
         if not enabled:
             store.upsert_run(ContentRemediationRun(
-                audit_id=audit_id,
-                enabled=False,
-                strategy=router.strategy,
-                status="DISABLED",
-                eligible_findings=0,
-                attempted_contexts=0,
-                generated_suggestions=0,
-                reason="DEFAULT_OFF",
+                audit_id=audit_id, enabled=False, strategy=router.strategy,
+                status="DISABLED", eligible_findings=0, attempted_contexts=0,
+                generated_suggestions=0, reason="DEFAULT_OFF",
             ))
             return M20ExecutionResult("DISABLED", (), jsonld_ids, 0)
 
@@ -76,25 +71,17 @@ def execute_m20(
         eligible_findings = sum(len(item.findings) for item in requests)
         if eligible_findings == 0:
             store.upsert_run(ContentRemediationRun(
-                audit_id=audit_id,
-                enabled=True,
-                strategy=router.strategy,
-                status="NO_ELIGIBLE_FINDINGS",
-                eligible_findings=0,
-                attempted_contexts=0,
-                generated_suggestions=0,
+                audit_id=audit_id, enabled=True, strategy=router.strategy,
+                status="NO_ELIGIBLE_FINDINGS", eligible_findings=0,
+                attempted_contexts=0, generated_suggestions=0,
             ))
             return M20ExecutionResult("NO_ELIGIBLE_FINDINGS", (), jsonld_ids, 0)
 
         if not router.providers:
             store.upsert_run(ContentRemediationRun(
-                audit_id=audit_id,
-                enabled=True,
-                strategy=router.strategy,
-                status="NOT_CONFIGURED",
-                eligible_findings=eligible_findings,
-                attempted_contexts=0,
-                generated_suggestions=0,
+                audit_id=audit_id, enabled=True, strategy=router.strategy,
+                status="NOT_CONFIGURED", eligible_findings=eligible_findings,
+                attempted_contexts=0, generated_suggestions=0,
                 reason="AI_NOT_CONFIGURED_OR_QUARANTINED",
             ))
             return M20ExecutionResult("NOT_CONFIGURED", (), jsonld_ids, 0)
@@ -109,13 +96,9 @@ def execute_m20(
             result = router.analyze(request)
             for attempt in router.consume_attempts():
                 store.add_attempt(
-                    attempt_id=new_id("M20A"),
-                    audit_id=audit_id,
-                    page_id=request.page_id,
-                    snapshot_id=request.snapshot_id,
-                    device=request.device,
-                    url=request.page_url,
-                    attempt=attempt,
+                    attempt_id=new_id("M20A"), audit_id=audit_id,
+                    page_id=request.page_id, snapshot_id=request.snapshot_id,
+                    device=request.device, url=request.page_url, attempt=attempt,
                 )
             if result.state is not ProviderState.AVAILABLE:
                 degraded = True
@@ -125,14 +108,10 @@ def execute_m20(
             for suggestion in result.suggestions:
                 suggestion_id = new_id("M20S")
                 store.add_suggestion(PersistedContentSuggestion(
-                    suggestion_id=suggestion_id,
-                    audit_id=audit_id,
-                    finding_id=suggestion.finding_id,
-                    page_id=request.page_id,
-                    snapshot_id=request.snapshot_id,
-                    device=request.device,
-                    provider=result.provider or "UNKNOWN",
-                    model=result.model,
+                    suggestion_id=suggestion_id, audit_id=audit_id,
+                    finding_id=suggestion.finding_id, page_id=request.page_id,
+                    snapshot_id=request.snapshot_id, device=request.device,
+                    provider=result.provider or "UNKNOWN", model=result.model,
                     objective=suggestion.objective,
                     target_location=suggestion.target_location,
                     proposed_text=suggestion.proposed_text,
@@ -152,14 +131,10 @@ def execute_m20(
         else:
             status = "DEGRADED"
         store.upsert_run(ContentRemediationRun(
-            audit_id=audit_id,
-            enabled=True,
-            strategy=router.strategy,
-            status=status,
-            eligible_findings=eligible_findings,
+            audit_id=audit_id, enabled=True, strategy=router.strategy,
+            status=status, eligible_findings=eligible_findings,
             attempted_contexts=attempted,
-            generated_suggestions=len(suggestion_ids),
-            reason=last_reason,
+            generated_suggestions=len(suggestion_ids), reason=last_reason,
         ))
         return M20ExecutionResult(status, tuple(suggestion_ids), jsonld_ids, attempted)
 
@@ -171,12 +146,9 @@ def _load_requests(*, audit_id: str, workspace: AuditWorkspace) -> tuple[Content
         snapshots = connection.execute(
             """
             SELECT ps.*, p.normalized_url
-            FROM page_snapshots ps
-            JOIN pages p ON p.page_id=ps.page_id
-            WHERE p.audit_id=?
-            ORDER BY p.normalized_url,ps.device
-            """,
-            (audit_id,),
+            FROM page_snapshots ps JOIN pages p ON p.page_id=ps.page_id
+            WHERE p.audit_id=? ORDER BY p.normalized_url,ps.device
+            """, (audit_id,),
         ).fetchall()
         requests: list[ContentRemediationRequest] = []
         placeholders = ",".join("?" for _ in ELIGIBLE_CONTENT_RULES)
@@ -185,14 +157,12 @@ def _load_requests(*, audit_id: str, workspace: AuditWorkspace) -> tuple[Content
             params: list[Any] = [audit_id, snapshot["page_id"], snapshot["device"], *allowed_rules]
             findings = connection.execute(
                 f"""
-                SELECT f.*
-                FROM findings f
+                SELECT f.* FROM findings f
                 WHERE f.audit_id=? AND f.page_id=?
                   AND f.device IN (?, 'BOTH')
                   AND f.rule_id IN ({placeholders})
                 ORDER BY f.rule_id,f.finding_id
-                """,
-                tuple(params),
+                """, tuple(params),
             ).fetchall()
             if not findings:
                 continue
@@ -202,25 +172,19 @@ def _load_requests(*, audit_id: str, workspace: AuditWorkspace) -> tuple[Content
                 evidence_ids = tuple(_json_list(finding["evidence_ids"]))
                 all_evidence_ids.extend(evidence_ids)
                 finding_inputs.append(ContentFindingInput(
-                    finding_id=str(finding["finding_id"]),
-                    rule_id=str(finding["rule_id"]),
-                    title=str(finding["title"]),
-                    severity=str(finding["severity"]),
+                    finding_id=str(finding["finding_id"]), rule_id=str(finding["rule_id"]),
+                    title=str(finding["title"]), severity=str(finding["severity"]),
                     expected_condition=str(finding["expected_condition"] or ""),
                     observed_value=_json_value(finding["observed_value"]),
                     evidence_ids=evidence_ids,
                 ))
-            evidence_inputs = _load_evidence(connection, tuple(dict.fromkeys(all_evidence_ids)))
-            main_content = _read_artifact(workspace, snapshot["main_content_ref"], _MAX_MAIN_CONTENT_CHARS)
             requests.append(ContentRemediationRequest(
-                snapshot_id=str(snapshot["snapshot_id"]),
-                page_id=str(snapshot["page_id"]),
-                page_url=str(snapshot["normalized_url"]),
-                device=str(snapshot["device"]),
+                snapshot_id=str(snapshot["snapshot_id"]), page_id=str(snapshot["page_id"]),
+                page_url=str(snapshot["normalized_url"]), device=str(snapshot["device"]),
                 title=str(snapshot["title"]) if snapshot["title"] else None,
-                main_content=main_content,
+                main_content=_read_artifact(workspace, snapshot["main_content_ref"], _MAX_MAIN_CONTENT_CHARS),
                 findings=tuple(finding_inputs),
-                evidence=evidence_inputs,
+                evidence=_load_evidence(connection, tuple(dict.fromkeys(all_evidence_ids))),
             ))
         return tuple(requests)
     finally:
@@ -236,10 +200,8 @@ def _load_evidence(connection: sqlite3.Connection, evidence_ids: tuple[str, ...]
         evidence_ids,
     ).fetchall()
     return tuple(ContentEvidenceInput(
-        evidence_id=str(row["evidence_id"]),
-        evidence_type=str(row["evidence_type"]),
-        source=str(row["source"]),
-        observed_value=_json_value(row["observed_value"]),
+        evidence_id=str(row["evidence_id"]), evidence_type=str(row["evidence_type"]),
+        source=str(row["source"]), observed_value=_json_value(row["observed_value"]),
     ) for row in rows)
 
 
@@ -247,15 +209,16 @@ def _materialize_jsonld(*, audit_id: str, workspace: AuditWorkspace) -> tuple[st
     connection = sqlite3.connect(workspace.database)
     connection.row_factory = sqlite3.Row
     try:
-        language_row = connection.execute("SELECT primary_language FROM audits WHERE audit_id=?", (audit_id,)).fetchone()
+        language_row = connection.execute(
+            "SELECT primary_language FROM audits WHERE audit_id=?", (audit_id,)
+        ).fetchone()
         language = str(language_row["primary_language"]) if language_row else "pt-BR"
         rows = connection.execute(
             """
             SELECT ps.*,p.normalized_url
             FROM page_snapshots ps JOIN pages p ON p.page_id=ps.page_id
             WHERE p.audit_id=? ORDER BY p.normalized_url,ps.device
-            """,
-            (audit_id,),
+            """, (audit_id,),
         ).fetchall()
         ids: list[str] = []
         with M20Persistence(workspace) as store:
@@ -264,29 +227,20 @@ def _materialize_jsonld(*, audit_id: str, workspace: AuditWorkspace) -> tuple[st
                 evidence_ids = tuple(str(item["evidence_id"]) for item in connection.execute(
                     """
                     SELECT evidence_id FROM evidence
-                    WHERE snapshot_id=? AND evidence_type IN ('STRUCTURED_DATA','HTML_ELEMENT','META_TAG','CANONICAL','MAIN_CONTENT')
+                    WHERE snapshot_id=? AND evidence_type IN
+                    ('STRUCTURED_DATA','HTML_ELEMENT','META_TAG','CANONICAL','MAIN_CONTENT')
                     ORDER BY evidence_id
-                    """,
-                    (row["snapshot_id"],),
+                    """, (row["snapshot_id"],),
                 ).fetchall())
                 status, types, proposed, improvements = _jsonld_for_snapshot(
-                    connection=connection,
-                    workspace=workspace,
-                    snapshot=row,
-                    language=language,
+                    connection=connection, workspace=workspace, snapshot=row, language=language,
                 )
                 store.add_jsonld(PersistedJsonLdSuggestion(
-                    suggestion_id=suggestion_id,
-                    audit_id=audit_id,
-                    page_id=str(row["page_id"]),
-                    snapshot_id=str(row["snapshot_id"]),
-                    device=str(row["device"]),
-                    status=status,
-                    existing_types=types,
-                    proposed_json=proposed,
-                    improvements=improvements,
-                    evidence_ids=evidence_ids,
-                    created_at=utc_now().isoformat(),
+                    suggestion_id=suggestion_id, audit_id=audit_id,
+                    page_id=str(row["page_id"]), snapshot_id=str(row["snapshot_id"]),
+                    device=str(row["device"]), status=status, existing_types=types,
+                    proposed_json=proposed, improvements=improvements,
+                    evidence_ids=evidence_ids, created_at=utc_now().isoformat(),
                 ))
                 ids.append(suggestion_id)
         return tuple(ids)
@@ -294,7 +248,26 @@ def _materialize_jsonld(*, audit_id: str, workspace: AuditWorkspace) -> tuple[st
         connection.close()
 
 
-def _jsonld_for_snapshot(*, connection: sqlite3.Connection, workspace: AuditWorkspace, snapshot: sqlite3.Row, language: str) -> tuple[str, tuple[str, ...], Any | None, tuple[str, ...]]:
+def _high_confidence_entities(connection: sqlite3.Connection, snapshot_id: str) -> tuple[sqlite3.Row, ...]:
+    """Return optional semantic entities without making M7 tables a prerequisite."""
+    try:
+        return tuple(connection.execute(
+            """
+            SELECT name,entity_type,confidence FROM entity_observations
+            WHERE snapshot_id=? AND confidence>=0.9 AND entity_type NOT IN ('TOPIC','OTHER')
+            ORDER BY confidence DESC,entity_observation_id LIMIT 2
+            """, (snapshot_id,),
+        ).fetchall())
+    except sqlite3.OperationalError as exc:
+        if "no such table" in str(exc).lower():
+            return ()
+        raise
+
+
+def _jsonld_for_snapshot(
+    *, connection: sqlite3.Connection, workspace: AuditWorkspace,
+    snapshot: sqlite3.Row, language: str,
+) -> tuple[str, tuple[str, ...], Any | None, tuple[str, ...]]:
     ref = snapshot["structured_data_ref"]
     if not ref:
         proposed: dict[str, Any] = {
@@ -307,25 +280,17 @@ def _jsonld_for_snapshot(*, connection: sqlite3.Connection, workspace: AuditWork
             proposed["name"] = str(snapshot["title"]).strip()
         if snapshot["description"]:
             proposed["description"] = str(snapshot["description"]).strip()
-        entities = connection.execute(
-            """
-            SELECT name,entity_type,confidence FROM entity_observations
-            WHERE snapshot_id=? AND confidence>=0.9 AND entity_type NOT IN ('TOPIC','OTHER')
-            ORDER BY confidence DESC,entity_observation_id LIMIT 2
-            """,
-            (snapshot["snapshot_id"],),
-        ).fetchall()
+        entities = _high_confidence_entities(connection, str(snapshot["snapshot_id"]))
         if len(entities) == 1 and str(entities[0]["entity_type"]) in _ENTITY_SCHEMA_TYPES:
             proposed["mainEntity"] = {
                 "@type": _ENTITY_SCHEMA_TYPES[str(entities[0]["entity_type"])],
                 "name": str(entities[0]["name"]),
             }
-        improvements = (
+        return "MISSING_PROPOSED", (), proposed, (
             "JSON-LD não foi observado. A proposta é um baseline WebPage baseado somente em dados já visíveis/persistidos.",
             "Use tipo mais específico apenas quando o conteúdo visível sustentar esse tipo e valide as propriedades exigidas pela feature alvo.",
             "JSON-LD é reforço opcional; não é requisito universal de GEO nem garantia de rich result.",
         )
-        return "MISSING_PROPOSED", (), proposed, improvements
 
     path = workspace.root / str(ref)
     if not path.is_file():
@@ -338,24 +303,36 @@ def _jsonld_for_snapshot(*, connection: sqlite3.Connection, workspace: AuditWork
     blocks = payload.get("blocks") if isinstance(payload, dict) else None
     if not isinstance(blocks, list):
         return "UNAVAILABLE", (), None, ("Formato persistido de Structured Data não reconhecido.",)
-    types = tuple(dict.fromkeys(str(value) for block in blocks if isinstance(block, dict) for value in (block.get("types") or []) if value))
+    types = tuple(dict.fromkeys(
+        str(value) for block in blocks if isinstance(block, dict)
+        for value in (block.get("types") or []) if value
+    ))
     improvements: list[str] = []
     parse_errors = [block for block in blocks if isinstance(block, dict) and block.get("parse_error")]
     if parse_errors:
-        improvements.append(f"Corrigir {len(parse_errors)} bloco(s) JSON-LD com erro de parse antes de qualquer otimização semântica.")
-    raw_values = [str(block.get("raw") or "").strip() for block in blocks if isinstance(block, dict) and block.get("raw")]
+        improvements.append(
+            f"Corrigir {len(parse_errors)} bloco(s) JSON-LD com erro de parse antes de qualquer otimização semântica."
+        )
+    raw_values = [
+        str(block.get("raw") or "").strip()
+        for block in blocks if isinstance(block, dict) and block.get("raw")
+    ]
     if len(raw_values) != len(set(raw_values)):
-        improvements.append("Há blocos JSON-LD idênticos repetidos; consolidar duplicações evita ambiguidade e manutenção redundante.")
+        improvements.append(
+            "Há blocos JSON-LD idênticos repetidos; consolidar duplicações evita ambiguidade e manutenção redundante."
+        )
 
     nodes: list[dict[str, Any]] = []
     for block in blocks:
         if isinstance(block, dict) and block.get("parsed") is not None:
             nodes.extend(_jsonld_nodes(block["parsed"]))
     if nodes:
-        if any("@context" not in node for node in nodes) and not any("@context" in node for node in nodes):
+        if not any("@context" in node for node in nodes):
             improvements.append("Adicionar @context=https://schema.org no documento/graph JSON-LD.")
         if any("@type" not in node for node in nodes):
-            improvements.append("Existem nós sem @type; definir o tipo Schema.org somente quando ele representar o conteúdo visível.")
+            improvements.append(
+                "Existem nós sem @type; definir o tipo Schema.org somente quando ele representar o conteúdo visível."
+            )
         web_pages = [node for node in nodes if _has_type(node, "WebPage")]
         if web_pages:
             web = web_pages[0]
@@ -368,10 +345,16 @@ def _jsonld_for_snapshot(*, connection: sqlite3.Connection, workspace: AuditWork
             if language and not web.get("inLanguage"):
                 improvements.append("O nó WebPage pode declarar inLanguage conforme o idioma configurado da auditoria.")
         elif types:
-            improvements.append("Opcionalmente, avaliar um nó WebPage ligado aos tipos existentes quando isso representar a página; não substituir o tipo principal específico.")
+            improvements.append(
+                "Opcionalmente, avaliar um nó WebPage ligado aos tipos existentes quando isso representar a página; não substituir o tipo principal específico."
+            )
     if not improvements:
-        improvements.append("Nenhum problema estrutural genérico foi detectado automaticamente; validar propriedades obrigatórias/recomendadas do tipo específico e correspondência com conteúdo visível.")
-    improvements.append("Não marcar conteúdo oculto, irrelevante ou não sustentado pela página; Structured Data deve representar fielmente o conteúdo visível.")
+        improvements.append(
+            "Nenhum problema estrutural genérico foi detectado automaticamente; validar propriedades obrigatórias/recomendadas do tipo específico e correspondência com conteúdo visível."
+        )
+    improvements.append(
+        "Não marcar conteúdo oculto, irrelevante ou não sustentado pela página; Structured Data deve representar fielmente o conteúdo visível."
+    )
     return "EXISTING_REVIEW", types, None, tuple(improvements)
 
 
