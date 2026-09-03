@@ -20,13 +20,9 @@ jobs:
           python-version: '3.13'
       - name: Install package
         run: python -m pip install -e .
+      - name: Install Chromium
+        run: python -m playwright install chromium
       - name: Compile Python
-        run: python -m compileall -q src tests/test_m21_web_performance.py
-      - name: M21 unit tests
-        run: python -m unittest discover -s tests -p 'test_m21_web_performance.py' -v
-      - name: Scoring regression
-        run: python -m unittest discover -s tests -p 'test_m9_scoring.py' -v
-      - name: M20 regression
-        run: python -m unittest discover -s tests -p 'test_m20_content_remediation.py' -v
-      - name: Stable baseline regression
-        run: python -m unittest discover -s tests -p 'test_m12_stable_baseline.py' -v
+        run: python -m compileall -q src tests
+      - name: Full test suite
+        run: python -m unittest discover -s tests -v
