@@ -472,6 +472,8 @@ class ResponsesSemanticProvider(_HardenedOpenAIProvider):
 
         if not isinstance(raw, Mapping):
             return self._failure_result(semantic_input, started_at, started_perf, summary, payload_hash, ProviderDiagnostic(ProviderErrorClass.INVALID_RESPONSE), AttemptStatus.CONTRACT_ERROR)
+        if not raw.get("output_text") and not raw.get("output"):
+            return self._failure_result(semantic_input, started_at, started_perf, summary, payload_hash, ProviderDiagnostic(ProviderErrorClass.EMPTY_RESPONSE), AttemptStatus.CONTRACT_ERROR, usage=_usage_from_native(raw))
         native_error = _response_error(raw)
         if native_error is not None:
             return self._failure_result(semantic_input, started_at, started_perf, summary, payload_hash, native_error, AttemptStatus.TECHNICAL_ERROR)

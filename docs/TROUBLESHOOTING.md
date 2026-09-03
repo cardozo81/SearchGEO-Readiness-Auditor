@@ -419,3 +419,8 @@ Antes de abrir correção de produto, preserve:
 7. error kind estruturado;
 8. indicação de Desktop/Mobile;
 9. informação se IA estava FULL/DEGRADED/NO_AI.
+
+<!-- M18_MULTI_AI_PROVIDER_ROUTING -->
+## M18 — diagnóstico multi-provider
+Erros são normalizados como `AUTH_ERROR`, `QUOTA_ERROR`, `CREDIT_ERROR`, `RATE_LIMIT_ERROR`, `MODEL_ERROR`, `PERMISSION_ERROR`, `NETWORK_ERROR`, `TIMEOUT_ERROR`, `SERVER_ERROR`, `CONTRACT_ERROR`, `EMPTY_RESPONSE`, `INVALID_RESPONSE` ou `UNKNOWN_PROVIDER_ERROR`. Em AUTO, erro coloca o provider em `QUARANTINED_FOR_AUDIT`; ele não é retentado no mesmo audit. Se toda a cadeia falhar, aparece `AI_PROVIDER_CHAIN_EXHAUSTED`; regras semânticas dependentes de IA permanecem UNKNOWN e isso não penaliza score. Nunca copie API keys para logs/HTML ao diagnosticar.
+

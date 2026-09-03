@@ -251,3 +251,15 @@ A specification define um modelo de configuração mais amplo para evolução do
 - forçar geração de selector quando não determinável.
 
 Esses itens são **fora da interface operacional atual**, mesmo quando houver parâmetros internos em classes de baixo nível.
+
+<!-- M18_MULTI_AI_PROVIDER_ROUTING -->
+## M18 — configuração multi-provider
+`--ai-provider` aceita `none`, `openai`, `deepseek`, `mimo`, `auto`. Defaults: OpenAI `gpt-5.6-terra/HIGH`; DeepSeek `deepseek-v4-pro/HIGH`; MiMo `mimo-v2.5-pro/HIGH` (reportado como thinking enabled). Chaves: `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `MIMO_API_KEY`. Modelos: `SEARCHGEO_OPENAI_MODEL`, `SEARCHGEO_DEEPSEEK_MODEL`, `SEARCHGEO_MIMO_MODEL`. Reasoning: `SEARCHGEO_OPENAI_REASONING_EFFORT`, `SEARCHGEO_DEEPSEEK_REASONING_EFFORT`, `SEARCHGEO_MIMO_REASONING_EFFORT`. Valores de chaves nunca devem ser documentados, impressos ou persistidos.
+
+```powershell
+searchgeo audit --urls-file .\urls.txt --project "Projeto" --ai-provider none
+searchgeo audit --urls-file .\urls.txt --project "Projeto" --ai-provider deepseek --ai-model deepseek-v4-pro
+searchgeo audit --urls-file .\urls.txt --project "Projeto" --ai-provider auto
+```
+AUTO ignora providers sem token ou com configuração inválida e cria cadeia imutável no início do audit.
+

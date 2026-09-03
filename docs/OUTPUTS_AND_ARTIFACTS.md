@@ -279,3 +279,8 @@ Score
 | RuleExecution | resultado versionado da regra |
 | `report.html` | projeção humana orientada a página |
 | `remediation.html` | projeção humana transversal orientada a problema/regra |
+
+<!-- M18_MULTI_AI_PROVIDER_ROUTING -->
+## M18 — persistência e relatório de IA
+`audit.db` passa a incluir `ai_audit_sessions`, `ai_provider_attempts` e `provider_pricing_catalog`. Cada tentativa preserva provenance, provider/model/depth, status/erro sanitizado, tokens somente quando reportados, duração, hash de payload e `ESTIMATED_COST` quando calculável. `report.html` inclui contexto operacional e tabela de uso; `remediation.html` inclui apenas contexto informativo, sem transformar falha de provider em finding/recommendation.
+
