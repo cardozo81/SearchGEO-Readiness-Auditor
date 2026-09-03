@@ -14,6 +14,7 @@ from searchgeo.m14_reporting import TEMPLATE_VERSION, _metric, new_m14_report_re
 from searchgeo.m15_reporting import write_remediation_report
 from searchgeo.m15_style_overrides import SCORE_LAYOUT_CSS
 from searchgeo.m16_root_cause import materialize_root_causes
+from searchgeo.m17_duplicate_remediation import refine_br_geo_051_html
 from searchgeo.m17_precision import materialize_m17_precision
 from searchgeo.m17_reporting import M17RemediationReportBuilder, M17ReportBuilder
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
@@ -91,7 +92,7 @@ class _PersistedInputAwareReportBuilder(M17ReportBuilder):
                 html,
                 flags=re.DOTALL,
             )
-        return html
+        return refine_br_geo_051_html(html)
 
     def _executive(
         self,
@@ -347,6 +348,7 @@ def execute_m11(
         audit_id=audit_id,
         workspace=workspace,
     )
+    remediation_html = refine_br_geo_051_html(remediation_html)
     remediation_path = write_remediation_report(workspace=workspace, html=remediation_html)
 
     record = new_m14_report_record(
