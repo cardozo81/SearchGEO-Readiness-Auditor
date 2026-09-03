@@ -1,16 +1,12 @@
 # Troubleshooting
 
-Use este guia para distinguir defeito de ambiente, falha localizada do target e limitação legítima da auditoria.
+Use este guia para distinguir falha do ambiente, limitação da auditoria, falha do provider e problema real do target.
+
+# CLI e instalação
 
 ## `searchgeo`: comando não encontrado
 
-**Sintoma**  
-PowerShell não reconhece `searchgeo`.
-
-**Causa provável**  
-Package não instalado no ambiente ativo ou venv não ativado.
-
-**Diagnóstico**
+Diagnóstico:
 
 ```powershell
 python --version
@@ -18,408 +14,381 @@ python -m pip show searchgeo-readiness-auditor
 Get-Command searchgeo -ErrorAction SilentlyContinue
 ```
 
-**Correção**
+Correção:
 
 ```powershell
 python -m pip install -e .
 ```
 
-Ou use `.\.venv\Scripts\searchgeo.exe` diretamente.
-
-**Limitação vs defeito**  
-Não é limitação do target; é preparação do ambiente.
-
----
+Ou use `.\.venv\Scripts\searchgeo.exe`.
 
 ## Python incompatível
-
-**Sintoma**  
-`pip` rejeita instalação ou comportamento diverge do ambiente validado.
-
-**Causa provável**  
-Python fora de `>=3.13,<3.14`.
-
-**Diagnóstico**
 
 ```powershell
 python --version
 ```
 
-**Correção**  
-Instale/ative CPython 3.13.
+O contrato atual exige CPython `>=3.13,<3.14`.
 
-**Limitação**  
-Suporte a outras versões está fora da Stable Local Baseline.
-
----
-
-## Package/Playwright não instalado
-
-**Sintoma**  
-ImportError para `playwright` ou package.
-
-**Diagnóstico**
+## Playwright/package ausente
 
 ```powershell
 python -m pip show playwright
 python -m pip show searchgeo-readiness-auditor
-```
-
-**Correção**
-
-```powershell
 python -m pip install -e .
 ```
 
----
-
 ## Chromium ausente
 
-**Sintoma**  
-Rendering registra `BROWSER_UNAVAILABLE`.
-
-**Causa provável**  
-Browser do Playwright não instalado.
-
-**Diagnóstico**
-
-```powershell
-python -m playwright install --dry-run chromium
-```
-
-**Correção**
+Sintoma típico: `BROWSER_UNAVAILABLE`.
 
 ```powershell
 python -m playwright install chromium
 ```
 
-Ou configure `PLAYWRIGHT_CHROMIUM_EXECUTABLE` para executável compatível.
+Ou:
 
-**Limitação vs defeito**  
-Sem Chromium, a auditoria perde capacidade RENDERED; isso é limitação de ambiente e pode reduzir Coverage, não prova falha do site.
+```powershell
+$env:PLAYWRIGHT_CHROMIUM_EXECUTABLE = "C:\caminho\para\chrome.exe"
+```
 
----
+Sem browser funcional, a perda de rendering é limitação da auditoria, não `FAIL` automático do website.
 
-## Chromium bloqueado por política/antivírus
+# Target, rede e rendering
 
-**Sintoma**  
-Browser está instalado, mas não inicia; `BROWSER_UNAVAILABLE` ou falha de launch.
-
-**Diagnóstico**  
-Teste um script/instalação Playwright no mesmo usuário e verifique políticas de execução/EDR.
-
-**Correção**  
-Liberar o executável/processo conforme política corporativa ou apontar para Chromium permitido via `PLAYWRIGHT_CHROMIUM_EXECUTABLE`.
-
-**Limitação**  
-Se a política não permitir browser automation, rendering real não pode ser homologado nesse ambiente.
-
----
-
-## Timeout de rendering
-
-**Sintoma**  
-`NAVIGATION_TIMEOUT` em um snapshot.
-
-**Causa provável**  
-Página não chega a `domcontentloaded` dentro de 15 s, rede lenta ou comportamento do site.
-
-**Diagnóstico**  
-Verifique HTTP RAW, acesso manual e se o problema ocorre em Desktop/Mobile.
-
-**Correção**  
-Corrija conectividade/target. O timeout não é configurável pela CLI atual.
-
-**Limitação vs defeito**  
-Timeout localizado é evidência de indisponibilidade naquele contexto; não deve ser automaticamente extrapolado para outras páginas/devices.
-
----
-
-## `networkidle` não é atingido
-
-**Sintoma**  
-Browser metadata mostra `settle_outcome = BOUNDED_TIMEOUT`.
-
-**Causa provável**  
-Conexões persistentes/analytics/long polling.
-
-**Correção**  
-Normalmente nenhuma. A implementação limita `networkidle` a 2 s e ainda captura o DOM.
-
-**Limitação**  
-É comportamento previsto, não erro por si só.
-
----
-
-## DNS / conexão
-
-**Sintoma**  
-BR-GEO-005 falha; Evidence HTTP possui network error.
-
-**Causa provável**  
-Hostname inválido/não resolvido, porta recusada ou rede indisponível.
-
-**Diagnóstico**
+## DNS/conexão
 
 ```powershell
 Resolve-DnsName example.com
 Test-NetConnection example.com -Port 443
 ```
 
-**Correção**  
-Corrigir DNS, URL, conectividade ou infraestrutura do target.
-
-**Limitação vs defeito**  
-Se o erro for específico do ambiente/proxy, é limitação da observação; se reproduzível externamente, pode ser problema real de acessibilidade.
-
----
+Falha local de rede/proxy não deve ser atribuída automaticamente ao website. Falha reproduzível no target pode ser problema real de acessibilidade.
 
 ## TLS
 
-**Sintoma**  
-Aquisição não obtém resposta utilizável e registra erro TLS.
+Valide certificado, cadeia e hostname no mesmo ambiente. Distinga falha do target de trust/proxy corporativo.
 
-**Diagnóstico**  
-Abra o endpoint com ferramenta corporativa/browser e valide certificado/cadeia/hostname.
+## Proxy/firewall
 
-**Correção**  
-Corrigir certificado/chain no target ou trust/proxy do ambiente quando o problema for local.
+A baseline não expõe flags próprias de proxy. Se HTTP/Chromium/provider funcionam em outro host e falham no ambiente atual, revise egress, proxy, DNS split-horizon e EDR.
 
----
+## Timeout de rendering
 
-## Proxy ou firewall
+`NAVIGATION_TIMEOUT` é localizado ao snapshot/device. O timeout não é configurável pela CLI atual.
 
-**Sintoma**  
-HTTP/Chromium falham para targets que funcionam em outro ambiente.
+## `networkidle` limitado
 
-**Diagnóstico**  
-Compare aquisição por PowerShell/browser no mesmo host, revise proxy corporativo, DNS split-horizon e regras de egress.
+`settle_outcome = BOUNDED_TIMEOUT` pode ocorrer com analytics/long polling. O renderer ainda captura o DOM conforme a política implementada; isso não é falha por si só.
 
-**Correção**  
-Ajustar rede. A baseline não expõe flags próprias de proxy.
+## HTTP 4xx/5xx
 
-**Limitação**  
-Ambiente sem egress suficiente não é adequado para smoke test externo.
+Consulte Evidence/RuleExecution e artifacts RAW. Regras derivadas podem ficar `UNKNOWN`/`NOT_APPLICABLE` para evitar cascading failure.
 
----
-
-## Site retorna 4xx/5xx
-
-**Sintoma**  
-HTTP status final evidencia resposta não utilizável; regras derivadas podem ficar bloqueadas.
-
-**Diagnóstico**  
-Abra `artifacts/http/page-*.response` e consulte Evidence/RuleExecution no `audit.db`.
-
-**Correção**  
-Depende do target: rota, autenticação, rate limit, WAF ou falha de aplicação.
-
-**Limitação vs defeito**  
-Um 4xx/5xx observado é dado técnico real; regras semânticas derivadas em `NOT_APPLICABLE`/`UNKNOWN` são prevenção de cascading failure, não ausência de problema técnico.
-
----
+# robots.txt e sitemap
 
 ## robots.txt ausente
 
-**Sintoma**  
-robots state `ABSENT`/404.
+Ausência/404 de `robots.txt` não é automaticamente `FAIL`.
 
-**Interpretação**  
-Ausência de robots não é automaticamente FAIL nem bloqueio.
+## robots.txt inválido
 
-**Correção**  
-Só é necessária se a política/site deveria publicar robots por requisito próprio.
+Consulte Evidence `ROBOTS_RULE` e o artifact HTTP correspondente.
 
----
+## sitemap ausente/inválido
 
-## robots.txt inválido/ininterpretável
+Ausência de sitemap não é `FAIL` automático. Malformação é registrada sem abortar toda a auditoria.
 
-**Sintoma**  
-BR-GEO-017 pode alertar/falhar conforme evidência.
+# Desktop/Mobile e SPA
 
-**Diagnóstico**  
-Consulte Evidence `ROBOTS_RULE` e artifact `artifacts/http/robots.response`, quando disponível.
+## Um device sem rendered artifact
 
-**Correção**  
-Corrigir sintaxe/política do arquivo.
+Verifique PageSnapshot/browser metadata e `artifacts/rendered`. Comparação Desktop/Mobile pode ficar `UNKNOWN`; não se inventa diferença negativa.
 
----
+## RAW mínimo e RENDERED completo em SPA/CSR
 
-## Sitemap ausente ou inválido
+Isso pode ser arquitetura válida. O auditor avalia recuperabilidade/direct routes/navegação/soft-404/lazy loading, não penaliza CSR/SPA apenas por existir.
 
-**Sintoma**  
-Sitemap não encontrado ou state `INVALID`.
+# IA — primeiro diagnóstico
 
-**Interpretação**  
-Ausência de sitemap não é FAIL automático. Sitemap malformado é registrado sem abortar Discovery.
+Confira qual modo foi solicitado:
 
-**Diagnóstico**  
-Evidence `SITEMAP_ENTRY` + artifact `sitemap-*.response`.
+```text
+none
+openai
+deepseek
+mimo
+auto
+```
 
----
+A referência completa está em [AI_GUIDE.md](AI_GUIDE.md).
 
-## Rendering ausente para um device
-
-**Sintoma**  
-Desktop ou Mobile não possui rendered artifact.
-
-**Diagnóstico**  
-Verifique PageSnapshot/browser metadata e `artifacts/rendered`.
-
-**Correção**  
-Resolver browser/rede/target conforme error kind.
-
-**Limitação**  
-Comparação BR-GEO-052 pode ficar `UNKNOWN`; isso não deve virar diferença negativa inventada.
-
----
-
-## Site SPA/CSR parece diferente no RAW
-
-**Sintoma**  
-RAW contém shell mínimo, RENDERED contém conteúdo completo.
-
-**Interpretação**  
-Isso pode ser válido. A baseline não penaliza SPA/CSR apenas pela arquitetura. BR-GEO-019..024 avaliam recuperabilidade, direct routes, navegação, soft-404 e lazy loading.
-
----
-
-## API key OpenAI ausente
-
-**Sintoma**  
-Modo `NO_AI`/`AI_NOT_CONFIGURED`.
-
-**Diagnóstico**
+## Verificar tokens sem revelá-los
 
 ```powershell
 Test-Path Env:OPENAI_API_KEY
+Test-Path Env:DEEPSEEK_API_KEY
+Test-Path Env:MIMO_API_KEY
 ```
 
-**Correção**  
-Configure a variável apenas se IA for desejada.
+Nunca use `Write-Output` para imprimir API keys em logs de suporte.
 
-**Limitação vs defeito**  
-Ausência de IA é suportada; não é erro do site.
+# Provider explícito sem token
 
----
-
-## Model OpenAI ausente
-
-**Sintoma**  
-CLI encerra: `--ai-model or SEARCHGEO_OPENAI_MODEL is required when --ai-provider=openai`.
-
-**Correção**
+Exemplo:
 
 ```powershell
-$env:SEARCHGEO_OPENAI_MODEL = "<modelo>"
+searchgeo audit https://example.com --ai-provider openai
 ```
 
-Ou `--ai-model`.
+sem `OPENAI_API_KEY`.
 
----
+Comportamento esperado:
 
-## Erro do OpenAIProvider
+- provider `NOT_CONFIGURED`;
+- nenhuma chamada externa;
+- auditoria continua sem IA efetiva;
+- semantic-only pode ficar `UNKNOWN`;
+- não é falha do website.
 
-**Sintoma**  
-`AI_PROVIDER_UNAVAILABLE:<tipo>`; análise semântica degrada.
+O mesmo vale para DeepSeek/MiMo com suas chaves específicas.
 
-**Causas**  
-HTTP error, timeout, rede, resposta inválida, schema/evidence inválida ou JSON inválido.
+# AUTO sem token
 
-**Diagnóstico**  
-Confirme credencial/model/conectividade. Não aceite saída inválida manualmente como finding.
+```powershell
+searchgeo audit https://example.com --ai-provider auto
+```
 
-**Correção**  
-Resolver provider/configuração ou executar sem IA.
+Comportamento:
 
-**Limitação**  
-Provider indisponível reduz capacidade analítica; não reduz qualidade do website por si só.
+- providers sem token não entram na cadeia;
+- se nenhum token/configuração elegível existir, nenhuma chamada externa é feita;
+- não há erro de website por ausência da IA.
 
----
+# Model inválido
 
-## Problemas com `audit.db`
+M18 possui allowlist.
 
-**Sintoma**  
-Workspace não reabre, database ausente/corrompido ou erro de permissão.
+Aceitos:
 
-**Diagnóstico**
+```text
+OPENAI:   gpt-5.6-sol | gpt-5.6-terra | gpt-5.6-luna
+DEEPSEEK: deepseek-v4-pro | deepseek-v4-flash
+MIMO:     mimo-v2.5-pro | mimo-v2.5
+```
+
+Provider explícito com model inválido é rejeitado pela configuração.
+
+Em `auto`, provider com model/reasoning inválido é excluído da cadeia e aparece em `excluded_configurations`; outros providers elegíveis continuam.
+
+# `--ai-model` com AUTO
+
+Isto é inválido:
+
+```powershell
+searchgeo audit https://example.com --ai-provider auto --ai-model gpt-5.6-terra
+```
+
+Configure por variáveis:
+
+```powershell
+$env:SEARCHGEO_OPENAI_MODEL = "gpt-5.6-terra"
+$env:SEARCHGEO_DEEPSEEK_MODEL = "deepseek-v4-pro"
+$env:SEARCHGEO_MIMO_MODEL = "mimo-v2.5-pro"
+searchgeo audit https://example.com --ai-provider auto
+```
+
+# Falhas de provider
+
+Classes normalizadas:
+
+```text
+AUTH_ERROR
+QUOTA_ERROR
+CREDIT_ERROR
+RATE_LIMIT_ERROR
+MODEL_ERROR
+PERMISSION_ERROR
+NETWORK_ERROR
+TIMEOUT_ERROR
+SERVER_ERROR
+CONTRACT_ERROR
+EMPTY_RESPONSE
+INVALID_RESPONSE
+UNKNOWN_PROVIDER_ERROR
+```
+
+## Token inválido
+
+Esperado: `AUTH_ERROR` ou `PERMISSION_ERROR` conforme resposta do serviço.
+
+Confirme credencial, escopo e endpoint acessível. Não copie o token para ticket/log.
+
+## Sem créditos / saldo
+
+Esperado: `CREDIT_ERROR` quando o provider fornece sinal classificável; em outros casos pode aparecer classe de quota/rate limit compatível com a resposta.
+
+Isso é estado da conta/provider, não problema do website.
+
+### Provider explícito
+
+- chamada falha;
+- provider entra em `QUARANTINED_FOR_AUDIT`;
+- não é chamado novamente no mesmo audit;
+- não existe fallback para outro fornecedor;
+- sessão semântica fica `DEGRADED` quando o universo necessário não foi atendido.
+
+### AUTO
+
+- provider falho entra em `QUARANTINED_FOR_AUDIT`;
+- próximo provider saudável pode ser tentado;
+- provider quarantined não retorna no mesmo audit.
+
+Se todos falharem:
+
+```text
+CHAIN_EXHAUSTED
+AI_PROVIDER_CHAIN_EXHAUSTED
+```
+
+# Timeout/rede do provider
+
+Esperado: `TIMEOUT_ERROR`/`NETWORK_ERROR`.
+
+Verifique egress HTTPS, proxy/firewall, DNS e disponibilidade do provider. Em AUTO, o próximo provider saudável pode ser utilizado conforme as regras de lock/failover.
+
+# Resposta inválida/contrato
+
+Pode aparecer:
+
+```text
+CONTRACT_ERROR
+EMPTY_RESPONSE
+INVALID_RESPONSE
+```
+
+Causas possíveis:
+
+- resposta vazia;
+- JSON inválido;
+- assessments incompletos;
+- `rule_id` ausente/duplicado/desconhecido;
+- enum inválido;
+- `evidence_id` inventado;
+- schema incompatível.
+
+O SearchGEO descarta a análise; não converta manualmente resposta inválida em finding.
+
+# Provider lock por URL
+
+Cenário:
+
+```text
+URL A Desktop -> Provider X SUCCESS
+URL A Mobile  -> Provider X falha
+```
+
+Comportamento esperado:
+
+- Provider Y não completa URL A Mobile;
+- URL A fica parcialmente degradada;
+- Provider X é quarantined para URLs seguintes;
+- URL B pode usar Provider Y.
+
+Isso é intencional para evitar Desktop/Mobile da mesma URL produzidos por providers diferentes.
+
+# Onde diagnosticar uso da IA
+
+## `report.html`
+
+Seção **Uso de IA — execução e telemetria**:
+
+- estratégia;
+- provider/model inicial e efetivo;
+- status;
+- cadeia inicial;
+- failover;
+- URL/device;
+- tokens;
+- `ESTIMATED_COST`;
+- duração;
+- erro sanitizado.
+
+## `audit.db`
+
+```text
+ai_audit_sessions
+ai_provider_attempts
+provider_pricing_catalog
+```
+
+## Logging do processo
+
+Quando `log_level` permite, M18 emite linha por tentativa e resumo de sessão com provider/model/status/duração/tokens/custo estimado/error_class.
+
+A baseline **não cria `audit.log` automaticamente**. Se o terminal/logging externo não foi preservado, use `audit.db` e `report.html` como registro persistente.
+
+# `ESTIMATED_COST`
+
+Se aparecer vazio/`—`, isso pode ser legítimo. O SearchGEO só estima custo quando possui os token fields necessários e preço aplicável no catálogo local versionado.
+
+Não use esse valor como invoice oficial.
+
+# `audit.db` / filesystem
+
+## Database ausente/corrompido
 
 ```powershell
 Test-Path .\audits\AUD-...\audit.db
 Get-Item .\audits\AUD-...\audit.db
 ```
 
-**Correção**  
-Garanta espaço/permissão. Não substitua o DB por `report.html`; reexecute a auditoria se a fonte primária foi perdida.
+`report.html` não substitui a fonte primária.
 
----
+## Sem permissão de escrita
 
-## Filesystem/permissões
-
-**Sintoma**  
-Falha ao criar `audits/<AUD-ID>` ou artifacts.
-
-**Causa provável**  
-Diretório read-only, ACL, path inválido, espaço em disco.
-
-**Correção**
+Use raiz gravável:
 
 ```powershell
 searchgeo audit https://example.com --audits-root D:\SearchGEO\audits
 ```
 
-Use path com permissão de criação/escrita.
+# Relatórios ausentes
 
----
+Se `report.html`/`remediation.html` não foram materializados, confira stdout/stderr e status persistido. Não há comando público de regeneração isolada; corrija o problema e reexecute.
 
-## `report.html` ausente
+# `COMPLETE_WITH_LIMITATIONS`
 
-**Sintoma**  
-Workspace existe, mas report não foi materializado.
+Não equivale automaticamente a site ruim. Pode refletir:
 
-**Diagnóstico**  
-Confira status do Audit no SQLite, stdout/stderr da execução e se pipeline chegou a REPORTING/M11.
-
-**Correção**  
-Corrija a falha operacional e reexecute. Não há comando de regeneração isolada exposto pela CLI atual.
-
-**Limitação**  
-Auditoria interrompida antes de M11 pode ter dados parciais úteis, mas não é uma Stable Local Baseline concluída.
-
----
-
-## Auditoria `COMPLETE_WITH_LIMITATIONS`
-
-**Sintoma**  
-Execução conclui, mas status possui limitações.
-
-**Diagnóstico**  
-Leia a seção Reliability/Limitations do report e o Audit persistido.
-
-Causas normais incluem:
-
-- `max_pages` atingido;
 - `NO_AI`;
-- rules UNKNOWN/ERROR;
-- dimensões não consolidadas.
+- provider sem token;
+- provider indisponível/quarantined;
+- `AI_PROVIDER_CHAIN_EXHAUSTED`;
+- `max_pages`;
+- regra `UNKNOWN`/`ERROR`;
+- perda de rendering/evidence;
+- score não consolidado.
 
-**Correção**  
-Só corrija quando a limitação for indesejada. Não trate automaticamente `COMPLETE_WITH_LIMITATIONS` como defeito do site.
+# Escalonamento técnico
 
-## Escalonamento técnico
+Preserve, sem secrets:
 
-Antes de abrir correção de produto, preserve:
-
-1. comando exato executado, sem secrets;
-2. versão do Python/package;
+1. comando executado;
+2. versão de Python/package;
 3. Audit ID;
 4. `audit.db`;
 5. artifacts relevantes;
 6. RuleExecution/Evidence IDs;
-7. error kind estruturado;
-8. indicação de Desktop/Mobile;
-9. informação se IA estava FULL/DEGRADED/NO_AI.
+7. Desktop/Mobile;
+8. modo IA (`NO_AI`, `FULL`, `DEGRADED`);
+9. estratégia IA (`NONE`, `SINGLE_PROVIDER`, `AUTO`);
+10. error class sanitizado;
+11. seção de telemetria do report.
 
-<!-- M18_MULTI_AI_PROVIDER_ROUTING -->
-## M18 — diagnóstico multi-provider
-Erros são normalizados como `AUTH_ERROR`, `QUOTA_ERROR`, `CREDIT_ERROR`, `RATE_LIMIT_ERROR`, `MODEL_ERROR`, `PERMISSION_ERROR`, `NETWORK_ERROR`, `TIMEOUT_ERROR`, `SERVER_ERROR`, `CONTRACT_ERROR`, `EMPTY_RESPONSE`, `INVALID_RESPONSE` ou `UNKNOWN_PROVIDER_ERROR`. Em AUTO, erro coloca o provider em `QUARANTINED_FOR_AUDIT`; ele não é retentado no mesmo audit. Se toda a cadeia falhar, aparece `AI_PROVIDER_CHAIN_EXHAUSTED`; regras semânticas dependentes de IA permanecem UNKNOWN e isso não penaliza score. Nunca copie API keys para logs/HTML ao diagnosticar.
+# Referências
+
+- [Referência completa da CLI](CLI_REFERENCE.md)
+- [Guia de IA](AI_GUIDE.md)
+- [Configuração](CONFIGURATION.md)
+- [Compatibilidade](COMPATIBILITY.md)

@@ -1,36 +1,33 @@
 # Instalação
 
-Este guia descreve a instalação da **Stable Local Baseline** realmente implementada. Não descreve empacotamento futuro.
+Este guia descreve a instalação da baseline local atual do SearchGEO Readiness Auditor, incluindo M18 multi-provider.
 
-## Ambiente de desenvolvimento/handoff atual
+## Ambiente de referência
 
-O fluxo operacional de referência é Windows + PowerShell. A suíte M12 também foi validada em GitHub Actions com CPython 3.13.15 e Chromium, mas isso não transforma outros sistemas em targets formais de distribuição.
+O fluxo operacional documentado usa Windows + PowerShell. Ubuntu é usado em validação automatizada, mas não substitui o target operacional de handoff.
 
-Consulte também [COMPATIBILITY.md](COMPATIBILITY.md) para a matriz completa de compatibilidade.
+Consulte [COMPATIBILITY.md](COMPATIBILITY.md) para o contrato completo.
 
 ## Requisitos
 
 | Componente | Obrigatório | Contrato atual |
 |---|---:|---|
 | CPython | Sim | `>=3.13,<3.14` |
-| pip | Sim | instalação do package; pode ser restaurado via `ensurepip` |
-| Playwright | Sim | `>=1.57,<2`, dependência do package |
-| Chromium | Sim para rendering real | instalado/gerenciado pelo Playwright ou path explícito |
-| SQLite | Sim | módulo embarcado do Python; não exige servidor |
-| Filesystem local | Sim | workspace, database, artifacts e report |
-| OpenAI | Não | serviço externo opcional para análise semântica |
-| Git/GitHub | Não em runtime | somente desenvolvimento/versionamento |
-| Docker | Não | não existe requisito Docker |
-| Database server | Não | SQLite é local/embarcado |
+| pip | Sim | instalação do package |
+| Playwright | Sim | `>=1.57,<2` |
+| Chromium | Sim para rendering real | gerenciado pelo Playwright ou path explícito |
+| SQLite | Sim | embarcado no Python |
+| Filesystem local | Sim | workspace, DB, artifacts e HTMLs |
+| OpenAI | Não | provider semântico opcional |
+| DeepSeek | Não | provider semântico opcional |
+| Xiaomi MiMo | Não | provider semântico opcional |
+| Docker | Não | não fornecido/requerido |
+| Database server | Não | SQLite local |
 | Web server | Não | CLI + HTML estático |
 
 # Instalar dependências ausentes no Windows
 
-Esta seção deve ser usada quando uma máquina nova **não possuir as dependências necessárias**.
-
-## 1. Verificar o que já existe
-
-No PowerShell:
+## 1. Verificar ambiente
 
 ```powershell
 winget --version
@@ -39,63 +36,40 @@ python --version
 python -m pip --version
 ```
 
-Se `py`/`python` não existirem, instale Python 3.13 conforme a próxima seção.
-
-## 2. Instalar Python 3.13 quando não existir
-
-Em Windows suportado, a forma recomendada é instalar o **Python Install Manager** via WinGet e depois instalar runtime 3.13.
+## 2. Instalar Python 3.13
 
 ```powershell
 winget install 9NQ7512CXL7T -e --accept-package-agreements --accept-source-agreements
 py install 3.13
-```
-
-Valide:
-
-```powershell
 py -3.13 --version
 ```
 
-O projeto exige Python `>=3.13,<3.14`; não use 3.14 para esta baseline.
-
-### Se `winget` não estiver disponível
-
-Verifique se o Windows App Installer está presente:
+Se `winget` não estiver disponível, valide o App Installer:
 
 ```powershell
 Get-AppxPackage Microsoft.DesktopAppInstaller
 ```
 
-Se estiver ausente/corrompido, abra a página do Python Install Manager na Microsoft Store por comando:
+Ou abra o Python Install Manager na Microsoft Store:
 
 ```powershell
 Start-Process "ms-windows-store://pdp/?ProductId=9NQ7512CXL7T"
 ```
 
-Após instalar o manager, execute:
+Depois:
 
 ```powershell
 py install 3.13
 ```
 
-## 3. Restaurar/instalar `pip` quando necessário
-
-Uma instalação normal do Python 3.13 já inclui suporte a `pip`. Se `pip` estiver indisponível:
+## 3. Restaurar `pip`, se necessário
 
 ```powershell
 py -3.13 -m ensurepip --upgrade
 py -3.13 -m pip install --upgrade pip
 ```
 
-Valide:
-
-```powershell
-py -3.13 -m pip --version
-```
-
 ## 4. Criar ambiente virtual
-
-Na raiz do repositório:
 
 ```powershell
 py -3.13 -m venv .venv
@@ -103,25 +77,17 @@ py -3.13 -m venv .venv
 python --version
 ```
 
-Se a política do PowerShell impedir ativação, use os executáveis diretamente:
+Se a política do PowerShell bloquear ativação:
 
 ```powershell
 .\.venv\Scripts\python.exe --version
 ```
 
-## 5. Instalar as dependências Python do projeto
-
-Com a venv ativa:
+## 5. Instalar o projeto
 
 ```powershell
 python -m pip install --upgrade pip
 python -m pip install -e .
-```
-
-Isso instala o package e a dependência externa declarada:
-
-```text
-playwright>=1.57,<2
 ```
 
 Valide:
@@ -132,60 +98,80 @@ python -m pip show playwright
 searchgeo --version
 ```
 
-## 6. Instalar Chromium quando não existir
-
-O Chromium usado pelo Playwright **não é instalado apenas com `pip install`**. Execute:
+## 6. Instalar Chromium
 
 ```powershell
 python -m playwright install chromium
 ```
 
-Esse é o comando obrigatório para provisionar o browser gerenciado pelo Playwright.
-
-Se a organização já possui Chromium/Chrome homologado e quiser usá-lo explicitamente:
+Executável corporativo alternativo:
 
 ```powershell
 $env:PLAYWRIGHT_CHROMIUM_EXECUTABLE = "C:\caminho\para\chrome.exe"
 ```
 
-A compatibilidade desse executável alternativo deve ser confirmada no smoke test humano.
-
-## 7. SQLite
-
-Não há pacote de sistema para instalar. A baseline usa `sqlite3` da biblioteca padrão do Python.
-
-Valide:
+## 7. Validar SQLite
 
 ```powershell
 python -c "import sqlite3; print(sqlite3.sqlite_version)"
 ```
 
-Se esse comando falhar em um Python padrão 3.13, a instalação do Python está incompleta/corrompida; reinstale o runtime.
+# Teste mínimo sem IA
 
-## 8. OpenAI — somente se IA for desejada
+Após instalar:
 
-Não existe dependência Python `openai` obrigatória. O adapter usa HTTP da biblioteca padrão.
+```powershell
+searchgeo --version
+searchgeo audit https://example.com --max-pages 1 --ai-provider none
+```
 
-Para habilitar IA:
+Nenhum token de IA é necessário para esse teste.
+
+# Habilitar IA — opcional
+
+Não instale SDK Python específico de OpenAI/DeepSeek/MiMo. Os adapters usam HTTP.
+
+## OpenAI
 
 ```powershell
 $env:OPENAI_API_KEY = "<chave>"
-$env:SEARCHGEO_OPENAI_MODEL = "<modelo>"
-searchgeo audit https://example.com --ai-provider openai
+searchgeo audit https://example.com --max-pages 1 --ai-provider openai
 ```
 
-Ou:
+Default: `gpt-5.6-terra`.
+
+## DeepSeek
 
 ```powershell
-$env:OPENAI_API_KEY = "<chave>"
-searchgeo audit https://example.com --ai-provider openai --ai-model "<modelo>"
+$env:DEEPSEEK_API_KEY = "<chave>"
+searchgeo audit https://example.com --max-pages 1 --ai-provider deepseek
 ```
 
-Consulte [AI_GUIDE.md](AI_GUIDE.md) antes de habilitar IA, especialmente a seção de dados enviados externamente.
+Default: `deepseek-v4-pro`.
+
+## Xiaomi MiMo
+
+```powershell
+$env:MIMO_API_KEY = "<chave>"
+searchgeo audit https://example.com --max-pages 1 --ai-provider mimo
+```
+
+Default: `mimo-v2.5-pro`.
+
+## AUTO com vários providers
+
+```powershell
+$env:OPENAI_API_KEY = "<chave-openai>"
+$env:DEEPSEEK_API_KEY = "<chave-deepseek>"
+$env:MIMO_API_KEY = "<chave-mimo>"
+searchgeo audit https://example.com --max-pages 1 --ai-provider auto
+```
+
+Providers sem token são omitidos da cadeia AUTO. Um provider explícito sem token fica `NOT_CONFIGURED` e nenhuma chamada externa é feita.
+
+Consulte [AI_GUIDE.md](AI_GUIDE.md) antes de habilitar IA em conteúdo corporativo.
 
 # Instalação normal — ambiente já provisionado
-
-Se Python 3.13 já estiver instalado:
 
 ```powershell
 py -3.13 -m venv .venv
@@ -196,46 +182,47 @@ python -m playwright install chromium
 searchgeo --version
 ```
 
-## Teste mínimo da instalação
+# Executar a aplicação
+
+Exemplo padrão:
 
 ```powershell
-searchgeo --version
-searchgeo audit https://example.com --max-pages 1
+searchgeo audit https://example.com --project "Exemplo"
 ```
 
-Uma auditoria real requer acesso HTTP/HTTPS ao target e permissão de escrita no diretório de saída.
+Várias URLs:
 
-## Dependências Python
-
-### Runtime obrigatório
-
-A única dependência Python externa declarada é:
-
-```text
-playwright>=1.57,<2
+```powershell
+searchgeo audit https://example.com/ https://example.com/produto --project "Exemplo"
 ```
 
-HTTP, SQLite, parsing TOML, HTML básico, JSON e integração OpenAI usam biblioteca padrão do Python.
+Arquivo de URLs:
 
-### Desenvolvimento/testes
+```powershell
+searchgeo audit --urls-file .\urls.txt --project "Exemplo"
+```
 
-A suíte usa `unittest` e utilitários da biblioteca padrão. Não existe extra `dev` ou dependência de testes separada no `pyproject.toml` da Stable Local Baseline.
+A referência completa de **todos os parâmetros de execução** está em [CLI_REFERENCE.md](CLI_REFERENCE.md).
 
-Para executar a suíte:
+# Executar testes do projeto
 
 ```powershell
 python -m compileall -q src tests
 python -m unittest discover -s tests -v
 ```
 
-## O que não existe nesta baseline
+# Dependências Python
 
-- instalador MSI/EXE do SearchGEO Auditor;
+A dependência externa declarada de runtime é Playwright. HTTP, SQLite, TOML, JSON e adapters de IA usam recursos da biblioteca padrão/implementação do projeto.
+
+# O que não existe nesta baseline
+
+- MSI/EXE standalone;
 - binário portátil sem Python;
 - imagem Docker oficial;
 - database server;
-- serviço web do auditor;
+- serviço web;
 - daemon/background worker;
-- CI permanente como requisito de runtime.
+- `audit.log` persistido automaticamente.
 
-Portanto, se o ambiente final exigir distribuição sem Python instalado, isso é trabalho futuro e está fora da Stable Local Baseline.
+Os registros persistentes de uma auditoria são o workspace (`audit.db`, artifacts, `report.html`, `remediation.html`).

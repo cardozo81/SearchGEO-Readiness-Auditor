@@ -2,9 +2,9 @@
 
 Auditor local de **Search/GEO Readiness** para avaliar, com rastreabilidade técnica, quão acessível, extraível, semanticamente compreensível e reutilizável um site é para mecanismos de busca e sistemas generativos.
 
-## Status
+## Status atual
 
-**Stable Local Baseline — implementada.** A baseline M1–M12 executa a auditoria ponta a ponta por CLI, persiste dados em SQLite + filesystem, analisa Desktop e Mobile separadamente e produz `report.html` estático.
+**Baseline local estável até M18.** A aplicação executa auditoria ponta a ponta por CLI, separa Desktop e Mobile, persiste estado em SQLite + filesystem, gera `report.html` e `remediation.html` e possui integração opcional com múltiplos providers de IA semântica.
 
 > Readiness não é promessa de ranking, tráfego, citação, presença ou visibilidade em mecanismos generativos.
 
@@ -17,43 +17,44 @@ Auditor local de **Search/GEO Readiness** para avaliar, com rastreabilidade téc
 | Python 3.12 ou 3.14+ | incompatível pelo contrato atual do package |
 | Playwright `>=1.57,<2` | obrigatório |
 | Chromium | obrigatório para rendering real Desktop/Mobile |
-| Ubuntu `ubuntu-latest` | suíte M12 validada em CI; não é target formal de distribuição |
+| Ubuntu `ubuntu-latest` | validado por suíte automatizada; não é target formal de distribuição |
 | macOS | não homologado |
 | SQLite | embarcado/local; nenhum database server necessário |
-| OpenAI | opcional; a auditoria funciona sem IA |
-| Docker / web server | não requeridos e não fornecidos nesta baseline |
+| OpenAI | opcional; provider semântico suportado |
+| DeepSeek | opcional; provider semântico suportado, qualificação SearchGEO `PROVISIONAL` |
+| Xiaomi MiMo | opcional; provider semântico suportado, qualificação SearchGEO `PROVISIONAL` |
+| Docker / web server | não requeridos e não fornecidos |
 
-O contrato completo, incluindo rede, filesystem, Chromium e estado de homologação, está em [Compatibilidade e Dependências](docs/COMPATIBILITY.md).
+O contrato completo está em [Compatibilidade e Dependências](docs/COMPATIBILITY.md).
 
-## Dependências
-
-Obrigatórias:
+## Dependências obrigatórias
 
 - CPython 3.13;
 - `pip`;
-- package do projeto, que declara `playwright>=1.57,<2`;
+- package do projeto;
+- Playwright `>=1.57,<2`;
 - Chromium funcional para rendering real;
 - filesystem local gravável;
 - acesso HTTP/HTTPS ao target.
 
-Opcional:
-
-- OpenAI para análise semântica via `OpenAIProvider`.
-
-Não são obrigatórios: Docker, database server, web server, SDK Python `openai`, Git ou GitHub em runtime.
+IA é opcional. Não é necessário instalar SDK Python de OpenAI, DeepSeek ou MiMo: os adapters usam HTTP.
 
 ## Capacidades principais
 
 - Discovery por seed, `robots.txt`, sitemap e links internos, limitado por `max_pages`.
+- Auditoria de uma URL, múltiplas URLs posicionais ou `--urls-file` em um mesmo `audit_id`.
 - Aquisição HTTP com redirects, headers, body e erros de rede rastreáveis.
-- Rendering real com Playwright/Chromium para Desktop e Mobile em contextos independentes.
+- Rendering real com Playwright/Chromium para Desktop e Mobile independentes.
+- Screenshots e observações de elementos DOM quando determináveis.
 - Extração de metadata, canonical, robots, headings, links, conteúdo principal e JSON-LD.
 - Evidence First: findings apontam para RuleExecution e Evidence persistidas.
-- Business Rules `BR-GEO-001..054`, incluindo JavaScript/SPA, semântica, entidades, Dados Estruturados, answerability, citation readiness e comparação Desktop/Mobile.
+- Business Rules `BR-GEO-001..054`.
 - Scoring determinístico por dispositivo em 10 dimensões, com Coverage, Confidence e Consolidation.
-- Priorização, Remediation Groups e recomendações determinísticas.
-- IA opcional: `NoneProvider` por padrão e `OpenAIProvider` opcional.
-- Relatório HTML5 estático, autocontido e prioritariamente pt-BR.
+- Priorização, causa raiz, remediation groups e recomendações determinísticas.
+- IA opcional com `none`, OpenAI, DeepSeek, MiMo ou `auto` multi-provider.
+- Failover controlado, quarantine por audit e lock de provider por URL.
+- Telemetria de IA persistida e exibida no relatório.
+- `report.html` orientado à auditoria e `remediation.html` orientado aos problemas.
 
 ## Arquitetura resumida
 
@@ -65,16 +66,16 @@ CLI
   -> Extraction + Evidence
   -> Deterministic Rules
   -> JavaScript/SPA + Content Extractability
-  -> Semantic Provider
+  -> Semantic Provider (none | single provider | AUTO)
   -> Desktop/Mobile Comparison
   -> Scoring
-  -> Prioritization + Recommendations
-  -> report.html
+  -> Prioritization + Root Cause + Recommendations
+  -> report.html + remediation.html
 ```
 
-Os dados primários ficam em `audit.db` e nos artifacts. `report.html` é uma projeção desses dados, não a fonte primária.
+Os dados primários ficam em `audit.db` e nos artifacts. Os HTMLs são projeções para leitura humana.
 
-## Quick start — PowerShell
+# Instalação rápida — PowerShell
 
 ```powershell
 py -3.13 -m venv .venv
@@ -82,76 +83,221 @@ py -3.13 -m venv .venv
 python -m pip install -e .
 python -m playwright install chromium
 searchgeo --version
+```
+
+# Execução rápida
+
+Sem IA, que é o default:
+
+```powershell
 searchgeo audit https://example.com --project "Exemplo"
 ```
 
-Por padrão:
+Com várias URLs:
+
+```powershell
+searchgeo audit `
+  https://example.com/ `
+  https://example.com/produto `
+  https://example.com/faq `
+  --project "Exemplo"
+```
+
+Por arquivo:
+
+```powershell
+searchgeo audit --urls-file .\urls.txt --project "Exemplo"
+```
+
+Defaults relevantes:
 
 - idioma: `pt-BR`;
 - mercado: `BR`;
 - limite: `100` páginas;
 - raiz de saída: `audits`;
-- IA: desativada (`--ai-provider none`).
+- IA: `none`.
 
-Ao concluir, a CLI informa o ID da auditoria e o caminho do relatório. A estrutura básica é:
+Ao concluir, a CLI informa o ID da auditoria, status, páginas auditadas, quantidade de problemas/recomendações e paths dos relatórios.
+
+Estrutura principal:
 
 ```text
 audits/<AUD-ID>/
   audit.db
   report.html
+  remediation.html
   artifacts/
 ```
 
-Consulte [Outputs e Artifacts](docs/OUTPUTS_AND_ARTIFACTS.md) para a estrutura detalhada.
+# Referência completa da linha de comando
 
-## Exemplo com opções
+A lista de **todos os parâmetros expostos**, defaults, regras de combinação, formatos de target e exemplos fica em:
 
-```powershell
-searchgeo audit https://example.com `
-  --project "Site Institucional" `
-  --language pt-BR `
-  --market BR `
-  --max-pages 50 `
-  --audits-root .\audits
+**[Referência completa da CLI](docs/CLI_REFERENCE.md)**
+
+Resumo do `audit`:
+
+```text
+searchgeo [--config PATH] audit [target ...]
+  [--urls-file PATH]
+  [--project TEXT]
+  [--language CODE]
+  [--market CODE]
+  [--max-pages N]
+  [--audits-root PATH]
+  [--ai-provider none|openai|deepseek|mimo|auto]
+  [--ai-model MODEL_ID]
 ```
 
-## Como configurar IA
+Use também:
 
-IA é opcional. Sem IA:
+```powershell
+searchgeo --help
+searchgeo audit --help
+```
+
+# Como configurar IA
+
+## 1. Não usar IA
 
 ```powershell
 searchgeo audit https://example.com --ai-provider none
 ```
 
-Esse é o default. A auditoria continua em `NO_AI`; avaliações semantic-only sem dados suficientes ficam `UNKNOWN`, sem transformar ausência de IA em falha do website.
+`none` é o default. A auditoria continua com regras determinísticas. Regras semantic-only sem base suficiente ficam `UNKNOWN`; ausência de IA não é `FAIL` do website.
 
-Para usar OpenAI:
+## 2. Usar somente um provider
+
+### OpenAI
 
 ```powershell
-$env:OPENAI_API_KEY = "<sua-chave>"
-$env:SEARCHGEO_OPENAI_MODEL = "<modelo-configurado>"
+$env:OPENAI_API_KEY = "<chave>"
 searchgeo audit https://example.com --ai-provider openai
 ```
 
-Alternativamente, forneça o model na CLI:
+Default: `gpt-5.6-terra` / `HIGH`.
+
+### DeepSeek
 
 ```powershell
-$env:OPENAI_API_KEY = "<sua-chave>"
-searchgeo audit https://example.com --ai-provider openai --ai-model "<modelo-configurado>"
+$env:DEEPSEEK_API_KEY = "<chave>"
+searchgeo audit https://example.com --ai-provider deepseek
 ```
 
-Requisitos para IA efetiva:
+Default: `deepseek-v4-pro` / `HIGH`.
 
-1. `--ai-provider openai`;
-2. `OPENAI_API_KEY` definida no ambiente;
-3. model definido por `--ai-model` ou `SEARCHGEO_OPENAI_MODEL`;
-4. egress HTTPS disponível para o provider;
-5. política de dados permitindo transmitir conteúdo/evidence do site auditado ao serviço externo.
+### Xiaomi MiMo
 
-Não grave API keys no repositório, TOML, artifacts ou scripts versionados. O projeto não fixa um nome de modelo; a compatibilidade do modelo configurado deve ser validada no momento da homologação. Consulte [AI Guide](docs/AI_GUIDE.md) e [Compatibilidade](docs/COMPATIBILITY.md).
+```powershell
+$env:MIMO_API_KEY = "<chave>"
+searchgeo audit https://example.com --ai-provider mimo
+```
 
-## Documentação
+Default: `mimo-v2.5-pro` / `HIGH`, normalizado no relatório como `THINKING_ENABLED`.
 
+Um provider explícito **não faz fallback para outro fornecedor**. Após falha qualificadora ele entra em `QUARANTINED_FOR_AUDIT` e não é chamado novamente dentro daquele audit.
+
+## 3. Usar vários providers com fallback
+
+Configure duas ou três chaves e selecione `auto`:
+
+```powershell
+$env:OPENAI_API_KEY = "<chave-openai>"
+$env:DEEPSEEK_API_KEY = "<chave-deepseek>"
+$env:MIMO_API_KEY = "<chave-mimo>"
+searchgeo audit --urls-file .\urls.txt --project "Exemplo" --ai-provider auto
+```
+
+`AUTO` monta uma cadeia imutável no início do audit com apenas providers que possuem token e configuração válida. As chamadas são sequenciais, não paralelas.
+
+Para os modelos default, a ordem atual é:
+
+1. OpenAI `gpt-5.6-terra`;
+2. DeepSeek `deepseek-v4-pro`;
+3. MiMo `mimo-v2.5-pro`.
+
+A política completa inclui também OpenAI Sol/Luna, DeepSeek Flash e MiMo V2.5 conforme o model configurado. A classificação é uma política de adequação ao contrato SearchGEO, não um benchmark científico universal.
+
+## Modelos aceitos pelo código
+
+```text
+OPENAI:   gpt-5.6-sol | gpt-5.6-terra | gpt-5.6-luna
+DEEPSEEK: deepseek-v4-pro | deepseek-v4-flash
+MIMO:     mimo-v2.5-pro | mimo-v2.5
+```
+
+`--ai-model` é permitido somente para provider explícito. Em `auto`, configure o model via variável específica do provider.
+
+## Provider selecionado sem token
+
+- provider explícito: fica `NOT_CONFIGURED`, nenhuma chamada externa ocorre e a auditoria segue sem IA efetiva;
+- `auto`: o provider sem token não entra na cadeia;
+- se nenhum provider for elegível em `auto`, nenhuma chamada externa é feita.
+
+Isso reduz capacidade semântica/cobertura quando aplicável, mas não transforma o website em `FAIL`.
+
+## Erro, quota, sem créditos ou timeout
+
+O runtime classifica falhas como autenticação, quota/crédito, rate limit, modelo/permissão, rede/timeout/server ou contrato/resposta inválida.
+
+- provider explícito: sessão semântica fica `DEGRADED`; não há cross-provider fallback;
+- `auto`: provider falho fica `QUARANTINED_FOR_AUDIT` e o próximo provider saudável pode ser usado;
+- se todos os providers do `auto` falharem, o estado operacional fica `CHAIN_EXHAUSTED` e a auditoria registra `AI_PROVIDER_CHAIN_EXHAUSTED`.
+
+## Lock de provider por URL
+
+Quando uma URL recebe a primeira análise válida, o provider fica fixado para Desktop/Mobile dessa URL. Se ele falhar no segundo device, outro provider **não** completa a mesma URL; o provider é quarantined para URLs seguintes e o contexto faltante permanece degradado/`UNKNOWN` quando aplicável.
+
+# Relatório, persistência e log de uso da IA
+
+O `report.html` contém a seção **Uso de IA — execução e telemetria**, com:
+
+- estratégia;
+- provider/model inicial e efetivo;
+- profundidade/reasoning;
+- cadeia inicial;
+- status e failover;
+- cobertura por URL/device;
+- tentativa por tentativa;
+- tokens reportados;
+- duração;
+- `ESTIMATED_COST` quando calculável;
+- erro sanitizado.
+
+No `audit.db`, M18 persiste:
+
+```text
+ai_audit_sessions
+ai_provider_attempts
+provider_pricing_catalog
+```
+
+A execução também emite logging sanitizado conforme `log_level`, sem API key, Authorization ou corpo integral da requisição. A baseline **não materializa `audit.log` automaticamente**; o registro persistente de uso é `audit.db` + `report.html`.
+
+`ESTIMATED_COST` é estimativa local versionada e não equivale a billing/invoice do provider nem participa do score.
+
+# Segurança das chaves
+
+Não grave API keys em:
+
+- repositório;
+- TOML versionado;
+- artifacts;
+- HTML;
+- scripts compartilhados;
+- logs.
+
+Valide presença sem imprimir o segredo:
+
+```powershell
+Test-Path Env:OPENAI_API_KEY
+Test-Path Env:DEEPSEEK_API_KEY
+Test-Path Env:MIMO_API_KEY
+```
+
+# Documentação
+
+- [Referência completa da CLI](docs/CLI_REFERENCE.md)
 - [Compatibilidade e dependências](docs/COMPATIBILITY.md)
 - [Instalação](docs/INSTALLATION.md)
 - [Guia do usuário](docs/USER_GUIDE.md)
@@ -159,7 +305,7 @@ Não grave API keys no repositório, TOML, artifacts ou scripts versionados. O p
 - [Interpretação do relatório](docs/REPORT_GUIDE.md)
 - [Business Rules](docs/RULES_GUIDE.md)
 - [Scoring e Reliability](docs/SCORING_GUIDE.md)
-- [IA e fallback](docs/AI_GUIDE.md)
+- [IA, routing e fallback](docs/AI_GUIDE.md)
 - [Outputs e artifacts](docs/OUTPUTS_AND_ARTIFACTS.md)
 - [Guia técnico](docs/TECHNICAL_GUIDE.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
@@ -167,13 +313,14 @@ Não grave API keys no repositório, TOML, artifacts ou scripts versionados. O p
 
 ## Fonte normativa
 
-A documentação acima explica uso e engenharia da Stable Local Baseline. A fonte normativa do produto permanece em [`docs/specification`](docs/specification/00_SPEC_INDEX.md). Em caso de conflito, **`docs/specification` prevalece**.
+A documentação operacional explica o uso da implementação. A fonte normativa permanece em [`docs/specification`](docs/specification/00_SPEC_INDEX.md). Em caso de conflito, `docs/specification` prevalece.
 
 ## Limitações atuais
 
-- Não existe executável portátil/distribuição standalone: Python 3.13 continua necessário.
-- Não existe interface web nem backend HTTP do produto.
-- Logging é configurado no processo; a baseline atual não materializa um `audit.log` por auditoria.
-- A configuração TOML atual expõe somente `log_level`; parâmetros de auditoria são passados pela CLI.
-- IA é opcional e depende de serviço externo somente quando `OpenAIProvider` é selecionado.
-- Compatibilidade operacional final em Windows ainda depende da execução humana de `docs/SMOKE_TEST.md`.
+- não existe executável standalone/portátil; Python 3.13 continua necessário;
+- não existe interface web/backend HTTP do produto;
+- logging é do processo; não existe `audit.log` persistido automaticamente por auditoria;
+- configuração TOML continua restrita ao escopo exposto pelo módulo de configuração; parâmetros de auditoria são CLI/environment;
+- providers externos exigem egress HTTPS, credencial e política de dados compatível;
+- DeepSeek e MiMo permanecem `PROVISIONAL` na política de qualificação SearchGEO até benchmark específico;
+- smoke live de M18 com providers reais depende de credenciais disponíveis no ambiente de homologação.

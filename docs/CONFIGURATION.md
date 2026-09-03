@@ -1,264 +1,286 @@
 # Configuração
 
-Este documento lista somente configuração suportada pela Stable Local Baseline, incluindo M14.
+Este documento descreve apenas configurações efetivamente expostas na baseline atual. A referência exaustiva dos argumentos CLI está em [CLI_REFERENCE.md](CLI_REFERENCE.md).
 
-## Parâmetros de auditoria
+# Precedência operacional
 
-Os parâmetros funcionais de auditoria são atualmente expostos pela CLI, não pelo TOML.
+A configuração do SearchGEO vem de três superfícies distintas:
 
-| Parâmetro | CLI | Default | Observação |
-|---|---|---|---|
-| target(s) | argumentos posicionais | — | um domínio/URL mantém modo clássico; dois ou mais valores criam `URL_SET` explícito |
-| URLs file | `--urls-file` | nenhum | arquivo UTF-8 com uma URL/domínio por linha; ativa `URL_SET` explícito |
-| project | `--project` | hostname/target normalizado | nome humano persistido no Audit |
-| language | `--language` | `pt-BR` | contexto primário de conteúdo/reporting |
-| market | `--market` | `BR` | contexto de mercado |
-| max_pages | `--max-pages` | `100` | deve ser maior que zero e cobrir todo conjunto explícito após deduplicação |
-| audits root | `--audits-root` | `audits` | diretório pai dos workspaces |
-| AI provider | `--ai-provider` | `none` | `none` ou `openai` |
-| AI model | `--ai-model` | nenhum | com OpenAI, use preferencialmente `gpt-5.6-terra`, `gpt-5.6-sol` ou `gpt-5.6-luna` |
+1. parâmetros CLI da auditoria;
+2. variáveis de ambiente para browser/providers;
+3. arquivo TOML para configuração de aplicação atualmente suportada.
 
-### Target e URL_SET
+Não existe arquivo único que substitua todos os parâmetros da CLI.
 
-A CLI valida:
+# Arquivo TOML
 
-- scheme somente `http` ou `https` quando informado;
-- hostname/IP/localhost válido;
-- ausência de credenciais embutidas na URL;
-- porta válida;
-- target sem scheme só pode ser domínio/host sem path/query/fragment.
-
-A normalização efetiva ocorre antes da criação do `AuditTarget`.
-
-Para várias URLs posicionais:
+Use a opção global antes do subcomando:
 
 ```powershell
-searchgeo audit `
-  "https://example.com/" `
-  "https://example.com/produto-a" `
-  "https://example.com/produto-b" `
-  --max-pages 3
+searchgeo --config .\searchgeo.toml audit https://example.com
 ```
 
-Para arquivo:
+A configuração TOML atual é usada para settings da aplicação, notadamente logging conforme `src/searchgeo/config.py`. Parâmetros como target, max pages e provider são passados pela CLI/environment.
 
-```powershell
-searchgeo audit --urls-file .\urls.txt --max-pages 3
-```
+# Parâmetros CLI
 
-Regras operacionais M14:
-
-- entradas explícitas são normalizadas e deduplicadas;
-- todas devem pertencer ao mesmo normalized origin;
-- origin incompatível é rejeitado antes da aquisição;
-- `--urls-file` permanece `URL_SET` mesmo que reste uma única URL única;
-- um `URL_SET` cria um único `audit_id`;
-- `max_pages` não pode ser menor que o número de URLs únicas explícitas;
-- o relatório preserva separadamente quantidade bruta fornecida, universo único normalizado e quantidade efetivamente auditada.
-
-O arquivo aceita linhas em branco e comentários cujo primeiro caractere não branco seja `#`.
-
-### Project
-
-Se `--project` for omitido, o `AuditRunner` usa o hostname do primeiro target normalizado; se isso não estiver disponível, usa o próprio target.
-
-### max_pages
-
-Default: `100`.
-
-No modo clássico de discovery, quando o universo descoberto excede o budget, a auditoria persiste limitação no formato:
+Sintaxe resumida:
 
 ```text
-MAX_PAGES_REACHED:discovered=<N>;audited=<N>
+searchgeo [--config PATH] audit [target ...]
+  [--urls-file PATH]
+  [--project TEXT]
+  [--language CODE]
+  [--market CODE]
+  [--max-pages N]
+  [--audits-root PATH]
+  [--ai-provider none|openai|deepseek|mimo|auto]
+  [--ai-model MODEL_ID]
 ```
 
-Isso informa cobertura limitada; não representa automaticamente defeito do site.
+Defaults:
 
-Em `URL_SET`, o auditor rejeita a execução se `max_pages` for menor que a quantidade de URLs únicas. Nenhuma URL explicitamente fornecida é silenciosamente descartada.
+| Parâmetro | Default |
+|---|---|
+| `--language` | `pt-BR` |
+| `--market` | `BR` |
+| `--max-pages` | `100` |
+| `--audits-root` | `audits` |
+| `--ai-provider` | `none` |
 
-## Configuração de aplicação/logging
+Para tipos, obrigatoriedade, validações e combinações, consulte [CLI_REFERENCE.md](CLI_REFERENCE.md).
 
-O arquivo padrão é `searchgeo.toml` no diretório corrente. A ausência do arquivo padrão é válida.
+# Targets e URL_SET
 
-Conteúdo suportado atualmente:
-
-```toml
-[searchgeo]
-log_level = "INFO"
-```
-
-Níveis válidos:
-
-```text
-CRITICAL
-ERROR
-WARNING
-INFO
-DEBUG
-```
-
-O TOML **não configura target(s), URLs file, project, language, market, max_pages, provider ou model** nesta baseline.
-
-### Selecionar outro arquivo
-
-Por CLI:
+Uma URL/domain positional:
 
 ```powershell
-searchgeo --config .\config\searchgeo.toml audit https://example.com
+searchgeo audit https://example.com
 ```
 
-Por ambiente:
+Várias:
 
 ```powershell
-$env:SEARCHGEO_CONFIG = "C:\config\searchgeo.toml"
+searchgeo audit https://example.com/ https://example.com/produto https://example.com/faq
 ```
 
-Se um path for selecionado explicitamente e o arquivo não existir, a CLI encerra com erro.
+Arquivo:
 
-## Environment variables
+```powershell
+searchgeo audit --urls-file .\urls.txt
+```
 
-| Variável | Uso | Obrigatória |
-|---|---|---:|
-| `SEARCHGEO_CONFIG` | path do TOML | Não |
-| `SEARCHGEO_LOG_LEVEL` | override do `log_level` | Não |
-| `SEARCHGEO_OPENAI_MODEL` | model ID da OpenAI | somente se `--ai-provider openai` e `--ai-model` omitido |
-| `OPENAI_API_KEY` | credencial do OpenAIProvider | somente para chamada OpenAI efetiva |
-| `PLAYWRIGHT_CHROMIUM_EXECUTABLE` | executável Chromium explícito | Não |
+`--urls-file` sempre caracteriza entrada explícita `URL_SET`, mesmo se apenas uma URL permanecer após remover comentários/linhas vazias. Positionals e arquivo podem ser combinados.
 
-`SEARCHGEO_LOG_LEVEL` prevalece sobre TOML.
+# Browser
 
-## OpenAIProvider
+A variável operacional disponível é:
 
-### Modelo recomendado
+```powershell
+$env:PLAYWRIGHT_CHROMIUM_EXECUTABLE = "C:\caminho\para\chrome.exe"
+```
 
-Para a Stable Local Baseline, a configuração operacional recomendada é:
+Quando omitida, o renderer usa o browser provisionado pelo Playwright conforme a implementação.
+
+# IA
+
+## Desabilitada
+
+```powershell
+searchgeo audit https://example.com --ai-provider none
+```
+
+Esse é o default.
+
+## OpenAI
 
 ```powershell
 $env:OPENAI_API_KEY = "<chave>"
-$env:SEARCHGEO_OPENAI_MODEL = "gpt-5.6-terra"
 searchgeo audit https://example.com --ai-provider openai
 ```
 
-Valores recomendados documentados:
+Configuração:
 
-| Model ID | Quando usar |
-|---|---|
-| `gpt-5.6-terra` | default recomendado: equilíbrio entre qualidade e custo |
-| `gpt-5.6-sol` | máxima qualidade analítica |
-| `gpt-5.6-luna` | menor custo / maior volume |
+| Variável | Função | Default |
+|---|---|---|
+| `OPENAI_API_KEY` | credencial | nenhuma |
+| `SEARCHGEO_OPENAI_MODEL` | model ID | `gpt-5.6-terra` |
+| `SEARCHGEO_OPENAI_REASONING_EFFORT` | reasoning | `HIGH` |
 
-O valor precisa ser um **model ID da API**, não um nome de plano ChatGPT nem uma categoria genérica.
-
-Não use nesse campo modelos de imagem, realtime, áudio, transcrição, TTS, embeddings ou moderação.
-
-O código atual não contém uma allowlist rígida: outras strings podem ser enviadas à API. Isso **não significa compatibilidade homologada**. Para evitar conflitos, use um dos três model IDs acima, salvo teste explícito com outro modelo.
-
-O model escolhido precisa suportar o contrato técnico usado pelo provider:
-
-- OpenAI Responses API (`/v1/responses`);
-- texto;
-- Structured Outputs;
-- `text.format = json_schema`;
-- `strict = true`.
-
-Consulte [AI_GUIDE.md](AI_GUIDE.md) para detalhes, modelos a evitar e procedimento de validação.
-
-### Precedência de configuração
-
-A flag tem precedência sobre a variável de ambiente:
-
-```powershell
-searchgeo audit https://example.com `
-  --ai-provider openai `
-  --ai-model "gpt-5.6-sol"
-```
-
-Nesse caso, `gpt-5.6-sol` é usado mesmo que `SEARCHGEO_OPENAI_MODEL` esteja definido com outro valor.
-
-O adapter real possui, internamente:
-
-- endpoint default `https://api.openai.com/v1/responses`;
-- timeout default de 45 s por chamada;
-- Structured Output em JSON Schema estrito;
-- `configuration_version = 1`;
-- `prompt_id = searchgeo-semantic-v1`;
-- `prompt_version = 1`.
-
-Endpoint, timeout e versões são parâmetros do objeto `OpenAIProvider`, mas **não são flags da CLI da Stable Local Baseline**. Não os documente operacionalmente como configuráveis por usuário final via CLI.
-
-M14 não adiciona outra chamada livre ao LLM para produzir recomendações. A actionability, receita técnica e referências são determinísticas/projetadas de estado persistido; o output semântico M7 continua sendo reutilizado.
-
-## Rendering e evidência visual
-
-O `BrowserRenderer` usa:
-
-- Chromium headless;
-- navegação `domcontentloaded`;
-- timeout de navegação: 15 s;
-- tentativa de `networkidle` limitada a 2 s;
-- Desktop 1440×900, DPR 1.0;
-- Mobile 412×915, DPR 2.625, `is_mobile` e touch ativados.
-
-M14 também tenta capturar, para cada snapshot renderizado:
-
-- PNG da viewport;
-- metadados do viewport e perfil;
-- observações DOM de elementos tecnicamente relevantes;
-- selector CSS somente quando reproduzível;
-- bounding box somente quando o elemento é visível e possui caixa válida.
-
-Esses valores são implementação atual e não possuem flags CLI. RAW HTTP e rendered HTML continuam persistidos separadamente; screenshot não substitui nenhum deles.
-
-## Paths
-
-Default:
+Modelos aceitos:
 
 ```text
-./audits/<AUD-ID>/
+gpt-5.6-sol
+gpt-5.6-terra
+gpt-5.6-luna
 ```
 
-Pode ser alterado somente no nível do diretório pai:
+## DeepSeek
 
 ```powershell
-searchgeo audit https://example.com --audits-root D:\SearchGEO\audits
+$env:DEEPSEEK_API_KEY = "<chave>"
+searchgeo audit https://example.com --ai-provider deepseek
 ```
 
-O nome `<AUD-ID>` é gerado internamente; não existe opção para escolher ID manualmente.
+| Variável | Função | Default |
+|---|---|---|
+| `DEEPSEEK_API_KEY` | credencial | nenhuma |
+| `SEARCHGEO_DEEPSEEK_MODEL` | model ID | `deepseek-v4-pro` |
+| `SEARCHGEO_DEEPSEEK_REASONING_EFFORT` | reasoning | `HIGH` |
 
-Screenshots M14 são armazenados sob:
+Modelos aceitos:
 
 ```text
-artifacts/visual/<page_id>/<device>/<snapshot_id>.png
+deepseek-v4-pro
+deepseek-v4-flash
 ```
 
-O relatório usa referência relativa ao workspace para manter a pasta/ZIP portátil e não incorpora imagens remotas.
+## Xiaomi MiMo
 
-## Configurações previstas versus expostas
+```powershell
+$env:MIMO_API_KEY = "<chave>"
+searchgeo audit https://example.com --ai-provider mimo
+```
 
-A specification define um modelo de configuração mais amplo para evolução do produto. Na Stable Local Baseline, somente os argumentos/variáveis descritos neste documento estão operacionalmente expostos. Não existem, por exemplo, flags para:
+| Variável | Função | Default |
+|---|---|---|
+| `MIMO_API_KEY` | credencial | nenhuma |
+| `SEARCHGEO_MIMO_MODEL` | model ID | `mimo-v2.5-pro` |
+| `SEARCHGEO_MIMO_REASONING_EFFORT` | reasoning | `HIGH` |
 
-- timeout HTTP;
+Modelos aceitos:
+
+```text
+mimo-v2.5-pro
+mimo-v2.5
+```
+
+MiMo reporta LOW/MEDIUM/HIGH como perfil normalizado `THINKING_ENABLED`.
+
+# Override de modelo por CLI
+
+Provider explícito:
+
+```powershell
+searchgeo audit https://example.com --ai-provider openai --ai-model gpt-5.6-sol
+searchgeo audit https://example.com --ai-provider deepseek --ai-model deepseek-v4-flash
+searchgeo audit https://example.com --ai-provider mimo --ai-model mimo-v2.5
+```
+
+`--ai-model` **não pode** ser usado com `--ai-provider auto`.
+
+No `auto`, use as variáveis específicas:
+
+```powershell
+$env:SEARCHGEO_OPENAI_MODEL = "gpt-5.6-luna"
+$env:SEARCHGEO_DEEPSEEK_MODEL = "deepseek-v4-pro"
+$env:SEARCHGEO_MIMO_MODEL = "mimo-v2.5-pro"
+searchgeo audit https://example.com --ai-provider auto
+```
+
+# AUTO multi-provider
+
+Exemplo com três providers:
+
+```powershell
+$env:OPENAI_API_KEY = "<chave-openai>"
+$env:DEEPSEEK_API_KEY = "<chave-deepseek>"
+$env:MIMO_API_KEY = "<chave-mimo>"
+searchgeo audit --urls-file .\urls.txt --ai-provider auto
+```
+
+Regras de configuração:
+
+- provider sem token é omitido da cadeia;
+- provider com token mas model/reasoning inválido é excluído como configuração inválida;
+- cadeia é ordenada uma vez no início pelo rank SearchGEO do model;
+- a cadeia não muda para reintroduzir provider quarantined;
+- chamadas são sequenciais, não paralelas.
+
+Se nenhum token elegível existir, nenhuma chamada externa é feita.
+
+# Reasoning aceito
+
+OpenAI/DeepSeek passam pelo perfil compatível com o adapter. A baseline M18 reconhece os níveis implementados no adapter; os defaults documentados são `HIGH`.
+
+MiMo aceita:
+
+```text
+NONE
+LOW
+MEDIUM
+HIGH
+```
+
+No relatório:
+
+- `NONE` -> `NONE`;
+- `LOW`, `MEDIUM`, `HIGH` -> `THINKING_ENABLED`.
+
+# Estados operacionais da IA
+
+| Situação | Estratégia | Resultado esperado |
+|---|---|---|
+| `none` | `NONE` | IA desabilitada; `NO_AI` |
+| provider explícito sem key | `SINGLE_PROVIDER` | `NOT_CONFIGURED`; sem chamada externa |
+| provider explícito com sucesso | `SINGLE_PROVIDER` | sucesso/FULL conforme universo aplicável |
+| provider explícito falha | `SINGLE_PROVIDER` | `DEGRADED`; provider quarantined; sem fallback cruzado |
+| `auto` sem provider elegível | `AUTO` | nenhuma chamada externa; sem IA efetiva |
+| `auto` com failover bem-sucedido | `AUTO` | provider falho quarantined; próximo pode ser efetivo |
+| todos providers AUTO falham | `AUTO` | `CHAIN_EXHAUSTED` + `AI_PROVIDER_CHAIN_EXHAUSTED` |
+
+# Logging
+
+O nível de logging é configurado pela configuração de aplicação. O formato padrão é:
+
+```text
+<timestamp> <LEVEL> <logger>: <message>
+```
+
+M18 emite logs sanitizados de tentativa e sessão quando o nível permite. Eles podem conter:
+
+- audit ID;
+- URL/device;
+- provider/model/depth;
+- status;
+- duração;
+- token counts reportados;
+- custo estimado;
+- `error_class`.
+
+Não contêm API key, Authorization ou body integral.
+
+A aplicação não cria `audit.log` automaticamente. Para registro persistente de IA, consulte `audit.db` e `report.html`.
+
+# Segurança
+
+Nunca coloque credenciais em arquivos versionados. Valide presença sem imprimir valores:
+
+```powershell
+Test-Path Env:OPENAI_API_KEY
+Test-Path Env:DEEPSEEK_API_KEY
+Test-Path Env:MIMO_API_KEY
+```
+
+# Configurações não expostas pela interface operacional
+
+A menos que sejam adicionadas explicitamente à CLI/configuração em versão futura, não há flags públicas para:
+
+- timeout HTTP customizado;
 - viewport customizado;
 - lista customizada de crawlers;
 - pesos de scoring;
 - thresholds de consolidação;
-- endpoint OpenAI;
+- endpoint customizado de provider via CLI;
 - prompt customizado;
 - diretório individual de artifacts;
 - formato de relatório diferente de HTML;
 - desabilitar screenshots isoladamente;
-- alterar bounds de `ElementObservation`;
-- forçar geração de selector quando não determinável.
+- forçar selector inventado.
 
-Esses itens são **fora da interface operacional atual**, mesmo quando houver parâmetros internos em classes de baixo nível.
+# Referências
 
-<!-- M18_MULTI_AI_PROVIDER_ROUTING -->
-## M18 — configuração multi-provider
-`--ai-provider` aceita `none`, `openai`, `deepseek`, `mimo`, `auto`. Defaults: OpenAI `gpt-5.6-terra/HIGH`; DeepSeek `deepseek-v4-pro/HIGH`; MiMo `mimo-v2.5-pro/HIGH` (reportado como thinking enabled). Chaves: `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `MIMO_API_KEY`. Modelos: `SEARCHGEO_OPENAI_MODEL`, `SEARCHGEO_DEEPSEEK_MODEL`, `SEARCHGEO_MIMO_MODEL`. Reasoning: `SEARCHGEO_OPENAI_REASONING_EFFORT`, `SEARCHGEO_DEEPSEEK_REASONING_EFFORT`, `SEARCHGEO_MIMO_REASONING_EFFORT`. Valores de chaves nunca devem ser documentados, impressos ou persistidos.
-
-```powershell
-searchgeo audit --urls-file .\urls.txt --project "Projeto" --ai-provider none
-searchgeo audit --urls-file .\urls.txt --project "Projeto" --ai-provider deepseek --ai-model deepseek-v4-pro
-searchgeo audit --urls-file .\urls.txt --project "Projeto" --ai-provider auto
-```
-AUTO ignora providers sem token ou com configuração inválida e cria cadeia imutável no início do audit.
+- [Referência completa da CLI](CLI_REFERENCE.md)
+- [Guia de IA](AI_GUIDE.md)
+- [Compatibilidade](COMPATIBILITY.md)
+- [Troubleshooting](TROUBLESHOOTING.md)

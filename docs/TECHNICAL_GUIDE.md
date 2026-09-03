@@ -1,8 +1,8 @@
 # Guia Técnico
 
-Este documento descreve a Stable Local Baseline M1–M12 como está implementada. Para requisitos normativos, prevalece [`docs/specification`](specification/00_SPEC_INDEX.md).
+Este documento descreve a baseline implementada até M18. Para requisitos normativos, prevalece [`docs/specification`](specification/00_SPEC_INDEX.md).
 
-## Arquitetura real
+# Arquitetura atual
 
 ```text
 searchgeo CLI
@@ -13,180 +13,224 @@ searchgeo CLI
      -> M5 Deterministic Rules BR-GEO-001..018
      -> M6 JavaScript/SPA BR-GEO-019..024
      -> Content Extractability BR-GEO-025..027
-     -> M7 Semantic Provider BR-GEO-028..049
+     -> M7 Semantic Rules BR-GEO-028..049
+        -> M18 provider abstraction/routing/telemetry
      -> M8 Desktop/Mobile Comparison BR-GEO-052
-     -> Pre-scoring Rules BR-GEO-050/051/053
-     -> M9 Scoring + BR-GEO-054/reproducibility contract
+     -> Pre-scoring BR-GEO-050/051/053
+     -> M9 Scoring + BR-GEO-054
      -> M10 Prioritization + Recommendations
-     -> M11 Static HTML Report
+     -> M14 Visual/DOM evidence + URL_SET
+     -> M15 Report UX + remediation.html
+     -> M16 Root Cause / element-level remediation
+     -> M17 Precision/report consistency
+     -> M11/M18 report projections
 ```
 
-`AuditRunner` é o orquestrador da Stable Local Baseline. Ele cria o workspace/Audit/AuditTarget, chama os marcos na ordem prevista, atualiza lifecycle status, finaliza como `COMPLETE`/`COMPLETE_WITH_LIMITATIONS` ou marca `FAILED` em exceção não absorvida.
+`AuditRunner` continua sendo o orquestrador ponta a ponta. M18 é aditivo: não muda Business Rules nem `SCORE-GEO-001`.
 
-## Principais módulos
+# Principais módulos
 
-| Arquivo/módulo | Responsabilidade |
+| Módulo | Responsabilidade |
 |---|---|
-| `cli.py` | parser, validação inicial, configuração de logging e chamada do AuditRunner |
-| `audit_runner.py` | pipeline ponta a ponta M2→M11 |
-| `domain.py` | entidades centrais, enums e IDs |
-| `persistence.py` | SQLite M1 + workspace filesystem + integridade referencial |
-| `url_utils.py` | normalização/resolução conservadora de URLs |
-| `acquisition.py` | HTTP, redirects, headers, erros de rede |
-| `discovery.py` | seed, robots, sitemaps, links, deduplicação e seleção por budget |
-| `m2.py` | persistência da descoberta/HTTP e primeiras RuleExecutions técnicas |
-| `rendering.py` | Playwright/Chromium, perfis Desktop/Mobile e falhas de rendering |
-| `m3.py` | materialização de PageSnapshots e rendered artifacts |
-| `extraction.py` | parser determinístico de metadata, links, headings, main content e JSON-LD |
-| `evidence.py` | criação consistente de Evidence |
-| `m4.py` | extração por snapshot + artifacts + Evidence |
-| `rules.py` | RuleDefinition/Registry/DependencyResolver para bloco determinístico inicial |
-| `m5.py` | BR-GEO-001..018 e Findings evidence-backed |
-| `javascript_spa.py` | comparação RAW×RENDERED, SPA/CSR, soft-404, lazy loading |
-| `m6.py` | BR-GEO-019..024 |
+| `cli.py` | parser, validação, seleção de provider e chamada do runner |
+| `audit_runner.py` | pipeline ponta a ponta |
+| `domain.py` | entidades/enums/IDs |
+| `persistence.py` | SQLite base + workspace |
+| `acquisition.py` / `discovery.py` | HTTP, robots, sitemap, links |
+| `rendering.py` / `m3.py` | Chromium + snapshots Desktop/Mobile |
+| `extraction.py` / `m4.py` | extração + Evidence |
+| `rules.py` / `m5.py` | regras determinísticas |
+| `javascript_spa.py` / `m6.py` | SPA/CSR/direct routes/lazy/soft-404 |
 | `content_extractability.py` | BR-GEO-025..027 |
-| `semantic.py` | contrato provider-independent, NoneProvider, OpenAIProvider e validação |
-| `semantic_persistence.py` | SemanticAssessment e EntityObservation em SQLite |
-| `m7.py` | BR-GEO-028..049 + FULL/DEGRADED/NO_AI |
-| `comparison.py` | comparação Desktop/Mobile |
-| `m8.py` | BR-GEO-052 |
+| `semantic.py` / `m7.py` | contrato semântico e aplicação das BR-GEO-028..049 |
+| `m18_ai.py` | adapters OpenAI/DeepSeek/MiMo, routing AUTO, quarantine, URL lock, usage/cost |
+| `m18_persistence.py` | sessões/tentativas/catálogo de preços e logging sanitizado |
+| `m18_reporting.py` | projeção operacional da IA nos HTMLs |
+| `comparison.py` / `m8.py` | Desktop/Mobile |
 | `pre_scoring_rules.py` | BR-GEO-050/051/053 |
-| `scoring.py` | SCORE-GEO-001, Coverage, Confidence, Consolidation e contributions |
-| `scoring_persistence.py` | persistência de Score/ScoreContribution |
-| `m9.py` | execução/persistência do scoring e integridade de reprodutibilidade |
-| `prioritization.py` | PRIORITY-GEO-001, groups e recommendation templates |
-| `recommendation_persistence.py` | persistência M10 |
-| `m10.py` | orquestra priorização/recomendações |
-| `reporting.py` | HTML estático, escaping/redaction, queries e metadata REPORT-GEO-001 |
-| `m11.py` | grava `report.html` e metadata |
+| `scoring.py` / `m9.py` | SCORE-GEO-001, Coverage, Confidence, Consolidation |
+| `prioritization.py` / `m10.py` | prioridade/grupos/recomendações |
+| `m14_*` | visual/DOM linking, URL_SET e evidência |
+| `m16_*` | causa raiz/escopo de elemento |
+| `m17_*` | precisão e consistência de reporting |
+| `reporting.py` / `m11.py` | report principal base |
+| `remediation.py` | remediation transversal |
 
-## Modelo de domínio
+# CLI
 
-### Audit
+A interface atual aceita uma URL, múltiplas URLs ou `--urls-file`, com parâmetros operacionais e seleção de IA.
 
-Raiz da execução. Guarda projeto, status, completion status, idioma, mercado, `max_pages`, `audit_mode`, capabilities, limitações e versões.
+A referência completa está em [CLI_REFERENCE.md](CLI_REFERENCE.md).
 
-Lifecycle implementado inclui `INITIALIZING`, `DISCOVERING`, `ACQUIRING`, `COMPARING`, `SCORING`, `RECOMMENDING`, `REPORTING`, `COMPLETED` e `FAILED`, entre outros estados disponíveis no domínio.
+# Modelo de dados principal
 
-### AuditTarget
+## Audit
 
-Target normalizado e origin associado ao Audit. A CLI atual cria `DOMAIN` ou `URL`; `URL_SET` existe no domínio, mas não é exposto pela CLI da Stable Local Baseline.
+Raiz da execução. Persiste lifecycle, projeto, idioma, mercado, `max_pages`, `audit_mode`, capabilities e limitations.
 
-### Page
+## AuditTarget
 
-URL selecionada para o universo auditado, com URL normalizada, URL descoberta, provenance (`SEED`, `SITEMAP`, `INTERNAL_LINK` etc.) e depth.
+Pode representar target clássico ou `URL_SET` explícito.
 
-### PageSnapshot
+## Page / PageSnapshot
 
-Observação de uma Page em `DESKTOP` ou `MOBILE`, contendo HTTP/rendering/extraction refs e classificação arquitetural (`STATIC_OR_SSR`, `HYDRATED`, `CSR_SPA`, `MIXED`, `UNKNOWN`).
+`Page` representa URL auditada. `PageSnapshot` representa observação Desktop/Mobile com HTTP/rendering/extraction e artifacts.
 
-### Evidence
+## Evidence / RuleExecution / Finding
 
-Observação rastreável. Relaciona audit/page/snapshot/device, tipo, source, observed value, optional artifact reference e timestamp.
+Evidence First permanece invariante. Finding precisa ser rastreável a RuleExecution/Evidence.
 
-### RuleExecution
+## SemanticAssessment / EntityObservation
 
-Execução versionada de uma Business Rule: resultado, observed value, expected condition, Evidence e erro técnico quando aplicável.
+Persistência M7 de resultados semânticos aceitos.
 
-### Finding
+## Score / ScoreContribution
 
-Problema/alerta publicado. O domínio rejeita Finding sem Evidence; a persistência também valida consistência com RuleExecution/page/device/evidence.
+Scoring determinístico por device/dimensão; LLM não calcula score.
 
-### SemanticAssessment / EntityObservation
+## Root cause / remediation
 
-Persistência M7 de avaliações provider-independent, provenance do provider/model/prompt/configuração, confidence/evidence e entidades observadas.
+M16/M17 adicionam projeções/materializações de causa/localização/ação sem alterar semântica das Business Rules.
 
-### Score / ScoreContribution
+# Persistência M18
 
-Resultado por dimensão/device e unidade que liga o cálculo a uma RuleExecution. `SCORE-GEO-001` é determinístico.
-
-### RemediationGroup / Recommendation
-
-Agrupamento por causa + regra e ação recomendada com Severity/Impact/Effort/Confidence/Priority.
-
-### Report
-
-A implementação usa `ReportRecord` para metadata (`REPORT-GEO-001`) e `report.html` para a projeção estática. HTML não é fonte primária.
-
-## Persistência
-
-### SQLite
-
-`audit.db` usa `sqlite3` embutido. As tabelas cobrem domínio, Evidence, RuleExecution, Finding e entidades adicionadas pelos marcos posteriores. Foreign keys e validações na camada Repository preservam integridade de scope.
-
-### Filesystem
-
-`AuditWorkspace` materializa:
+M18 acrescenta:
 
 ```text
-<AUD-ID>/audit.db
-<AUD-ID>/artifacts/
-<AUD-ID>/report.html
+ai_audit_sessions
+ai_provider_attempts
+provider_pricing_catalog
 ```
 
-Artifacts de HTTP/rendering/extraction são apontados por paths relativos persistidos.
+`ai_audit_sessions` descreve estratégia, cadeia inicial, provider efetivo e estados.
 
-## Pipelines por marco
+`ai_provider_attempts` descreve cada chamada materializada com URL/device/provider/model/depth/status/duração/diagnóstico/usage/custo estimado.
 
-### M1 — Audit + Persistence
+`provider_pricing_catalog` versiona preços usados para `ESTIMATED_COST`.
 
-Cria/reabre workspaces, round-trip das entidades e integridade referencial.
+Nunca persistir:
 
-### M2 — Discovery + HTTP
+- API key;
+- Authorization;
+- body integral sensível;
+- chain-of-thought.
 
-Descobre universo, respeita `max_pages`, persiste provenance/HTTP/robots/sitemap/RAW. Falhas HTTP/rede são dados de aquisição, não exceções globais por padrão.
+# Provider abstraction M18
 
-### M3 — Rendering
+Adapters implementados:
 
-Para cada Page, cria snapshots Desktop e Mobile independentes. Um Chromium pode ser reutilizado, mas cada render usa browser context independente.
+```text
+OpenAIProvider
+DeepSeekProvider
+MiMoProvider
+NoneProvider
+```
 
-### M4 — Extraction + Evidence
+`GitHub Copilot` não é SemanticProvider.
 
-Prioriza rendered DOM, usa RAW fallback, materializa main content/Structured Data e Evidence.
+Modelos suportados:
 
-### M5 — Deterministic Rules
+```text
+OPENAI:   gpt-5.6-sol | gpt-5.6-terra | gpt-5.6-luna
+DEEPSEEK: deepseek-v4-pro | deepseek-v4-flash
+MIMO:     mimo-v2.5-pro | mimo-v2.5
+```
 
-Registry, dependencies e findings. Falha de pré-requisito bloqueia derivadas em vez de multiplicar FAIL.
+# SINGLE_PROVIDER
 
-### M6 — JavaScript/SPA
+Provider explícito:
 
-RAW×RENDERED, arquitetura, direct routes, navegação crawlable, soft-404 e lazy loading bounded. CSR/SPA válido não recebe penalidade por arquitetura em si.
+- não faz fallback para outro fornecedor;
+- sem key -> `NOT_CONFIGURED`;
+- falha qualificadora -> `QUARANTINED_FOR_AUDIT`;
+- após quarantine, não há nova chamada naquele audit;
+- sessão insuficiente -> `DEGRADED`;
+- `CHAIN_EXHAUSTED` não é usado para `SINGLE_PROVIDER`.
 
-### Content Extractability
+# AUTO
 
-BR-GEO-025..027: conteúdo principal, boilerplate e preservação de qualificadores sem threshold arbitrário de palavras.
+`ProviderRoutingSession`:
 
-### M7 — Semantic
+1. considera apenas providers com key/configuração válida;
+2. ordena por rank SearchGEO do model;
+3. mantém cadeia inicial imutável;
+4. tenta candidatos sequencialmente;
+5. quarantina provider falho;
+6. promove fallback saudável quando permitido;
+7. não reintroduz provider quarantined.
 
-Provider independent. Determinístico/híbrido continua sem IA; semantic-only usa fallback seguro. Output externo precisa passar schema + evidence validation.
+Se todos forem quarantined:
 
-### M8 — Device Comparison
+```text
+CHAIN_EXHAUSTED
+AI_PROVIDER_CHAIN_EXHAUSTED
+```
 
-Classifica SAME/DIFFERENT/NOT_APPLICABLE/UNKNOWN e separa diferença observada de problema material.
+# URL provider lock
 
-### Pre-scoring
+A primeira resposta válida fixa o provider da URL. Desktop/Mobile da mesma URL devem usar o mesmo provider.
 
-Internal links no universo conhecido, duplicates/near-duplicates somente no universo auditado e integridade de Findings.
+Se o pinned provider falhar no segundo device, não existe cross-provider completion naquela URL. O provider é quarantined para URLs seguintes.
 
-### M9 — Scoring
+# Contrato de aceitação semântica
 
-Produz Score/Contributions por device e dimensão, controla double counting e reliability.
+Resposta válida exige exatamente BR-GEO-028..049, sem duplicidade/omissão/ID estranho, enums válidos e evidence IDs existentes.
 
-### M10 — Prioritization
+HTTP 200 sozinho não implica `AVAILABLE`.
 
-Agrupa findings por root cause e cria recommendation determinística. Priority não altera score.
+OpenAI usa JSON Schema estrito nativo. DeepSeek usa modo estruturado compatível com o adapter e validação local. MiMo usa JSON object + validação local estrita do schema SearchGEO.
 
-### M11 — Report
+# Error taxonomy
 
-Consulta estado persistido, aplica escaping/redaction e grava HTML estático autocontido + metadata.
+```text
+AUTH_ERROR
+QUOTA_ERROR
+CREDIT_ERROR
+RATE_LIMIT_ERROR
+MODEL_ERROR
+PERMISSION_ERROR
+NETWORK_ERROR
+TIMEOUT_ERROR
+SERVER_ERROR
+CONTRACT_ERROR
+EMPTY_RESPONSE
+INVALID_RESPONSE
+UNKNOWN_PROVIDER_ERROR
+```
 
-### M12 — Stable Local Baseline
+Diagnósticos são sanitizados.
 
-Integra todos os blocos em `AuditRunner` e conecta a CLI real. A suíte crítica valida pipeline e delegação operacional.
+# Usage e custo
 
-## Tratamento de erros
+`ProviderUsage` normaliza:
 
-Princípios implementados:
+- input tokens;
+- cached input tokens;
+- output tokens;
+- reasoning tokens;
+- total tokens.
+
+Campos não reportados ficam `None`/`NULL`.
+
+`ESTIMATED_COST` usa catálogo local versionado e não é billing oficial nem componente do score.
+
+# Logging M18
+
+`m18_persistence.py` emite logs INFO sanitizados por tentativa e sessão quando o nível configurado permite.
+
+Inclui somente dados operacionais como provider/model/status/duração/tokens/custo/error_class.
+
+A baseline não materializa `audit.log` automaticamente.
+
+# Reporting M18
+
+`m18_reporting.py` enriquece os HTMLs depois da projeção base.
+
+`report.html` recebe seção operacional detalhada.
+
+`remediation.html` recebe apenas contexto da análise semântica; falha do provider nunca vira finding/recommendation.
+
+# Princípios de falha
 
 ```text
 UNKNOWN != FAIL
@@ -194,58 +238,71 @@ ERROR != FAIL
 NOT_APPLICABLE != FAIL
 ```
 
-- Página inacessível pode gerar FAIL técnico de retrievability, enquanto regras derivadas ficam NOT_APPLICABLE/UNKNOWN.
-- Rendering Desktop pode falhar sem apagar o snapshot Mobile.
-- Extração falha por snapshot.
-- Provider indisponível degrada análise sem publicar FAIL do site.
-- M8 trata ausência de um device como UNKNOWN.
-- AuditRunner marca Audit `FAILED` somente quando uma exceção escapa da pipeline.
+Falha de infraestrutura/provider pode reduzir Coverage/Confidence/Consolidation sem reduzir qualidade do website artificialmente.
 
-## Prevenção de cascading failures
+# Prevenção de cascading failures
 
-`DependencyResolver` bloqueia regra derivada quando dependency retorna FAIL/ERROR/UNKNOWN/NOT_APPLICABLE. O objetivo é publicar a causa observável e evitar sintomas semânticos artificiais.
+Dependências bloqueadas produzem estado não conclusivo em derivadas em vez de multiplicar FAILs.
 
 Exemplo:
 
 ```text
-HTTP não recuperável -> finding técnico
-entity/answerability dependentes -> NOT_APPLICABLE/UNKNOWN
+HTTP não recuperável
+  -> finding técnico de acesso quando aplicável
+  -> semântica derivada UNKNOWN/NOT_APPLICABLE
 ```
 
-## Pontos de extensão
+# Report e artifacts
 
-### Nova Business Rule
+Workspace atual:
 
-1. Atualize primeiro a specification normativa.
-2. Defina ID/version/category/dimension/scope/basis/dependencies/severity/scoring group.
-3. Implemente checks e Evidence.
-4. Garanta fallback e no-cascade.
-5. Adicione mapping de scoring somente se normativamente aplicável.
-6. Teste persistência/rastreabilidade.
+```text
+<AUD-ID>/
+  audit.db
+  report.html
+  remediation.html
+  artifacts/
+```
 
-Não reutilize IDs existentes nem altere semanticamente BR-GEO-* sem decisão normativa.
+Screenshots/rendered/raw/extractions são paths relativos ao workspace.
 
-### Novo provider semântico
+# Pontos de extensão
 
-Implemente o protocolo `SemanticAnalysisProvider` e retorne `ProviderCallResult`. Preserve validação de schema/evidence antes de aceitar output. Business Rules não devem importar provider específico.
+## Nova Business Rule
 
-### Nova Evidence
+Atualize specification antes de implementar; preserve evidence/dependency/scoring invariants.
 
-Use `EvidenceManager`/domínio e mantenha scope audit/page/snapshot/device consistente. Artifacts devem usar path relativo ao workspace.
+## Novo provider
 
-### Nova extração
+Implemente contrato provider-neutral, validação local, error taxonomy, usage e política de segurança. Não faça Business Rule importar fornecedor específico.
 
-Adicione ao `ContentExtractor`/persistência de snapshot de forma determinística; preserve RAW e RENDERED como fontes distinguíveis.
+## Novo model
 
-### Nova seção do relatório
+Adicione explicitamente ao allowlist/policy/pricing/qualificação e valide contrato. Não basta aceitar string arbitrária.
 
-`ReportBuilder` deve consumir estado persistido, não recalcular fonte primária no HTML. Preserve escaping, redaction, autocontenção e `REPORT-GEO-*` versionamento quando houver mudança de contrato.
+## Nova Evidence
 
-## Limitações técnicas atuais
+Preserve scope e provenance.
 
-- Python 3.13 continua obrigatório.
-- CLI é a única interface de produto.
-- Não há web UI/server.
-- Não há resume de auditoria interrompida.
-- Logging atual é process-level; não há `audit.log` materializado.
-- Ajustes internos de timeout/browser/provider não estão expostos como flags de usuário.
+## Nova seção de relatório
+
+Consuma estado persistido; não use HTML como fonte primária.
+
+# Limitações técnicas atuais
+
+- Python 3.13 obrigatório;
+- CLI é a interface do produto;
+- sem web UI/server;
+- sem resume de audit interrompido;
+- logging process-level, sem `audit.log` automático;
+- endpoints/timeouts/viewports não expostos como flags públicas;
+- live compatibility de provider depende também de credencial/conta/egress externos;
+- DeepSeek/MiMo permanecem PROVISIONAL até benchmark SearchGEO específico.
+
+# Referências
+
+- [Referência completa da CLI](CLI_REFERENCE.md)
+- [Guia de IA](AI_GUIDE.md)
+- [Configuração](CONFIGURATION.md)
+- [Guia do relatório](REPORT_GUIDE.md)
+- [Especificação M18](specification/18_MULTI_AI_PROVIDER_ROUTING.md)
