@@ -405,3 +405,7 @@ A lista acumulada de branches encerradas deve ser apresentada ao humano ao final
 A execução deve interromper diante dos blockers reais definidos em D-034 ou em outra decisão normativa aplicável. Problemas técnicos ordinários e solucionáveis devem ser diagnosticados, corrigidos, revalidados e não constituem, por si só, motivo para solicitar aprovação humana.
 
 Nenhum marco pode ser declarado concluído apenas para permitir avanço, e nenhum escopo do marco seguinte deve ser antecipado materialmente antes do encerramento do marco atual, salvo infraestrutura estritamente necessária e já permitida pela especificação.
+
+<!-- M18_MULTI_AI_PROVIDER_ROUTING -->
+## M18 — Multi-AI Provider Abstraction, Reliability Routing & Usage Telemetry
+Implementar adapters provider-neutral para OpenAI/DeepSeek/MiMo, AUTO determinístico com quarantine e URL provider lock, telemetria persistida, catálogo versionado de preços e projeção operacional nos HTMLs. Preservar NoneProvider/OpenAI compatibility e invariantes de scoring. Testes externos usam mocks/fakes; live smoke é condicionado à presença de tokens.

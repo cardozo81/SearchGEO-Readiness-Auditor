@@ -379,3 +379,19 @@ AI_PROVIDER_UNAVAILABLE:<ErrorType>
 ```
 
 A estratégia é fail-safe: preservar rastreabilidade e reduzir capacidade analítica em vez de publicar conclusão negativa sem evidência.
+
+<!-- M18_MULTI_AI_PROVIDER_ROUTING -->
+## M18 — Multi-AI Provider, routing e telemetria
+Providers de runtime: `OPENAI`, `DEEPSEEK`, `MIMO`, `NONE`; `AUTO` usa somente providers com API key e configuração válida, em ordem determinística de confiabilidade SearchGEO. Provider explícito não faz failover cruzado. Após falha em AUTO o provider fica `QUARANTINED_FOR_AUDIT`; o primeiro resultado válido fixa o provider da URL para Desktop/Mobile. A mesma URL nunca recebe duas análises válidas de providers diferentes.
+
+| Provider | Modelo | Profundidade recomendada | Structured Output | Responses API | Classe | Qualificação | Uso |
+|---|---|---|---|---|---|---|---|
+| OPENAI | gpt-5.6-sol | HIGH/XHIGH | SIM | SIM | A+ | QUALIFIED | máxima qualidade |
+| OPENAI | gpt-5.6-terra | HIGH | SIM | SIM | A | QUALIFIED | default |
+| DEEPSEEK | deepseek-v4-pro | HIGH | SIM | SIM | A- | PROVISIONAL | alternativa forte |
+| MIMO | mimo-v2.5-pro | thinking enabled | SIM | SIM | B+ | PROVISIONAL | alternativa forte |
+| OPENAI | gpt-5.6-luna | HIGH | SIM | SIM | B+ | QUALIFIED | volume/custo |
+| DEEPSEEK | deepseek-v4-flash | HIGH | SIM | SIM | B | PROVISIONAL | volume/custo |
+| MIMO | mimo-v2.5 | thinking enabled | SIM | SIM | B | PROVISIONAL | volume/multimodal |
+
+“Confiabilidade SearchGEO” é política inicial de adequação ao contrato específico do auditor, não benchmark científico geral. DeepSeek/MiMo permanecem PROVISIONAL até SearchGEO Provider Benchmark. MiMo normaliza LOW/MEDIUM/HIGH para `THINKING_ENABLED`; não se afirma profundidade relativa entre esses níveis.

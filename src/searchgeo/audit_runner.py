@@ -31,6 +31,8 @@ from searchgeo.m10 import execute_m10
 from searchgeo.m11 import execute_m11
 from searchgeo.m14_linking import link_findings_to_elements
 from searchgeo.m14_persistence import M14Persistence
+from searchgeo.m18_persistence import persist_provider_runtime
+from searchgeo.m18_reporting import enrich_written_reports
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
 from searchgeo.pre_scoring_rules import execute_pre_scoring_rules
 from searchgeo.semantic import NoneProvider, SemanticAnalysisProvider
@@ -176,6 +178,7 @@ def run_audit(
                 persistence=persistence,
                 workspace=workspace,
             )
+            runtime_provider = semantic_provider or NoneProvider()
             m7 = execute_m7(
                 audit_id=audit_id,
                 m3_result=m3,
@@ -184,7 +187,13 @@ def run_audit(
                 m6_result=m6,
                 persistence=persistence,
                 workspace=workspace,
-                provider=semantic_provider or NoneProvider(),
+                provider=runtime_provider,
+            )
+            persist_provider_runtime(
+                audit_id=audit_id,
+                provider=runtime_provider,
+                workspace=workspace,
+                audit_mode=m7.audit_mode.value,
             )
 
             _set_status(persistence, audit_id, AuditStatus.COMPARING)
@@ -250,6 +259,7 @@ def run_audit(
                 persistence=persistence,
                 workspace=workspace,
             )
+            enrich_written_reports(audit_id=audit_id, workspace=workspace)
 
             current = persistence.audits.get(audit_id)
             if current is None:
