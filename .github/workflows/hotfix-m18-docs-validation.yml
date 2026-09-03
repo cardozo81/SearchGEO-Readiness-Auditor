@@ -1,0 +1,91 @@
+name: Temporary M18 docs operational validation
+
+on:
+  push:
+    branches: [hotfix-m18-docs-operational-semantics]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -e .
+      - run: python -m playwright install --with-deps chromium
+      - name: Compile
+        run: python -m compileall -q src tests
+      - name: M18 operational tests
+        run: python -m unittest tests.test_m18_multi_ai_provider tests.test_m18_operational_contract -v
+      - name: Full regression
+        run: python -m unittest discover -s tests -v
+      - name: Documentation contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          required = [
+              'README.md',
+              'docs/CLI_REFERENCE.md',
+              'docs/AI_GUIDE.md',
+              'docs/CONFIGURATION.md',
+              'docs/COMPATIBILITY.md',
+              'docs/INSTALLATION.md',
+              'docs/USER_GUIDE.md',
+              'docs/REPORT_GUIDE.md',
+              'docs/TECHNICAL_GUIDE.md',
+              'docs/TROUBLESHOOTING.md',
+              'docs/SMOKE_TEST.md',
+              'docs/specification/18_MULTI_AI_PROVIDER_ROUTING.md',
+          ]
+          for name in required:
+              if not Path(name).is_file():
+                  raise SystemExit(f'missing required document: {name}')
+
+          # Validate local Markdown links in the updated documentation set.
+          link_re = re.compile(r'\[[^\]]+\]\(([^)]+)\)')
+          for name in required:
+              path = Path(name)
+              text = path.read_text(encoding='utf-8')
+              for raw in link_re.findall(text):
+                  target = raw.split('#', 1)[0]
+                  if not target or '://' in target or target.startswith('mailto:'):
+                      continue
+                  resolved = (path.parent / target).resolve()
+                  if not resolved.exists():
+                      raise SystemExit(f'broken local link: {name} -> {raw}')
+
+          cli = Path('docs/CLI_REFERENCE.md').read_text(encoding='utf-8')
+          for token in (
+              '--version','--config','target','--urls-file','--project','--language','--market',
+              '--max-pages','--audits-root','--ai-provider','--ai-model',
+              'none','openai','deepseek','mimo','auto',
+          ):
+              if token not in cli:
+                  raise SystemExit(f'CLI reference missing: {token}')
+
+          ai = Path('docs/AI_GUIDE.md').read_text(encoding='utf-8')
+          for model in (
+              'gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna',
+              'deepseek-v4-pro','deepseek-v4-flash','mimo-v2.5-pro','mimo-v2.5',
+          ):
+              if model not in ai:
+                  raise SystemExit(f'AI guide missing supported model: {model}')
+          print('DOC_CONTRACT=PASS')
+          PY
+      - name: Diff and secret hygiene
+        run: |
+          git diff --check origin/main...HEAD
+          if git grep -n -E '(sk-[A-Za-z0-9_-]{20,}|github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})' -- .; then
+            echo 'Potential credential material detected.' >&2
+            exit 1
+          fi
+          echo 'SECRET_SCAN=PASS'
