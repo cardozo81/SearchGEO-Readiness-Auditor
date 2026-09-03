@@ -102,6 +102,8 @@ class M18ReportLayoutTests(unittest.TestCase):
         self.assertLess(enriched.index(".m18-ai{"), enriched.index("</head>"))
         self.assertIn(".m18-table-wrap{display:block;width:100%;max-width:100%;overflow-x:auto", enriched)
         self.assertIn("min-width:1050px", enriched)
+        self.assertIn("width:calc(100% - var(--m15-sidebar));max-width:1280px", enriched)
+        self.assertIn("@media(max-width:820px){.page.m15-main{width:100%;max-width:100%}}", enriched)
 
     def test_remediation_context_is_inserted_inside_main_content(self) -> None:
         html = (
