@@ -82,10 +82,13 @@ class _PersistedInputAwareReportBuilder(M17ReportBuilder):
         # references can be applied. Keep labels but remove external hrefs in
         # that degenerate report, preserving the long-standing self-contained
         # empty-report invariant. Real audited page universes keep the links.
-        with sqlite3.connect(workspace.database) as connection:
+        connection = sqlite3.connect(workspace.database)
+        try:
             page_count = connection.execute(
                 "SELECT COUNT(*) FROM pages WHERE audit_id = ?", (audit_id,)
             ).fetchone()[0]
+        finally:
+            connection.close()
         if page_count == 0:
             html = re.sub(
                 r"<a href='https?://[^']+' target='_blank' rel='noopener'>(.*?)</a>",
