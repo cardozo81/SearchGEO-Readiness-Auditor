@@ -1,379 +1,239 @@
-# Guia do Relatório
+# REPORT_GUIDE.md
 
-O SearchGEO gera dois relatórios HTML estáticos a partir do estado persistido:
+Guia de leitura do report site do SearchGEO Readiness Auditor.
+
+## Ponto de entrada
+
+Abra:
 
 ```text
-report.html
-remediation.html
+<audits-root>/<AUD-ID>/report/index.html
 ```
 
-A fonte primária continua sendo `audit.db` + artifacts. Os HTMLs são projeções para leitura humana.
+Não é necessário servidor web. Os arquivos usam links relativos e um CSS compartilhado.
 
-# Abrir os relatórios
+## Estrutura
 
-```powershell
-Start-Process .\audits\AUD-...\report.html
-Start-Process .\audits\AUD-...\remediation.html
+```text
+report/
+├─ index.html
+├─ mobile.html          # quando Mobile foi auditado
+├─ desktop.html         # quando Desktop foi auditado
+├─ remediation.html
+├─ ai-usage.html
+├─ references.html
+└─ css/
+   └─ site.css
 ```
 
-Não é necessário web server.
+O menu é comum às páginas existentes naquela auditoria.
 
-# `report.html`
+## Por que o relatório foi separado
 
-É a visão principal orientada à auditoria e às páginas.
+Cada página responde a um domínio diferente:
 
-Pode apresentar:
+| Página | Domínio |
+|---|---|
+| `index.html` | visão executiva, Overall, Coverage, Confidence e dimensões |
+| `mobile.html` | evidência, findings e semântica do contexto Mobile |
+| `desktop.html` | evidência, findings e semântica do contexto Desktop |
+| `remediation.html` | causa raiz, prioridade, alvo de correção, aceite e revalidação |
+| `ai-usage.html` | telemetria operacional dos providers de IA |
+| `references.html` | fontes oficiais, natureza das regras e fórmulas do auditor |
 
-- projeto/audit ID;
-- domínio/origin e modo de entrada;
-- URLs fornecidas/auditadas;
-- limitações;
-- Compatibilidade GEO;
-- Score, Coverage, Confidence e Consolidation;
-- Desktop/Mobile separados;
-- recursos do domínio;
-- inventário de páginas;
-- findings/evidence;
-- screenshots/DOM;
-- actionability/prioridade;
-- causa raiz/remediação;
-- contexto semântico;
-- telemetria M18 de IA.
+A separação evita dois problemas do HTML monolítico anterior: navegação excessivamente longa e mistura entre falha operacional da IA e qualidade do website.
 
-# `remediation.html`
+## `index.html`
 
-É a visão transversal orientada a problema/regra.
+É o dashboard executivo. Deve ser lido nesta ordem:
 
-Agrupa ocorrências por escopo/regra/actionability e mostra, quando disponível:
+1. dispositivo efetivamente auditado;
+2. Readiness/Overall quando consolidado;
+3. Coverage;
+4. Confidence;
+5. Consolidation;
+6. dimensões;
+7. findings/remediações quando existirem.
 
-- páginas afetadas;
-- devices;
-- resultado;
-- prioridade;
-- causa raiz;
-- selector/alvo quando determinável;
-- orientação de correção;
-- critérios de aceite/revalidação;
-- referências técnicas.
+## Score / Readiness
 
-Falha de provider de IA aparece somente como **contexto operacional**, nunca como finding/recommendation do website.
+O Score representa somente as regras efetivamente avaliadas que participam do cálculo.
 
-# Compatibilidade GEO, Coverage, Confidence e Consolidation
+Baseline:
 
-Esses conceitos não são equivalentes.
+```text
+PASS    = 1,00
+WARNING = 0,50 por padrão
+FAIL    = 0,00
+```
 
-## Compatibilidade GEO
+`UNKNOWN`, `ERROR` e `NOT_APPLICABLE` não são convertidos em `FAIL`.
 
-Representa readiness quando `OVERALL_READINESS` está metodologicamente consolidado.
+As faixas visuais `Excelente / Alta / Moderada / Baixa / Crítica` são classificação interna do SearchGEO. Não são thresholds oficiais de Google, OpenAI ou outro mantenedor.
 
 ## Coverage
 
-Representa quanto do universo aplicável foi efetivamente avaliado.
+Coverage responde:
 
-Coverage baixa não significa website ruim.
+> quanto do universo aplicável realmente foi avaliado?
+
+```text
+evaluated applicable weight / total applicable weight
+```
+
+Coverage baixa significa **análise incompleta**, não qualidade baixa do site.
+
+Exemplo:
+
+```text
+Score:      90/100
+Coverage:   45%
+Confidence: LOW
+```
+
+A leitura correta não é “site excelente”. A leitura correta é: a parte avaliada teve resultado alto, porém menos da metade do universo aplicável foi suficientemente avaliada e a conclusão é fraca.
 
 ## Confidence
 
-Representa a confiabilidade da conclusão considerando evidência/capacidade analítica.
+Confidence responde:
+
+> quão forte é a conclusão do auditor com as evidências disponíveis?
+
+No SCORE-GEO-002 atual ela considera principalmente Coverage, completude de evidência e erros de execução.
+
+**Confidence LOW não significa que o texto do website é ruim, não confiável ou não aderente a GEO.**
+
+Ela significa que o auditor não possui base suficiente para sustentar uma conclusão forte. O conteúdo do site é avaliado por RuleExecutions, findings e Score; Confidence qualifica a conclusão.
+
+Também não deve ser confundida com o campo de confidence devolvido por um provider de IA em uma avaliação semântica individual.
 
 ## Consolidation
 
-Indica se existe base suficiente para consolidar a dimensão/overall.
-
-# Score zero versus não calculado
-
-Score válido igual a zero:
+Estados:
 
 ```text
-Score: 0.0
-Estado: CALCULADO
+CONSOLIDATED
+PARTIAL
+NOT_CONSOLIDATED
+NOT_APPLICABLE
 ```
 
-Sem base suficiente:
+Uma dimensão `NOT_APPLICABLE` legítima não recebe 0 nem 100 e fica fora do Overall.
 
-```text
-Score: NÃO DETERMINADO
-Estado: NÃO CALCULADO
-```
+Uma dimensão aplicável `NOT_CONSOLIDATED` pode impedir publicação de um Overall.
 
-`Coverage: 0%` não significa `Score GEO: 0`.
+## Mobile e Desktop
 
-# Desktop e Mobile
+Quando `--device-context mobile`:
 
-São avaliados separadamente desde rendering até scoring. Não existe média artificial.
+- existe `mobile.html`;
+- `desktop.html` não é gerado;
+- o report não apresenta Desktop como se tivesse sido auditado.
 
-Exemplo válido:
+Quando `desktop`, vale o inverso.
 
-```text
-Desktop: 82 / Alta / Consolidado
-Mobile: NÃO DETERMINADA
-```
+Quando `both`, existem as duas páginas e a comparação entre contextos pode ser interpretada.
 
-# Actionability
+Diferença Mobile × Desktop não é automaticamente defeito. A regra BR-GEO-052 distingue diferença material de falha.
 
-| Valor | Interpretação |
-|---|---|
-| `REQUIRED_FIX` | correção evidence-backed requerida |
-| `REVIEW_RECOMMENDED` | revisão humana/contextual necessária |
-| `OPTIONAL_IMPROVEMENT` | melhoria não bloqueante |
-| `NO_ACTION` | nenhuma ação necessária |
-| `INSUFFICIENT_EVIDENCE` | não há base para ordenar mudança |
+## Página por dispositivo
 
-Actionability não altera o score.
+`mobile.html` e `desktop.html` apresentam:
 
-# Evidência e selector
+- scorecard do dispositivo;
+- dimensões;
+- páginas/URLs auditadas;
+- HTTP/final URL;
+- snapshot visual quando disponível;
+- findings aplicáveis ao dispositivo;
+- avaliações semânticas não aprovadas.
 
-O auditor pode exibir:
+Detalhes extensos ficam recolhidos em `details`, reduzindo poluição visual sem remover rastreabilidade.
 
-- URL/device;
-- Evidence/RuleExecution;
+## Remediações
+
+`remediation.html` organiza por problema/causa, não por tamanho do crawl.
+
+Quando M16/M17 conseguiu materializar a causa, a ocorrência pode exibir:
+
+- causa precisa;
+- reason code;
+- escopo;
 - selector observado;
-- tag/id/classes;
-- trecho HTML persistido;
-- bounding box;
-- screenshot local.
-
-Quando um único elemento não pode ser determinado com segurança, o relatório usa `NÃO DETERMINADO` em vez de inventar selector.
-
-# Uso de IA — M18
-
-O `report.html` possui a seção:
-
-```text
-Uso de IA — execução e telemetria
-```
-
-Ela é operacional e separada dos findings do website.
-
-## Campos de sessão
-
-O relatório diferencia:
-
-- IA habilitada: `SIM`/`NÃO`;
-- estratégia: `NONE`, `SINGLE_PROVIDER` ou `AUTO`;
-- provider inicialmente selecionado;
-- provider efetivamente utilizado;
-- modelo efetivo;
-- reasoning/depth;
-- status operacional da sessão;
-- quantidade de URLs analisadas com sucesso por provider;
-- cadeia inicial imutável;
-- cobertura semântica externa;
-- eventos de failover.
-
-## Tabela de tentativas
-
-Cada tentativa persistida pode aparecer com:
-
-| Campo | Significado |
-|---|---|
-| URL | página associada ao snapshot |
-| Device | Desktop/Mobile |
-| Provider | OpenAI, DeepSeek ou MiMo |
-| Model | model ID efetivamente configurado |
-| Depth | reasoning profile normalizado |
-| Status | sucesso/erro contratual/técnico etc. |
-| Tokens input | somente se provider reportou |
-| Tokens output | somente se provider reportou |
-| Tokens reasoning | somente se provider reportou |
-| Estimated cost | estimativa local quando calculável |
-| Duration | duração da tentativa |
-| Error | diagnóstico sanitizado |
-
-Tokens ausentes ficam vazios/`—`; não são inventados.
-
-# Interpretação dos estados de IA
-
-## `NO_AI`
-
-Nenhum provider efetivo. Pode ocorrer por:
-
-- `--ai-provider none`;
-- provider explícito sem token;
-- AUTO sem providers elegíveis.
-
-Regras semantic-only podem ficar `UNKNOWN`. Isso não é `FAIL` do website.
-
-## `FULL`
-
-Provider produziu respostas válidas para o universo aplicável necessário ao modo FULL.
-
-## `DEGRADED`
-
-Parte da análise semântica ficou indisponível/rejeitada.
-
-Exemplos:
-
-- provider explícito falhou;
-- pinned provider falhou no segundo device;
-- resposta violou contrato/schema/evidence.
-
-## `CHAIN_EXHAUSTED`
-
-Exclusivo da estratégia `AUTO`: todos os providers elegíveis foram quarantined após falhas.
-
-A auditoria registra:
-
-```text
-AI_PROVIDER_CHAIN_EXHAUSTED
-```
-
-Isso continua sendo limitação operacional da auditoria.
-
-# Provider explícito sem token
-
-O relatório não deve afirmar que houve chamada externa.
-
-Comportamento:
-
-```text
-strategy = SINGLE_PROVIDER
-provider = configurado conceitualmente
-chamada externa = nenhuma
-estado = NOT_CONFIGURED / sem IA efetiva
-```
-
-# Provider explícito com erro/crédito
-
-Exemplo:
-
-```text
-OpenAI -> CREDIT_ERROR
-```
-
-O relatório deve mostrar tentativa sem sucesso/estado degradado, não ausência fictícia de configuração.
-
-Não existe fallback para outro fornecedor nesse modo.
-
-# AUTO e failover
-
-Exemplo:
-
-```text
-OpenAI -> CREDIT_ERROR
-DeepSeek -> SUCCESS
-```
-
-O relatório pode indicar:
-
-```text
-OpenAI (CREDIT_ERROR) → DeepSeek
-```
-
-OpenAI permanece quarantined pelo restante do audit.
-
-# Lock por URL
-
-Exemplo:
-
-```text
-URL A Desktop -> DeepSeek SUCCESS
-URL A Mobile  -> DeepSeek TIMEOUT
-```
-
-MiMo não é usado para completar URL A Mobile. O relatório deve refletir a perda de cobertura daquele contexto. MiMo pode ser usado em URL seguinte se for o próximo provider saudável.
-
-# `ESTIMATED_COST`
-
-É calculado com catálogo local versionado e usage reportado pelo provider.
-
-Não é:
-
-- invoice;
-- billing oficial;
-- valor garantido;
-- componente do score.
-
-Quando os campos necessários não existirem, o custo permanece não calculado.
-
-# Diagnósticos de erro de IA
-
-Podem aparecer classes como:
-
-```text
-AUTH_ERROR
-QUOTA_ERROR
-CREDIT_ERROR
-RATE_LIMIT_ERROR
-MODEL_ERROR
-PERMISSION_ERROR
-NETWORK_ERROR
-TIMEOUT_ERROR
-SERVER_ERROR
-CONTRACT_ERROR
-EMPTY_RESPONSE
-INVALID_RESPONSE
-UNKNOWN_PROVIDER_ERROR
-```
-
-Mensagens potencialmente sensíveis não precisam ser reproduzidas para classificar o erro.
-
-# `audit.db` e relatório
-
-A seção de IA é construída a partir das tabelas:
-
-```text
-ai_audit_sessions
-ai_provider_attempts
-provider_pricing_catalog
-```
-
-Se for necessário diagnóstico técnico mais profundo, consulte o DB. O HTML não substitui a persistência.
-
-# Logging versus relatório
-
-M18 também emite logging operacional sanitizado quando `log_level` permite.
-
-Logs podem conter:
-
-- audit ID;
-- URL/device;
-- provider/model/depth;
-- status;
-- duração;
-- tokens reportados;
+- alvo técnico;
+- localização esperada;
+- diagnostic confidence;
+- mudança recomendada;
+- observado versus esperado;
+- exemplo pós-correção;
+- decisão humana;
+- critérios de aceite;
+- revalidação.
+
+Uma condição `UNKNOWN`/evidência insuficiente não deve ser transformada artificialmente em ordem de alteração do site.
+
+## Uso de IA
+
+`ai-usage.html` é operacional. Pode exibir:
+
+- IA habilitada ou não;
+- estratégia;
+- provider/model efetivo;
+- status da sessão;
+- cadeia inicial;
+- chamadas;
+- tokens;
 - custo estimado;
-- error class.
+- duração;
+- erro sanitizado.
 
-Não contêm API key, Authorization ou corpo integral da requisição.
+Falha, quota, timeout ou provider não configurado **não é finding GEO do website**.
 
-A baseline não cria `audit.log` automaticamente. Portanto:
+`ESTIMATED_COST` é estimativa local, não invoice.
+
+## Referências e metodologia
+
+`references.html` explica:
+
+- fontes primárias oficiais;
+- natureza `OFFICIAL`, `STANDARD`, `HEURISTIC` ou baseline interna das BR-GEO;
+- fórmula do Score;
+- Coverage;
+- Confidence;
+- Overall;
+- limites das classificações internas.
+
+A página inclui o guia oficial do Google de 2026 sobre recursos generativos. O posicionamento adotado pelo SearchGEO é compatível com esse material: práticas fundamentais de SEO continuam relevantes, não há markup GEO/AEO especial obrigatório, nem necessidade de reescrever conteúdo apenas para IA.
+
+## Cores
+
+Cores indicam mensagem, não decoração:
+
+- verde: estado positivo/evidência suficiente;
+- âmbar: atenção, parcialidade ou confiança reduzida;
+- vermelho: problema/ação de alta gravidade;
+- azul: informação contextual;
+- cinza: indisponível/não determinado.
+
+Cor nunca substitui o texto do estado.
+
+## CSS
+
+Todos os HTMLs finais referenciam:
 
 ```text
-registro persistente = audit.db + report.html
-logging do processo = console/handler configurado
+css/site.css
 ```
 
-# `COMPLETE_WITH_LIMITATIONS`
+Não existe CSS final inline/embutido nos `<head>` do report site. Isso mantém layout e navegação consistentes e reduz duplicação estrutural.
 
-Esse status não significa necessariamente falha do website. Pode resultar de:
+## Fonte de verdade
 
-- NO_AI;
-- provider indisponível;
-- AUTO chain exhausted;
-- rendering/evidence incompleto;
-- max pages;
-- regras UNKNOWN/ERROR;
-- score não consolidado.
+O HTML é projeção. A fonte de verdade permanece:
 
-# Segurança visual
+```text
+audit.db
+artifacts/
+```
 
-O relatório deve permanecer sanitizado:
-
-- sem API keys;
-- sem Authorization;
-- sem secrets de provider;
-- conteúdo dinâmico HTML-escaped;
-- sem chain-of-thought.
-
-# Portabilidade
-
-Screenshots/artifacts são locais e referenciados por paths relativos. Para transportar uma auditoria, copie/compacte o workspace completo, não apenas `report.html`.
-
-# Referências
-
-- [Guia do usuário](USER_GUIDE.md)
-- [Referência completa da CLI](CLI_REFERENCE.md)
-- [Guia de IA](AI_GUIDE.md)
-- [Outputs e artifacts](OUTPUTS_AND_ARTIFACTS.md)
-- [Troubleshooting](TROUBLESHOOTING.md)
+O report site não recalcula score, finding ou recommendation.

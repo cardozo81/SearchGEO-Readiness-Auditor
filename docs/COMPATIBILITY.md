@@ -1,237 +1,140 @@
-# Compatibilidade e Dependências
+# COMPATIBILITY.md
 
-Este é o contrato operacional da baseline atual do SearchGEO Readiness Auditor, incluindo M18 multi-provider.
+## Runtime
 
-## Matriz de compatibilidade
+| Item | Compatibilidade atual |
+|---|---|
+| CPython | `>=3.13,<3.14` |
+| Windows + PowerShell | target operacional principal |
+| Playwright | `>=1.57,<2` |
+| Chromium | obrigatório para rendering real |
+| SQLite | embarcado/local |
+| Filesystem | local e gravável |
+| HTTP/HTTPS egress | necessário para targets e providers externos |
+| Docker | não requerido/não fornecido |
+| Web server | não requerido |
 
-| Item | Estado | Contrato/observação |
-|---|---|---|
-| Windows + PowerShell | **Target operacional de handoff** | documentação e exemplos operacionais são preparados para este ambiente |
-| Ubuntu `ubuntu-latest` | **Validado por testes automatizados** | usado em gates de regressão; não é target formal de distribuição |
-| macOS | **Não homologado** | nenhuma garantia operacional nesta baseline |
-| CPython 3.13.x | **Obrigatório/suportado** | `requires-python = ">=3.13,<3.14"` |
-| Python 3.12 ou anterior | **Incompatível** | fora do contrato do package |
-| Python 3.14+ | **Incompatível** | fora do contrato até decisão explícita |
-| Playwright `>=1.57,<2` | **Obrigatório** | dependência externa de runtime declarada |
-| Chromium | **Obrigatório para rendering real** | browser do Playwright ou executável compatível explícito |
-| SQLite | **Obrigatório e embarcado** | módulo `sqlite3`; sem database server |
-| Filesystem local gravável | **Obrigatório** | `audit.db`, artifacts e HTMLs são locais |
-| HTTP/HTTPS para target | **Obrigatório para auditoria real** | discovery, aquisição e rendering dependem de rede |
-| OpenAI | **Opcional / suportado** | provider M18; qualificação SearchGEO `QUALIFIED` |
-| DeepSeek | **Opcional / suportado** | provider M18; qualificação SearchGEO `PROVISIONAL` |
-| Xiaomi MiMo | **Opcional / suportado** | provider M18; qualificação SearchGEO `PROVISIONAL` |
-| Docker | **Não requerido / não fornecido** | sem imagem oficial |
-| Web server/backend | **Não requerido / não fornecido** | CLI + HTML estático |
-| Git/GitHub | **Não requerido em runtime** | engenharia/versionamento somente |
+O `pyproject.toml` é a fonte de verdade para versão Python/dependência do package.
 
-## Dependências obrigatórias
+## Contextos de dispositivo
 
-### Python
+A CLI suporta:
 
-```powershell
-py -3.13 --version
+```text
+mobile
+desktop
+both
 ```
 
-### Package
+Default:
 
-```powershell
-python -m pip install -e .
+```text
+mobile
 ```
 
-### Chromium
+Perfis reais de navegador continuam definidos em `rendering.py`. Quando somente um contexto é selecionado, não é criado snapshot do outro dispositivo.
 
-```powershell
-python -m playwright install chromium
+Chamadas internas a M3 sem `SEARCHGEO_DEVICE_CONTEXT` preservam `both` por compatibilidade interna; isso não altera o default de usuário da CLI.
+
+## Providers de IA
+
+| Provider | Estado |
+|---|---|
+| `none` | suportado/default |
+| OpenAI | suportado |
+| DeepSeek | suportado; qualificação SearchGEO `PROVISIONAL` |
+| Xiaomi MiMo | suportado; qualificação SearchGEO `PROVISIONAL` |
+| `auto` | suportado; roteamento sequencial/failover controlado |
+
+Não é necessário SDK Python específico desses providers; os adapters usam HTTP.
+
+## Modelos aceitos
+
+```text
+OPENAI:   gpt-5.6-sol | gpt-5.6-terra | gpt-5.6-luna
+DEEPSEEK: deepseek-v4-pro | deepseek-v4-flash
+MIMO:     mimo-v2.5-pro | mimo-v2.5
 ```
 
-Sem Chromium funcional, aquisição HTTP pode ocorrer, mas rendering Desktop/Mobile perde capacidade e isso reduz cobertura/confiabilidade da auditoria; não é automaticamente `FAIL` do website.
+Model ID diferente deve ser considerado não suportado pelo contrato atual, mesmo que a API externa possua outros modelos.
 
-Executável alternativo:
+## Saída persistente
 
-```powershell
-$env:PLAYWRIGHT_CHROMIUM_EXECUTABLE = "C:\caminho\para\chrome.exe"
-```
-
-### Filesystem
-
-O processo precisa conseguir criar:
+Contrato público:
 
 ```text
 <audits-root>/<AUD-ID>/audit.db
 <audits-root>/<AUD-ID>/artifacts/
-<audits-root>/<AUD-ID>/report.html
-<audits-root>/<AUD-ID>/remediation.html
+<audits-root>/<AUD-ID>/report/index.html
+<audits-root>/<AUD-ID>/report/remediation.html
+<audits-root>/<AUD-ID>/report/ai-usage.html
+<audits-root>/<AUD-ID>/report/references.html
+<audits-root>/<AUD-ID>/report/css/site.css
 ```
 
-### Rede
-
-Sem IA, o host precisa alcançar o site auditado e seus recursos necessários ao rendering.
-
-Com IA, precisa também de egress HTTPS ao provider selecionado.
-
-# Compatibilidade de IA
-
-IA não é dependência obrigatória. O default é:
-
-```powershell
-searchgeo audit https://example.com --ai-provider none
-```
-
-ou simplesmente:
-
-```powershell
-searchgeo audit https://example.com
-```
-
-## OpenAI
-
-Modelos suportados pelo allowlist:
+Condicionalmente:
 
 ```text
-gpt-5.6-sol
-gpt-5.6-terra
-gpt-5.6-luna
+report/mobile.html
+report/desktop.html
 ```
 
-Default:
+A página correspondente existe apenas se o dispositivo foi auditado.
+
+## HTML/CSS
+
+O report site final:
+
+- é estático;
+- usa links relativos;
+- não exige JavaScript para navegação básica;
+- não exige web server;
+- usa stylesheet externo compartilhado;
+- não embute CSS final no `<head>` de cada página.
+
+## Dados primários
+
+O HTML não é fonte primária. A reprodutibilidade depende de:
 
 ```text
-gpt-5.6-terra / HIGH
+audit.db
+artifacts/
 ```
 
-Requer:
+## Structured Data
 
-```text
-OPENAI_API_KEY
-```
+A cobertura operacional específica do parser é JSON-LD. Microdata e RDFa não devem ser tratados como equivalentes automaticamente pelo auditor atual.
 
-## DeepSeek
+JSON-LD também não é requisito universal para um Overall SearchGEO: quando ausente e as regras correspondentes são legitimamente `NOT_APPLICABLE`, a dimensão Structured Data fica fora da agregação.
 
-Modelos suportados:
+## GEO/AEO externo
 
-```text
-deepseek-v4-pro
-deepseek-v4-flash
-```
+O produto não declara compatibilidade com um “padrão GEO” universal porque esse padrão normativo não existe.
 
-Default:
+A referência oficial mais direta do Google para recursos generativos é:
 
-```text
-deepseek-v4-pro / HIGH
-```
+<https://developers.google.com/search/docs/fundamentals/ai-optimization-guide>
 
-Requer:
+O guia mantém SEO como base e não cria requisito especial de AEO/GEO, `llms.txt`, chunking obrigatório ou Structured Data específico para IA.
 
-```text
-DEEPSEEK_API_KEY
-```
+## Rede e segurança
 
-Estado de qualificação SearchGEO: `PROVISIONAL` até benchmark específico.
+Para provider externo são necessários:
 
-## Xiaomi MiMo
+- DNS;
+- HTTPS egress;
+- credencial válida;
+- saldo/quota/permissão compatível;
+- política organizacional que autorize envio do contexto persistido ao provider.
 
-Modelos suportados:
+Secrets não devem aparecer em artifacts, report site ou logs.
 
-```text
-mimo-v2.5-pro
-mimo-v2.5
-```
+## Não homologado / fora do escopo
 
-Default:
-
-```text
-mimo-v2.5-pro / HIGH
-```
-
-No relatório, reasoning habilitado é normalizado como `THINKING_ENABLED`.
-
-Requer:
-
-```text
-MIMO_API_KEY
-```
-
-Estado de qualificação SearchGEO: `PROVISIONAL` até benchmark específico.
-
-# Modos e efeitos
-
-| Situação | Chamada externa | Modo/efeito |
-|---|---:|---|
-| `--ai-provider none` | Não | `NO_AI`; regras semantic-only podem ficar `UNKNOWN` |
-| provider explícito sem key | Não | `NOT_CONFIGURED`; não é falha do site |
-| provider explícito configurado e válido | Sim | pode chegar a `FULL` conforme universo aplicável |
-| provider explícito falha | Sim até a falha | `DEGRADED`; provider quarantined; sem fallback para outro provider |
-| `auto` sem tokens | Não | nenhuma cadeia elegível; sem IA efetiva |
-| `auto` com failover | Sim | provider falho quarantined; próximo saudável pode ser promovido |
-| todos AUTO falham | Sim | `CHAIN_EXHAUSTED`; limitação `AI_PROVIDER_CHAIN_EXHAUSTED` |
-
-## Sem token
-
-Provider explícito:
-
-- retorna `NOT_CONFIGURED`;
-- nenhuma requisição externa é realizada;
-- pipeline determinístico continua.
-
-`AUTO`:
-
-- provider sem token é omitido;
-- se nenhum provider possuir token/configuração válida, não há chamada externa.
-
-## Sem créditos / quota / erro
-
-O runtime classifica falhas de autenticação, quota/crédito, rate limit, modelo/permissão, rede/timeout/server e contrato/resposta.
-
-Provider explícito não troca de fornecedor. `AUTO` pode fazer fallback, sempre respeitando quarantine e lock por URL.
-
-# Homologação M18
-
-A implementação M18 foi validada por suíte automatizada com adapters fakes/mocks e integração de persistência/relatório. O live smoke real de providers é condicionado à existência de credenciais no ambiente de homologação.
-
-A ausência de credenciais no CI significa apenas que o smoke externo foi pulado; não autoriza afirmar homologação live de uma conta/provider específicos.
-
-# Segurança
-
-API keys devem existir apenas no ambiente do processo ou mecanismo seguro equivalente. Não devem ser gravadas em:
-
-- Git;
-- TOML versionado;
-- artifacts;
-- HTMLs;
-- logs;
-- scripts compartilhados.
-
-Validação segura:
-
-```powershell
-Test-Path Env:OPENAI_API_KEY
-Test-Path Env:DEEPSEEK_API_KEY
-Test-Path Env:MIMO_API_KEY
-```
-
-# O que significa "compatível"
-
-Para a aplicação local:
-
-- Python/package dentro do contrato;
-- Chromium funcional;
-- filesystem gravável;
-- rede disponível ao target;
-- suíte sem regressão;
-- smoke operacional no ambiente de destino quando exigido.
-
-Para um provider/model de IA:
-
-- model ID presente no allowlist M18;
-- API key válida;
-- endpoint acessível;
-- conta com permissão/limite/crédito suficientes;
-- resposta compatível com o contrato semântico;
-- validação local SearchGEO concluída.
-
-# Referências
-
-- [Instalação](INSTALLATION.md)
-- [Referência completa da CLI](CLI_REFERENCE.md)
-- [Guia de IA](AI_GUIDE.md)
-- [Configuração](CONFIGURATION.md)
+- executável standalone sem Python;
+- macOS como target formal de handoff;
+- banco de dados remoto;
+- execução distribuída;
+- interface web/backend do SearchGEO;
+- Docker oficial;
+- geração automática de conteúdo como parte do baseline atual.

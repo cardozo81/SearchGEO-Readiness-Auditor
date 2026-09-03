@@ -1,48 +1,106 @@
-# OpenAI Provider Diagnostics
+# OPENAI_PROVIDER_DIAGNOSTICS.md
 
-O SearchGEO utiliza a OpenAI somente para a camada semântica opcional. Falha do provider não deve ser convertida em defeito do website nem alterar `SCORE-GEO-001`.
+## Onde diagnosticar
 
-A partir do hotfix do issue #23, o adapter usado pela CLI:
-
-- envia o contrato explícito das 22 regras `BR-GEO-028..049`;
-- exige exatamente uma avaliação por regra;
-- rejeita saída parcial como indisponível;
-- preserva diagnóstico sanitizado de HTTP sem persistir API key nem corpo/mensagem completa;
-- diferencia no relatório `Uso de IA: SIM`, `NÃO` e `TENTATIVA SEM SUCESSO`.
-
-Exemplo de limitação sanitizada:
+A telemetria final fica em:
 
 ```text
-AI_PROVIDER_UNAVAILABLE:HTTP_429:type=insufficient_quota:code=credit_balance_exhausted:request_id=req_...
+<audits-root>/<AUD-ID>/report/ai-usage.html
 ```
 
-O `request_id` aparece somente quando fornecido pela API. Mensagens completas de erro não são persistidas por esse diagnóstico.
+No banco:
 
-Um `HTTP_429` com `credit_balance_exhausted` indica indisponibilidade de quota/créditos da conta da API; a auditoria permanece `DEGRADED` e regras dependentes do provider podem ficar `UNKNOWN`.
+```text
+ai_audit_sessions
+ai_provider_attempts
+```
 
-## `TIMEOUT_ERROR` com chave configurada e saldo disponível
+## Credencial
 
-`TIMEOUT_ERROR` é diferente de erro de saldo, quota ou autenticação. Ele indica que a chamada HTTP não terminou dentro do limite operacional do cliente; por si só, não demonstra problema na API key nem ausência de créditos.
+Valide presença sem imprimir a chave:
 
-Na CLI atual, o timeout de chamadas semânticas externas é `180` segundos por padrão. Ele pode ser ajustado sem alterar o código:
+```powershell
+Test-Path Env:OPENAI_API_KEY
+```
+
+Com `--ai-provider openai`, chaves ausentes de DeepSeek/MiMo não interferem.
+
+## Provider sem chave
+
+Estado esperado:
+
+```text
+NOT_CONFIGURED
+```
+
+Nenhuma chamada externa ocorre.
+
+## Timeout
+
+`TIMEOUT_ERROR` não significa, por si só, falta de crédito ou erro de autenticação.
+
+Default CLI:
+
+```text
+180 s
+```
+
+Override:
 
 ```powershell
 $env:SEARCHGEO_AI_TIMEOUT_SECONDS = "240"
-searchgeo audit https://example.com --ai-provider openai --ai-model gpt-5.6-terra
 ```
 
-O valor deve ser numérico, finito e maior que zero.
+Não existe retry automático após timeout.
 
-O SearchGEO não faz retry automático após timeout. Isso é intencional: uma chamada que expirou localmente pode ter sido processada pelo provider, portanto repetir silenciosamente poderia gerar consumo duplicado. Em provider explícito, a falha coloca o provider em `QUARANTINED_FOR_AUDIT`; em `auto`, o próximo provider saudável pode ser tentado conforme a política M18.
+## Saldo disponível e timeout
 
-## Independência entre providers
+Ter saldo/crédito disponível elimina apenas algumas hipóteses. Uma chamada ainda pode falhar por:
 
-Uma execução explícita:
+- timeout local;
+- rede;
+- rate limit;
+- indisponibilidade de servidor;
+- model/permission;
+- contrato/resposta inválida.
+
+Use a classe de erro persistida, não inferência pelo saldo.
+
+## Dispositivo
+
+Default da CLI:
+
+```text
+mobile
+```
+
+Para economizar chamadas, mantenha Mobile quando Desktop não for necessário:
 
 ```powershell
-searchgeo audit https://example.com --ai-provider openai
+searchgeo audit https://example.com `
+  --device-context mobile `
+  --ai-provider openai
 ```
 
-depende somente da configuração OpenAI. A ausência de `DEEPSEEK_API_KEY` e `MIMO_API_KEY` não invalida nem sobrescreve o resultado OpenAI.
+Use `both` somente quando a comparação for necessária.
 
-Em `auto`, providers sem key não entram na cadeia. Quando um provider retorna uma análise válida para um contexto, a cadeia é encerrada naquele ponto; nenhum provider posterior é chamado para sobrescrever o resultado. O provider também fica fixado à URL para manter Desktop/Mobile comparáveis.
+## Primeiro resultado válido
+
+No AUTO, o primeiro provider com resultado válido encerra a cadeia naquele contexto. Não existe chamada posterior para sobrescrever a resposta aceita.
+
+## URL lock
+
+Com `both`, se uma URL foi aceita por um provider e esse provider falha no outro dispositivo, o runtime não mistura outro provider para completar a mesma URL. O provider pode ser quarantined para URLs posteriores.
+
+## Custo
+
+`ESTIMATED_COST` em `ai-usage.html` é estimativa local. Não substitui billing/invoice da OpenAI.
+
+## Segurança
+
+A página de telemetria não deve conter:
+
+- API key;
+- Authorization;
+- body integral sensível;
+- mensagem não sanitizada que possa carregar segredo.

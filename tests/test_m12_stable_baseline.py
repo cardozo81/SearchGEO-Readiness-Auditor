@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager, redirect_stdout
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import StringIO
+import os
 from pathlib import Path
 import sqlite3
 from tempfile import TemporaryDirectory
@@ -15,6 +16,7 @@ from unittest.mock import patch
 from searchgeo.acquisition import HttpClient
 from searchgeo.audit_runner import AuditRunResult, run_audit
 from searchgeo.cli import main
+from searchgeo.device_context import DEVICE_CONTEXT_ENV
 from searchgeo.discovery import DiscoveryEngine
 from searchgeo.domain import AuditMode, AuditStatus, CompletionStatus, DeviceContext
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
@@ -92,7 +94,7 @@ class _FixtureRenderer:
 
 
 class M12StableBaselineTests(unittest.TestCase):
-    def test_end_to_end_pipeline_materializes_all_rules_devices_scores_and_report(self) -> None:
+    def test_end_to_end_pipeline_materializes_all_rules_devices_scores_and_report_site(self) -> None:
         with _server() as origin, TemporaryDirectory() as directory:
             html = f"""<!doctype html><html lang='pt-BR'><head><title>Guia SearchGEO</title>
 <meta name='description' content='Guia técnico.'><link rel='canonical' href='{origin}/'>
@@ -112,8 +114,14 @@ class M12StableBaselineTests(unittest.TestCase):
             )
 
             self.assertTrue(result.report_path.is_file())
+            self.assertEqual(result.report_path, result.audit_root / "report" / "index.html")
             self.assertTrue((result.audit_root / "audit.db").is_file())
             self.assertTrue((result.audit_root / "artifacts").is_dir())
+            self.assertTrue((result.audit_root / "report" / "css" / "site.css").is_file())
+            for filename in ("mobile.html", "desktop.html", "remediation.html", "ai-usage.html", "references.html"):
+                self.assertTrue((result.audit_root / "report" / filename).is_file(), filename)
+            self.assertFalse((result.audit_root / "report.html").exists())
+            self.assertFalse((result.audit_root / "remediation.html").exists())
             self.assertEqual(result.audited_pages, 1)
             self.assertEqual(result.completion_status, CompletionStatus.COMPLETE_WITH_LIMITATIONS)
 
@@ -125,9 +133,7 @@ class M12StableBaselineTests(unittest.TestCase):
                 self.assertEqual(audit.status, AuditStatus.COMPLETED)
                 self.assertEqual(audit.completion_status, CompletionStatus.COMPLETE_WITH_LIMITATIONS)
                 self.assertEqual(audit.audit_mode, AuditMode.NO_AI)
-                self.assertTrue(
-                    any(limitation.startswith("MAX_PAGES_REACHED:") for limitation in audit.limitations)
-                )
+                self.assertTrue(any(limitation.startswith("MAX_PAGES_REACHED:") for limitation in audit.limitations))
 
             connection = sqlite3.connect(result.audit_root / "audit.db")
             connection.row_factory = sqlite3.Row
@@ -147,12 +153,11 @@ class M12StableBaselineTests(unittest.TestCase):
                 ).fetchall()
                 self.assertEqual({row[0]: row[1] for row in snapshots}, {"DESKTOP": 1, "MOBILE": 1})
 
-                score_devices = {
-                    row[0]
-                    for row in connection.execute("SELECT DISTINCT device FROM scores")
-                }
+                score_devices = {row[0] for row in connection.execute("SELECT DISTINCT device FROM scores")}
                 self.assertEqual(score_devices, {"DESKTOP", "MOBILE"})
-                self.assertEqual(connection.execute("SELECT COUNT(*) FROM reports").fetchone()[0], 1)
+                report_rows = connection.execute("SELECT file_path FROM reports").fetchall()
+                self.assertEqual(len(report_rows), 1)
+                self.assertEqual(report_rows[0][0], "report/index.html")
 
                 invalid_findings = connection.execute(
                     """
@@ -165,35 +170,49 @@ class M12StableBaselineTests(unittest.TestCase):
                 connection.close()
 
             report = result.report_path.read_text(encoding="utf-8")
+            css = (result.audit_root / "report" / "css" / "site.css").read_text(encoding="utf-8")
             self.assertIn('lang="pt-BR"', report)
-            self.assertIn("Como interpretar este relatório", report)
-            self.assertIn("Desktop", report)
-            self.assertIn("Mobile", report)
-            self.assertIn("Algumas avaliações semânticas não foram executadas", report)
+            self.assertIn("Visão geral da auditoria", report)
+            self.assertIn("Cobertura e confiabilidade", report)
+            self.assertIn("Confiabilidade baixa não significa", report)
+            self.assertIn("Relatório Mobile", report)
+            self.assertIn("Relatório Desktop", report)
+            self.assertIn("Referências e metodologia", report)
+            self.assertIn('<link rel="stylesheet" href="css/site.css">', report)
+            self.assertNotIn("<style", report.casefold())
+            self.assertIn("--nav:", css)
 
-    def test_cli_audit_command_delegates_to_full_runner_and_reports_paths(self) -> None:
+    def test_cli_audit_command_defaults_to_mobile_and_restores_environment(self) -> None:
         with TemporaryDirectory() as directory:
             expected = AuditRunResult(
                 audit_id="AUD-TEST",
                 audit_root=Path(directory) / "AUD-TEST",
-                report_path=Path(directory) / "AUD-TEST" / "report.html",
+                report_path=Path(directory) / "AUD-TEST" / "report" / "index.html",
                 completion_status=CompletionStatus.COMPLETE_WITH_LIMITATIONS,
                 audited_pages=2,
                 finding_count=3,
                 recommendation_count=2,
             )
             output = StringIO()
-            with patch("searchgeo.cli.run_audit", return_value=expected) as mocked, redirect_stdout(output):
-                exit_code = main([
-                    "audit",
-                    "example.com",
-                    "--project",
-                    "Projeto CLI",
-                    "--max-pages",
-                    "2",
-                    "--audits-root",
-                    directory,
-                ])
+
+            def fake_run(*args, **kwargs):
+                self.assertEqual(os.environ.get(DEVICE_CONTEXT_ENV), "mobile")
+                return expected
+
+            with patch.dict(os.environ, {}, clear=True):
+                with patch("searchgeo.cli.run_audit", side_effect=fake_run) as mocked, redirect_stdout(output):
+                    exit_code = main([
+                        "audit",
+                        "example.com",
+                        "--project",
+                        "Projeto CLI",
+                        "--max-pages",
+                        "2",
+                        "--audits-root",
+                        directory,
+                    ])
+                self.assertNotIn(DEVICE_CONTEXT_ENV, os.environ)
+
             self.assertEqual(exit_code, 0)
             mocked.assert_called_once()
             _, kwargs = mocked.call_args
@@ -202,7 +221,9 @@ class M12StableBaselineTests(unittest.TestCase):
             self.assertIsInstance(kwargs["semantic_provider"], NoneProvider)
             rendered = output.getvalue()
             self.assertIn("Auditoria concluída: AUD-TEST", rendered)
-            self.assertIn("report.html", rendered)
+            self.assertIn("Contexto de dispositivo: MOBILE", rendered)
+            self.assertIn("report", rendered)
+            self.assertIn("index.html", rendered)
 
 
 if __name__ == "__main__":

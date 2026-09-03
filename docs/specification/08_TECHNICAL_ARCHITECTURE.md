@@ -1,321 +1,194 @@
 # TECHNICAL_ARCHITECTURE.md
 
-**Status:** APPROVED  
-**Architecture:** Local Modular Monolith
+**Status:** APPROVED — REPORT-SITE-GEO-001
 
-## 1. Princípio
+## 1. Estilo arquitetural
 
-Uma aplicação local, um processo principal e módulos internos.
+Aplicação local, modular, CLI-first, single-machine no baseline.
 
-Não utilizar no MVP:
+Não exige:
 
-- microservices;
-- API server;
-- web application;
-- message broker;
+- web server;
 - database server;
-- distributed workers;
-- cloud backend obrigatório.
+- Docker;
+- daemon/background worker;
+- IA externa.
 
-## 2. Stack
+## 2. Runtime
 
-Linguagem recomendada:
+- CPython 3.13.x;
+- Playwright + Chromium;
+- SQLite embarcado;
+- filesystem local;
+- HTTP/HTTPS para target;
+- HTTPS para provider externo somente quando habilitado.
 
-Python
+## 3. Pipeline
 
-Versão exata definida no bootstrap conforme compatibilidade das dependências.
-
-## 3. Componentes
-
+```text
 CLI
-→ Audit Orchestrator
-→ Discovery Engine
-→ HTTP Acquisition
-→ Browser Renderer
-→ Snapshot Builder
-→ Content Extractor
-→ Evidence Manager
-→ Rules Engine
-→ Semantic Analysis Service
-→ Desktop/Mobile Comparator
-→ Finding Engine
-→ Scoring Engine
-→ Prioritization Engine
-→ Recommendation Engine
-→ Remediation Grouper
-→ Report Builder
+→ configuração/contexto de dispositivo
+→ discovery/acquisition
+→ rendering
+→ extraction/evidence
+→ deterministic rules
+→ semantic provider opcional
+→ device comparison quando ambos existem
+→ scoring
+→ prioritization
+→ root cause/precision
+→ M11/M18 intermediate reporting
+→ report-site finalization
+```
 
-## 4. Persistência
+## 4. Device context
 
-SQLite embarcado + filesystem.
+A CLI resolve exatamente um dos valores:
 
-SQLite:
+```text
+mobile
+desktop
+both
+```
 
-- sem servidor;
-- sem serviço Windows;
-- sem porta;
-- sem instalação de engine externo.
+Default de usuário:
 
-Filesystem:
+```text
+mobile
+```
 
-- response.html;
-- rendered.html;
-- main_content.txt;
-- structured_data.json;
-- logs;
-- report.html.
+Precedência:
 
-## 5. Abstração de persistência
+1. `--device-context`;
+2. `SEARCHGEO_DEVICE_CONTEXT`;
+3. `mobile`.
 
-Business Logic
-→ Repository
-→ Persistence Adapter
-→ SQLite/filesystem
+M3 renderiza somente o conjunto selecionado. Downstream deve trabalhar sobre os snapshots realmente materializados. Nenhum provider semântico deve ser chamado para dispositivo não renderizado.
 
-## 6. CLI
+Chamadas internas diretas a M3 sem variável preservam `both` para compatibilidade interna/testes.
 
-Interface inicial:
+## 5. Persistência
 
-`searchgeo audit <target>`
+Workspace:
 
-Opções futuras do MVP:
+```text
+<AUD-ID>/
+├─ audit.db
+├─ artifacts/
+└─ report/
+```
 
-- --project
-- --language
-- --market
-- --max-pages
-- --config
-- --ai-provider
+SQLite guarda entidades estruturadas; filesystem guarda payloads/artefatos grandes.
 
-## 7. Configuração
+## 6. Artifacts
 
-Configuração externa ao código.
+Podem incluir:
 
-Formato sugerido:
+- RAW HTTP/HTML;
+- rendered HTML;
+- conteúdo principal;
+- structured data;
+- screenshots;
+- evidence materializada.
 
-`searchgeo.toml`
+Os artifacts são referenciados por caminhos relativos ao workspace.
 
-Segredos preferencialmente em environment variables.
+## 7. IA
 
-## 8. Audit Orchestrator
+`SemanticAnalysisProvider` é abstração independente de fornecedor.
 
-Coordena workflows.
+Providers suportados na baseline operacional:
 
-Não implementa Business Rules diretamente.
+```text
+NONE
+OPENAI
+DEEPSEEK
+MIMO
+AUTO router
+```
 
-## 9. Capability Detector
+M18 persiste sessão e tentativas. IA não executa scoring.
 
-Detecta:
+## 8. Scoring
 
-- filesystem;
-- SQLite;
-- browser;
-- renderer;
-- AI provider.
+`SCORE-GEO-002` é determinístico sobre RuleExecutions persistidas.
 
-Determina:
+A camada de scoring não deve reexecutar website ou IA.
 
-- FULL;
-- DEGRADED;
-- NO_AI.
+## 9. Reporting interno
 
-## 10. Discovery Engine
+M11/M15/M16/M17/M18 preservam seus contratos intermediários para compatibilidade de testes/módulos.
 
-Responsabilidades:
+Durante `run_audit`, esses HTMLs intermediários não são o contrato final do usuário.
 
-- seed;
-- robots;
-- sitemap;
-- internal links;
-- normalization;
-- deduplication;
-- max_pages.
+## 10. Report site final
 
-Seleção determinística quando excede limite:
+O módulo `report_site` materializa:
 
-1. seed;
-2. sitemap;
-3. menor crawl depth;
-4. maior quantidade de referências internas;
-5. desempate estável.
+```text
+report/
+├─ index.html
+├─ mobile.html          # condicional
+├─ desktop.html         # condicional
+├─ remediation.html
+├─ ai-usage.html
+├─ references.html
+└─ css/
+   └─ site.css
+```
 
-## 11. HTTP Acquisition
+`report/index.html` é o `AuditRunResult.report_path` e o `reports.file_path` persistido.
 
-Separada da renderização.
+Após materialização bem-sucedida, intermediários `report.html` e `remediation.html` da raiz são removidos.
 
-Produz:
+## 11. Separação de domínio na apresentação
 
-- requested URL;
-- final URL;
-- status;
-- headers;
-- redirects;
-- body;
-- network errors;
-- timings.
+- `index.html`: visão executiva/readiness;
+- `mobile.html`: evidência e resultados Mobile;
+- `desktop.html`: evidência e resultados Desktop;
+- `remediation.html`: causa/prioridade/correção;
+- `ai-usage.html`: operação da IA;
+- `references.html`: fontes e metodologia.
 
-## 12. Browser Renderer
+Essa separação impede que falha de provider seja percebida como finding do website.
 
-Baseline:
+## 12. CSS
 
-Playwright + Chromium
+Todas as páginas finais referenciam:
 
-Responsável por:
+```text
+report/css/site.css
+```
 
-- JavaScript;
-- DOM;
-- controlled settling;
-- bounded scrolling;
-- rendered capture;
-- diagnostics relevantes.
+CSS inline/embutido não pertence ao contrato final do report site.
 
-## 13. Desktop/Mobile Profiles
+## 13. Segurança
 
-Perfis independentes.
+Secrets nunca devem ser persistidos em:
 
-Mobile não é apenas redução de viewport.
+- audit.db como valor de credencial;
+- artifacts;
+- report site;
+- logging operacional.
 
-## 14. Content Extractor
+Payload estruturado exibido deve passar por escaping/redaction apropriado.
 
-Extrai:
+## 14. Fonte de verdade
 
-- main content;
-- metadata;
-- headings;
-- links;
-- Dados Estruturados;
-- text blocks.
+```text
+audit.db + artifacts
+```
 
-Não realiza análise semântica profunda.
+HTML é projeção. Report generation não pode recalcular Score/Finding nem chamar provider externo.
 
-## 15. Evidence Manager
+## 15. Reprodutibilidade
 
-Cria `EV-GEO-*`.
+Versionar:
 
-Evidence não é log.
-
-## 16. Rules Engine
-
-Componentes:
-
-- Rule Registry;
-- Check/Validator;
-- Applicability Resolver;
-- Dependency Resolver;
-- Rule Executor;
-- Finding Engine.
-
-## 17. Semantic Analysis
-
-Interface:
-
-SemanticAnalysisProvider
-
-MVP:
-
-- NoneProvider;
-- OpenAIProvider.
-
-Futuro:
-
-- Anthropic;
-- Gemini;
-- Azure OpenAI;
-- Bedrock;
-- Local.
-
-Business Rules nunca importam diretamente provider específico.
-
-## 18. Semantic Normalization
-
-Provider
-→ normalized result
-→ schema validation
-→ evidence validation
-→ SemanticAssessment
-
-Falha do provider não encerra auditoria.
-
-## 19. Scoring
-
-Scoring Engine não faz chamadas a LLM.
-
-## 20. Reporting
-
-Relatório:
-
-- HTML5;
-- CSS local/inline;
-- JavaScript mínimo;
-- SVG inline quando útil;
-- sem backend;
-- sem CDN;
-- sem remote fonts;
-- sem internet obrigatória.
-
-## 21. Logging
-
-Cada auditoria produz `audit.log`.
-
-Logs não substituem Evidence.
-
-## 22. Segurança
-
-API keys/tokens nunca devem ir para:
-
-- report;
-- evidence;
-- log;
-- artifacts.
-
-## 23. Distribuição
-
-Meta:
-
-SearchGEO/
-├── searchgeo.exe
-├── runtime/
-├── browser/
-├── config/
-└── audits/
-
-Preferencialmente copiar/extrair/executar.
-
-Não assumir Python instalado na máquina final.
-
-## 24. Estrutura de código sugerida
-
-src/searchgeo/
-├── cli/
-├── config/
-├── domain/
-├── workflows/
-├── discovery/
-├── acquisition/
-├── rendering/
-├── extraction/
-├── evidence/
-├── rules/
-│   ├── checks/
-│   └── definitions/
-├── semantic/
-│   └── providers/
-├── comparison/
-├── scoring/
-├── prioritization/
-├── recommendations/
-├── persistence/
-├── reporting/
-└── diagnostics/
-
-Não criar módulos futuros vazios durante M0 apenas para reproduzir esta árvore.
-
-## 25. Complexidade a evitar
-
-- event bus;
-- DI framework pesado;
-- ORM sofisticado sem necessidade;
-- async generalizado prematuramente;
-- plugin framework completo;
-- cloud abstractions;
-- microservices.
+- auditor;
+- ruleset;
+- rendering policy;
+- prompt/contract semântico quando aplicável;
+- scoring;
+- prioritization;
+- reporting contract.

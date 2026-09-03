@@ -1,194 +1,187 @@
-# M15 — Error-Centric Report + Report UX
+# ERROR_CENTRIC_REPORT_UX.md
 
-**Status:** APPROVED EVOLUTION  
-**Baseline de entrada:** M14 integrado em `main`  
-**Contratos preservados:** `SCORE-GEO-001`, `REPORT-GEO-003`
+**Status:** APPROVED — M15 historical contract evolved by REPORT-SITE-GEO-001
 
 ## 1. Objetivo
 
-Melhorar a capacidade humana de navegar, interpretar e priorizar uma auditoria multi-URL sem alterar findings, scoring, coverage, confidence ou consolidation já persistidos.
+M15 introduziu uma visão orientada a problemas além da visão orientada a página. A evolução REPORT-SITE-GEO-001 preserva o princípio de separação por domínio, mas substitui o contrato público de dois HTMLs soltos por um mini-site estático.
 
-M15 adiciona uma segunda projeção HTML, orientada a problema, e melhora a apresentação do relatório orientado a página.
-
-## 2. Dois ângulos complementares
-
-O workspace deve conter, no mesmo nível:
+## 2. Contrato final de saída
 
 ```text
 <AUD-ID>/
-├─ report.html
-└─ remediation.html
+├─ audit.db
+├─ artifacts/
+└─ report/
+   ├─ index.html
+   ├─ mobile.html          # quando aplicável
+   ├─ desktop.html         # quando aplicável
+   ├─ remediation.html
+   ├─ ai-usage.html
+   ├─ references.html
+   └─ css/
+      └─ site.css
 ```
 
-`report.html` continua sendo a visão principal orientada a página.
+`report.html` e `remediation.html` na raiz não são mais contrato público final. Podem existir apenas transitoriamente durante a orquestração interna M11/M18 e devem ser removidos após finalização bem-sucedida do report site.
 
-`remediation.html` é uma projeção derivada orientada a regra/problema e usa o contrato:
+## 3. Navegação
+
+Todas as páginas finais devem compartilhar:
+
+- mesma arquitetura de menu;
+- mesmo stylesheet externo;
+- mesma área estrutural de conteúdo;
+- estados visuais semanticamente consistentes.
+
+O menu deve conter apenas páginas materializadas. Ex.: `desktop.html` não deve aparecer em auditoria Mobile-only.
+
+## 4. Visão geral
+
+`index.html` é dashboard executivo.
+
+Conteúdo prioritário:
+
+- dispositivo(s) efetivamente auditado(s);
+- Overall quando consolidado;
+- Coverage;
+- Confidence;
+- Consolidation;
+- dimensões;
+- contagens acionáveis;
+- ligação para domínios de detalhe.
+
+Não deve concentrar toda evidência, telemetria e remediação em uma página longa.
+
+## 5. Mobile e Desktop
+
+Resultados por dispositivo ficam separados:
 
 ```text
-REMEDIATION-GEO-001
+mobile.html
+desktop.html
 ```
 
-O segundo HTML não recalcula regra, finding ou score.
+Cada página pode conter:
 
-## 3. Agrupamento por problema
+- scorecard do dispositivo;
+- dimensões;
+- páginas auditadas;
+- screenshots;
+- findings aplicáveis;
+- avaliações semânticas relevantes.
 
-`remediation.html` deve agrupar findings compatíveis por:
+Resultados do outro dispositivo não devem ser misturados.
 
-- escopo (`GLOBAL` ou `PAGE`);
-- `rule_id`;
-- actionability.
+## 6. Remediation
 
-Para cada grupo deve mostrar, quando disponível:
+`remediation.html` é a visão orientada a problema/causa.
 
-- título do problema;
-- regra;
+Deve preservar:
+
+- agrupamento global versus página quando aplicável;
 - actionability;
-- quantidade de páginas afetadas;
-- paths afetados;
-- device por ocorrência;
-- resultado bruto;
 - prioridade;
-- selector quando determinável;
-- orientação de remediação;
-- critério de aceite;
-- referências técnicas.
+- causa raiz;
+- reason code;
+- elemento/selector observado;
+- alvo técnico;
+- observado vs esperado;
+- mudança recomendada;
+- critérios de aceite;
+- revalidação;
+- decisão humana quando necessária.
 
-Um mesmo problema presente em várias páginas deve ser apresentado uma vez como grupo, com suas ocorrências listadas.
+Detalhes extensos podem ser colapsados com HTML nativo (`details/summary`) para reduzir ruído sem perder rastreabilidade.
 
-## 4. Global versus pontual
+## 7. IA
 
-O relatório transversal deve separar visualmente:
+Telemetria operacional não pertence à mesma hierarquia visual dos findings do site.
 
-- **Problemas globais:** findings sem `page_id`, associados ao domínio/recurso global;
-- **Problemas por página:** findings associados a uma ou mais páginas concretas.
+`ai-usage.html` deve conter provider/model/status/tokens/custo/duração/erro sanitizado.
 
-A quantidade de páginas afetadas deve ser explícita para permitir identificar recorrência.
+Falha de IA não pode receber cor/mensagem de defeito do website.
 
-Não promover um finding de página a problema global apenas porque se repete em várias páginas.
+## 8. Referências
 
-## 5. Navegação do `report.html`
+`references.html` deve reunir:
 
-Em desktop, deve existir menu lateral fixo durante scroll vertical.
+- fontes primárias/standards;
+- natureza da base de cada regra;
+- fórmula de Score/Coverage/Confidence/Overall;
+- avisos sobre heurísticas internas;
+- distinção entre recomendações SearchGEO e requisitos oficiais.
 
-O menu deve:
-
-- listar as páginas auditadas;
-- ocultar visualmente scheme e domínio;
-- mostrar somente path e query quando existir;
-- limitar visualmente paths longos com ellipsis;
-- manter o destino real do anchor;
-- incluir acesso ao guia do Score GEO;
-- incluir acesso a `remediation.html`.
-
-Em viewport estreita, a navegação deve deixar de ocupar uma coluna lateral fixa e passar para apresentação compacta no topo.
-
-## 6. Tipografia e layout
-
-O relatório deve evitar quebra arbitrária de tokens como:
-
-- `NÃO DETERMINADO`;
-- `INDISPONÍVEL`;
-- valores de score;
-- estados de consolidação quando houver espaço de layout alternativo.
-
-Os grids de score devem priorizar colunas adequadas em desktop e empilhamento em viewport estreita.
+## 9. Tipografia
 
 Requisitos:
 
-- hierarquia tipográfica consistente;
-- cards e métricas alinhados;
-- `min-width: 0` onde necessário;
-- quebra de URLs/HTML/JSON controlada;
-- labels e valores curtos sem `word-break` agressivo;
-- layout print sem menu lateral.
+- evitar heading excessivamente grande;
+- negrito reservado a hierarquia/estado/valor importante;
+- tabelas com tipografia compacta;
+- texto de leitura com line-height confortável;
+- detalhes técnicos longos recolhidos quando adequado.
 
-## 7. Guia das dimensões do Score GEO
+## 10. Cores
 
-`report.html` deve conter seção de referência para as dez dimensões oficiais de `SCORE-GEO-001`:
+Estados determinantes devem usar semântica estável:
 
-1. Acessibilidade Técnica;
-2. Capacidade de Indexação;
-3. Extração de Conteúdo;
-4. Estrutura Semântica;
-5. Clareza de Entidades;
-6. Dados Estruturados;
-7. Capacidade de Resposta;
-8. Preparação para Citação;
-9. Evidências e Confiabilidade;
-10. Cobertura de Intenções.
+- positivo: verde;
+- atenção/parcial: âmbar;
+- problema: vermelho;
+- informação: azul;
+- não determinado/indisponível: cinza.
 
-Para cada dimensão, mostrar:
+Cor nunca substitui texto.
 
-- o que ela mede;
-- como melhorar a evidência/condição avaliada;
-- estado observado por Desktop/Mobile quando score estiver persistido;
-- links técnicos oficiais quando existir referência verificada para regras representativas da dimensão.
+## 11. Layout
 
-Não inventar referência externa para heurísticas sem fonte normativa específica.
+Desktop:
 
-## 8. Interpretação no fim do relatório
+- navegação fixa;
+- conteúdo deve descontar explicitamente a largura da navegação;
+- tabelas largas usam overflow interno;
+- nenhum bloco deve invadir a sidebar.
 
-O fim de `report.html` deve explicar de forma objetiva:
+Mobile:
 
-- Score;
-- Coverage;
-- Confidence;
-- Consolidation;
-- Actionability;
-- Desktop versus Mobile;
-- impacto da ausência de IA.
+- navegação pode virar barra sticky/horizontal;
+- conteúdo ocupa 100%;
+- grids colapsam para uma coluna quando necessário.
 
-Deve permanecer explícito que:
+## 12. CSS
+
+Contrato final:
 
 ```text
-Score 0.0 calculado != score não calculado
-Coverage != Score
-UNKNOWN != FAIL
-ERROR != FAIL
-NOT_APPLICABLE != FAIL
+report/css/site.css
 ```
 
-## 9. Portabilidade
+Proibido no report site final:
 
-`report.html` e `remediation.html` devem usar links relativos entre si.
+- `<style>` duplicado em cada página;
+- CSS estrutural inline;
+- dependência de CDN obrigatória.
 
-O workspace continua sendo a unidade portátil; nenhum dos dois relatórios deve exigir backend, CDN ou fonte remota para leitura.
+## 13. Score e reliability
 
-## 10. Documentação de execução multi-URL
+A UI deve explicar:
 
-A documentação operacional deve conter exemplos genéricos para:
+- Score = qualidade observada na parcela avaliada;
+- Coverage = quanto do universo aplicável foi avaliado;
+- Confidence = força da conclusão;
+- Consolidation = se o resultado é publicável como consolidado.
 
-- múltiplas URLs declaradas diretamente no comando;
-- carga por arquivo `--urls-file`.
+`Confidence LOW` não significa baixa qualidade textual e não autoriza ordem de reescrita sem finding específico.
 
-Exemplos não devem depender de domínio corporativo real usado em smoke test.
+## 14. Thresholds
 
-## 11. Invariantes
+As faixas visuais de score são internas ao SearchGEO. A UI/metodologia deve evitar linguagem que sugira certificação oficial GEO/AEO.
 
-M15 não altera:
+## 15. Fontes externas
 
-- Business Rules;
-- fatores/weights;
-- scoring groups;
-- fórmula de Score;
-- Coverage;
-- Confidence;
-- Consolidation;
-- actionability M14;
-- evidências persistidas;
-- política de IA.
+A fundamentação atual deve reconhecer o guia do Google para recursos generativos de Search e não inventar requisitos especiais de GEO/AEO. Structured Data, chunking, `llms.txt` e escrita “para IA” não podem ser apresentados como requisitos universais quando a fonte oficial não os exige.
 
-Os dois HTMLs são projeções do mesmo estado persistido.
+## 16. Fonte de verdade
 
-## 12. Aceite mínimo
-
-1. `report.html` continua sendo gerado.
-2. `remediation.html` é gerado no mesmo diretório.
-3. regra repetida em duas páginas aparece como um grupo transversal com duas páginas afetadas.
-4. finding global aparece na seção global e não é atribuído artificialmente a página.
-5. menu do `report.html` mostra paths, não domínio.
-6. paths longos usam truncamento visual.
-7. Score GEO possui guia das dez dimensões.
-8. interpretação final diferencia Score/Coverage/Confidence/Consolidation/Actionability.
-9. viewport estreita não mantém sidebar fixa ocupando a lateral.
-10. suíte de regressão permanece verde.
+O report site é projeção sobre dados persistidos. Não recalcula findings, scores, recommendations nem executa IA.

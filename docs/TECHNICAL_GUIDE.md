@@ -1,308 +1,245 @@
-# Guia Técnico
+# TECHNICAL_GUIDE.md
 
-Este documento descreve a baseline implementada até M18. Para requisitos normativos, prevalece [`docs/specification`](specification/00_SPEC_INDEX.md).
-
-# Arquitetura atual
+## Pipeline
 
 ```text
-searchgeo CLI
-  -> AuditRunner.run_audit
-     -> M2 Discovery + HTTP
-     -> M3 Rendering Desktop/Mobile
-     -> M4 Extraction + Evidence
-     -> M5 Deterministic Rules BR-GEO-001..018
-     -> M6 JavaScript/SPA BR-GEO-019..024
-     -> Content Extractability BR-GEO-025..027
-     -> M7 Semantic Rules BR-GEO-028..049
-        -> M18 provider abstraction/routing/telemetry
-     -> M8 Desktop/Mobile Comparison BR-GEO-052
-     -> Pre-scoring BR-GEO-050/051/053
-     -> M9 Scoring + BR-GEO-054
-     -> M10 Prioritization + Recommendations
-     -> M14 Visual/DOM evidence + URL_SET
-     -> M15 Report UX + remediation.html
-     -> M16 Root Cause / element-level remediation
-     -> M17 Precision/report consistency
-     -> M11/M18 report projections
+CLI
+→ target validation
+→ device-context resolution
+→ M2 discovery/acquisition
+→ M3 rendering selected device(s)
+→ M4 extraction/evidence
+→ M5/M6 deterministic analysis
+→ content extractability
+→ M7 semantic provider
+→ M8 device comparison when possible
+→ pre-scoring rules
+→ M9 SCORE-GEO-002
+→ M10 prioritization
+→ M14 element linking
+→ M11/M16/M17 report/remediation materialization
+→ M18 telemetry enrichment
+→ report_site finalization
 ```
 
-`AuditRunner` continua sendo o orquestrador ponta a ponta. M18 é aditivo: não muda Business Rules nem `SCORE-GEO-001`.
+## Device context
 
-# Principais módulos
+Module:
 
-| Módulo | Responsabilidade |
-|---|---|
-| `cli.py` | parser, validação, seleção de provider e chamada do runner |
-| `audit_runner.py` | pipeline ponta a ponta |
-| `domain.py` | entidades/enums/IDs |
-| `persistence.py` | SQLite base + workspace |
-| `acquisition.py` / `discovery.py` | HTTP, robots, sitemap, links |
-| `rendering.py` / `m3.py` | Chromium + snapshots Desktop/Mobile |
-| `extraction.py` / `m4.py` | extração + Evidence |
-| `rules.py` / `m5.py` | regras determinísticas |
-| `javascript_spa.py` / `m6.py` | SPA/CSR/direct routes/lazy/soft-404 |
-| `content_extractability.py` | BR-GEO-025..027 |
-| `semantic.py` / `m7.py` | contrato semântico e aplicação das BR-GEO-028..049 |
-| `m18_ai.py` | adapters OpenAI/DeepSeek/MiMo, routing AUTO, quarantine, URL lock, usage/cost |
-| `m18_persistence.py` | sessões/tentativas/catálogo de preços e logging sanitizado |
-| `m18_reporting.py` | projeção operacional da IA nos HTMLs |
-| `comparison.py` / `m8.py` | Desktop/Mobile |
-| `pre_scoring_rules.py` | BR-GEO-050/051/053 |
-| `scoring.py` / `m9.py` | SCORE-GEO-001, Coverage, Confidence, Consolidation |
-| `prioritization.py` / `m10.py` | prioridade/grupos/recomendações |
-| `m14_*` | visual/DOM linking, URL_SET e evidência |
-| `m16_*` | causa raiz/escopo de elemento |
-| `m17_*` | precisão e consistência de reporting |
-| `reporting.py` / `m11.py` | report principal base |
-| `remediation.py` | remediation transversal |
+```text
+src/searchgeo/device_context.py
+```
 
-# CLI
+Variable:
 
-A interface atual aceita uma URL, múltiplas URLs ou `--urls-file`, com parâmetros operacionais e seleção de IA.
+```text
+SEARCHGEO_DEVICE_CONTEXT
+```
 
-A referência completa está em [CLI_REFERENCE.md](CLI_REFERENCE.md).
+Values:
 
-# Modelo de dados principal
+```text
+mobile
+desktop
+both
+```
 
-## Audit
+The CLI resolves one value per invocation. It temporarily places the resolved value in the process environment so M3 and downstream consumers see the same universe, then restores the previous environment value after `run_audit` returns or fails.
 
-Raiz da execução. Persiste lifecycle, projeto, idioma, mercado, `max_pages`, `audit_mode`, capabilities e limitations.
+Default CLI: `mobile`.
 
-## AuditTarget
+Direct M3 invocation without environment value: legacy `both` for compatibility.
 
-Pode representar target clássico ou `URL_SET` explícito.
+## Rendering
 
-## Page / PageSnapshot
+M3 no longer has to render both devices for every user-facing audit. It obtains runtime devices from `device_context.runtime_devices()`.
 
-`Page` representa URL auditada. `PageSnapshot` representa observação Desktop/Mobile com HTTP/rendering/extraction e artifacts.
+Each persisted snapshot includes device-specific metadata and the selected audit device universe in browser metadata.
 
-## Evidence / RuleExecution / Finding
+Because M7 consumes M3 snapshot IDs, no semantic-provider call exists for an unrendered device.
 
-Evidence First permanece invariante. Finding precisa ser rastreável a RuleExecution/Evidence.
+## Cost implication
 
-## SemanticAssessment / EntityObservation
+For N successfully rendered pages and a healthy explicit provider:
 
-Persistência M7 de resultados semânticos aceitos.
+```text
+mobile/desktop: up to N semantic contexts
+both:           up to 2N semantic contexts
+```
 
-## Score / ScoreContribution
+Actual attempt count may be lower due to provider disabled/not configured, quarantine, missing snapshots or other pipeline conditions.
 
-Scoring determinístico por device/dimensão; LLM não calcula score.
+## Scoring
 
-## Root cause / remediation
+M9 remains deterministic and provider-independent once RuleExecutions are persisted.
 
-M16/M17 adicionam projeções/materializações de causa/localização/ação sem alterar semântica das Business Rules.
+`SCORE-GEO-002`:
 
-# Persistência M18
+- separates Score, Coverage, Confidence and Consolidation;
+- distinguishes `NOT_APPLICABLE` from missing/unresolved execution;
+- prevents missing IA from becoming website FAIL;
+- uses `scoring_group` to reduce correlated double counting;
+- computes Overall separately by device.
 
-M18 acrescenta:
+The report site only exposes devices actually captured by the audit, even though the scoring model itself remains defined for Desktop and Mobile.
+
+## Confidence semantics
+
+Current score confidence is an **auditor reliability indicator**. It is not a direct content-quality metric.
+
+`LOW` can result from limited Coverage/evidence/errors. Therefore no component should infer “rewrite this text” from Confidence alone.
+
+## Intermediate M11/M18 HTML
+
+The existing M11/M18 builder contracts are intentionally preserved internally to minimize regression risk. `execute_m11()` can still materialize the historical intermediate HTML files; M18 enriches those files as before.
+
+In a complete `run_audit`, these are intermediate projections only.
+
+## Final report-site materialization
+
+Module:
+
+```text
+src/searchgeo/report_site.py
+```
+
+After M18 enrichment:
+
+1. read persisted `audit.db` state;
+2. generate `report/css/site.css`;
+3. generate all domain pages;
+4. update `reports.file_path` to `report/index.html`;
+5. only after successful materialization, remove intermediate root `report.html` and `remediation.html`;
+6. return `report/index.html` as `AuditRunResult.report_path`.
+
+The final public output is therefore:
+
+```text
+report/index.html
+report/mobile.html       # conditional
+report/desktop.html      # conditional
+report/remediation.html
+report/ai-usage.html
+report/references.html
+report/css/site.css
+```
+
+## Why finalization happens after M18
+
+M18 previously enriched `report.html` and `remediation.html`. Keeping this ordering allows existing direct M11/M18 unit contracts to remain testable while the user-facing projection moves to a multi-page site.
+
+The final report site reads M18 tables from SQLite rather than copying the enriched legacy DOM.
+
+## Report domains
+
+### Overview
+
+Executive score/reliability only.
+
+### Device pages
+
+Page-level snapshots/findings/semantic state isolated by Mobile or Desktop.
+
+### Remediation
+
+Loads:
+
+```text
+remediation_groups
+recommendations
+root_cause_analyses
+root_cause_precision
+findings
+```
+
+and projects M16/M17 diagnostic detail without recalculating it.
+
+### AI telemetry
+
+Loads:
 
 ```text
 ai_audit_sessions
 ai_provider_attempts
-provider_pricing_catalog
 ```
 
-`ai_audit_sessions` descreve estratégia, cadeia inicial, provider efetivo e estados.
+No provider call is made during report generation.
 
-`ai_provider_attempts` descreve cada chamada materializada com URL/device/provider/model/depth/status/duração/diagnóstico/usage/custo estimado.
+### References
 
-`provider_pricing_catalog` versiona preços usados para `ESTIMATED_COST`.
+Uses versioned `rule_references.py` plus the curated primary-authority catalog in `report_site.py`.
 
-Nunca persistir:
+## CSS architecture
 
-- API key;
-- Authorization;
-- body integral sensível;
-- chain-of-thought.
-
-# Provider abstraction M18
-
-Adapters implementados:
+Final CSS exists only at:
 
 ```text
-OpenAIProvider
-DeepSeekProvider
-MiMoProvider
-NoneProvider
+report/css/site.css
 ```
 
-`GitHub Copilot` não é SemanticProvider.
+Every final page uses:
 
-Modelos suportados:
+```html
+<link rel="stylesheet" href="css/site.css">
+```
+
+This removes the previous accumulation of embedded CSS fragments from the final user-facing pages.
+
+## Security
+
+`report_site` uses HTML escaping for dynamic values and the reporting redaction helper when rendering persisted structured payloads.
+
+Do not add raw provider bodies, headers or secrets to the final projection.
+
+## M18 routing
+
+Explicit provider:
+
+- no cross-provider fallback;
+- failure can quarantine provider for audit;
+- missing other provider keys irrelevant.
+
+AUTO:
+
+- immutable eligible chain;
+- sequential calls;
+- first valid result ends the context;
+- failed provider quarantined;
+- URL lock prevents mixed-provider completion of a previously pinned URL.
+
+## Timeout
+
+CLI applies `SEARCHGEO_AI_TIMEOUT_SECONDS`, default 180 s, to constructed provider(s). No automatic retry after timeout.
+
+## Reproducibility
+
+The report site is not used as scoring input. Reproducibility remains based on:
 
 ```text
-OPENAI:   gpt-5.6-sol | gpt-5.6-terra | gpt-5.6-luna
-DEEPSEEK: deepseek-v4-pro | deepseek-v4-flash
-MIMO:     mimo-v2.5-pro | mimo-v2.5
+audit.db
+artifacts
+rule versions
+scoring version
 ```
 
-# SINGLE_PROVIDER
+`BR-GEO-054` checks score reconstruction from persisted state.
 
-Provider explícito:
+## Testing strategy
 
-- não faz fallback para outro fornecedor;
-- sem key -> `NOT_CONFIGURED`;
-- falha qualificadora -> `QUARANTINED_FOR_AUDIT`;
-- após quarantine, não há nova chamada naquele audit;
-- sessão insuficiente -> `DEGRADED`;
-- `CHAIN_EXHAUSTED` não é usado para `SINGLE_PROVIDER`.
+Minimum stabilization suite:
 
-# AUTO
-
-`ProviderRoutingSession`:
-
-1. considera apenas providers com key/configuração válida;
-2. ordena por rank SearchGEO do model;
-3. mantém cadeia inicial imutável;
-4. tenta candidatos sequencialmente;
-5. quarantina provider falho;
-6. promove fallback saudável quando permitido;
-7. não reintroduz provider quarantined.
-
-Se todos forem quarantined:
-
-```text
-CHAIN_EXHAUSTED
-AI_PROVIDER_CHAIN_EXHAUSTED
+```powershell
+python -m compileall -q src tests
+python -m unittest discover -s tests -v
 ```
 
-# URL provider lock
+Regression coverage includes:
 
-A primeira resposta válida fixa o provider da URL. Desktop/Mobile da mesma URL devem usar o mesmo provider.
-
-Se o pinned provider falhar no segundo device, não existe cross-provider completion naquela URL. O provider é quarantined para URLs seguintes.
-
-# Contrato de aceitação semântica
-
-Resposta válida exige exatamente BR-GEO-028..049, sem duplicidade/omissão/ID estranho, enums válidos e evidence IDs existentes.
-
-HTTP 200 sozinho não implica `AVAILABLE`.
-
-OpenAI usa JSON Schema estrito nativo. DeepSeek usa modo estruturado compatível com o adapter e validação local. MiMo usa JSON object + validação local estrita do schema SearchGEO.
-
-# Error taxonomy
-
-```text
-AUTH_ERROR
-QUOTA_ERROR
-CREDIT_ERROR
-RATE_LIMIT_ERROR
-MODEL_ERROR
-PERMISSION_ERROR
-NETWORK_ERROR
-TIMEOUT_ERROR
-SERVER_ERROR
-CONTRACT_ERROR
-EMPTY_RESPONSE
-INVALID_RESPONSE
-UNKNOWN_PROVIDER_ERROR
-```
-
-Diagnósticos são sanitizados.
-
-# Usage e custo
-
-`ProviderUsage` normaliza:
-
-- input tokens;
-- cached input tokens;
-- output tokens;
-- reasoning tokens;
-- total tokens.
-
-Campos não reportados ficam `None`/`NULL`.
-
-`ESTIMATED_COST` usa catálogo local versionado e não é billing oficial nem componente do score.
-
-# Logging M18
-
-`m18_persistence.py` emite logs INFO sanitizados por tentativa e sessão quando o nível configurado permite.
-
-Inclui somente dados operacionais como provider/model/status/duração/tokens/custo/error_class.
-
-A baseline não materializa `audit.log` automaticamente.
-
-# Reporting M18
-
-`m18_reporting.py` enriquece os HTMLs depois da projeção base.
-
-`report.html` recebe seção operacional detalhada.
-
-`remediation.html` recebe apenas contexto da análise semântica; falha do provider nunca vira finding/recommendation.
-
-# Princípios de falha
-
-```text
-UNKNOWN != FAIL
-ERROR != FAIL
-NOT_APPLICABLE != FAIL
-```
-
-Falha de infraestrutura/provider pode reduzir Coverage/Confidence/Consolidation sem reduzir qualidade do website artificialmente.
-
-# Prevenção de cascading failures
-
-Dependências bloqueadas produzem estado não conclusivo em derivadas em vez de multiplicar FAILs.
-
-Exemplo:
-
-```text
-HTTP não recuperável
-  -> finding técnico de acesso quando aplicável
-  -> semântica derivada UNKNOWN/NOT_APPLICABLE
-```
-
-# Report e artifacts
-
-Workspace atual:
-
-```text
-<AUD-ID>/
-  audit.db
-  report.html
-  remediation.html
-  artifacts/
-```
-
-Screenshots/rendered/raw/extractions são paths relativos ao workspace.
-
-# Pontos de extensão
-
-## Nova Business Rule
-
-Atualize specification antes de implementar; preserve evidence/dependency/scoring invariants.
-
-## Novo provider
-
-Implemente contrato provider-neutral, validação local, error taxonomy, usage e política de segurança. Não faça Business Rule importar fornecedor específico.
-
-## Novo model
-
-Adicione explicitamente ao allowlist/policy/pricing/qualificação e valide contrato. Não basta aceitar string arbitrária.
-
-## Nova Evidence
-
-Preserve scope e provenance.
-
-## Nova seção de relatório
-
-Consuma estado persistido; não use HTML como fonte primária.
-
-# Limitações técnicas atuais
-
-- Python 3.13 obrigatório;
-- CLI é a interface do produto;
-- sem web UI/server;
-- sem resume de audit interrompido;
-- logging process-level, sem `audit.log` automático;
-- endpoints/timeouts/viewports não expostos como flags públicas;
-- live compatibility de provider depende também de credencial/conta/egress externos;
-- DeepSeek/MiMo permanecem PROVISIONAL até benchmark SearchGEO específico.
-
-# Referências
-
-- [Referência completa da CLI](CLI_REFERENCE.md)
-- [Guia de IA](AI_GUIDE.md)
-- [Configuração](CONFIGURATION.md)
-- [Guia do relatório](REPORT_GUIDE.md)
-- [Especificação M18](specification/18_MULTI_AI_PROVIDER_ROUTING.md)
+- old direct M11/M18 contracts;
+- final `run_audit` report-site paths;
+- no root legacy report after finalization;
+- shared external CSS;
+- Mobile/Desktop conditional pages;
+- provider telemetry separation;
+- mobile-only provider-call reduction;
+- environment restoration by CLI.

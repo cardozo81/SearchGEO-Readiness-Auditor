@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import sqlite3
 from datetime import datetime, timezone
 from email.message import Message
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 
 from searchgeo.acquisition import HttpClient
 from searchgeo.audit_runner import run_audit
+from searchgeo.device_context import DEVICE_CONTEXT_ENV
 from searchgeo.discovery import DiscoveryEngine
 from searchgeo.m18_ai import (
     DeepSeekProvider,
@@ -186,10 +189,10 @@ class M18ProviderTests(unittest.TestCase):
             raise _http_error(429, error_type="insufficient_quota", error_code="credit_balance_exhausted")
         def deepseek_success(*args):
             calls["DEEPSEEK"] += 1
-            return _success_transport()( *args )
+            return _success_transport()(*args)
         def mimo_success(*args):
             calls["MIMO"] += 1
-            return _success_transport()( *args )
+            return _success_transport()(*args)
 
         router = ProviderRoutingSession((
             OpenAIProvider(api_key="x", transport=openai_fail),
@@ -230,7 +233,6 @@ class M18ProviderTests(unittest.TestCase):
         failed_mobile = router.analyze(_input(url, "SNP-A-M"))
         self.assertEqual(failed_mobile.state, ProviderState.UNAVAILABLE)
         self.assertEqual(mimo_calls, 0)
-        # A new URL starts with the next healthy provider after DeepSeek quarantine.
         self.assertEqual(router.analyze(_input("https://example.com/b", "SNP-B-D")).provider, "MIMO")
         self.assertEqual(mimo_calls, 1)
 
@@ -259,7 +261,6 @@ class M18ProviderTests(unittest.TestCase):
         self.assertEqual(result.reason, "AI_PROVIDER_CHAIN_EXHAUSTED")
         self.assertTrue(all(value == "QUARANTINED_FOR_AUDIT" for value in exhausted.session_snapshot()["provider_states"].values()))
 
-
     def test_explicit_provider_quarantine_blocks_retries_across_urls(self) -> None:
         calls = 0
 
@@ -281,7 +282,7 @@ class M18ProviderTests(unittest.TestCase):
         self.assertEqual(snapshot["provider_states"]["OPENAI"], "QUARANTINED_FOR_AUDIT")
         self.assertEqual(len(provider.attempt_history()), 1)
 
-    def test_run_audit_persists_attempts_and_enriches_both_reports(self) -> None:
+    def test_run_audit_persists_attempts_and_materializes_ai_telemetry_page(self) -> None:
         with _server() as origin, TemporaryDirectory() as directory:
             html = f"""<!doctype html><html lang='pt-BR'><head><title>Guia M18</title>
 <meta name='description' content='Guia técnico.'><link rel='canonical' href='{origin}/'>
@@ -325,16 +326,47 @@ class M18ProviderTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            report = result.report_path.read_text(encoding="utf-8")
-            remediation = (result.audit_root / "remediation.html").read_text(encoding="utf-8")
-            self.assertIn("Uso de IA — execução e telemetria", report)
-            self.assertIn("ESTIMATED_COST", report)
-            self.assertIn("OPENAI", report)
-            self.assertIn("gpt-5.6-terra", report)
-            self.assertIn("Contexto da análise semântica", remediation)
-            self.assertIn("Este bloco é informativo", remediation)
-            self.assertNotIn(secret, report)
-            self.assertNotIn(secret, remediation)
+            overview = result.report_path.read_text(encoding="utf-8")
+            ai = (result.audit_root / "report" / "ai-usage.html").read_text(encoding="utf-8")
+            remediation = (result.audit_root / "report" / "remediation.html").read_text(encoding="utf-8")
+            self.assertIn("Uso de IA", ai)
+            self.assertIn("Custo est.", ai)
+            self.assertIn("OPENAI", ai)
+            self.assertIn("gpt-5.6-terra", ai)
+            self.assertIn("Sem sobrescrita", ai)
+            self.assertIn("Remediações", remediation)
+            self.assertNotIn("Tentativas</h2>", overview)
+            for html_page in (overview, ai, remediation):
+                self.assertNotIn(secret, html_page)
+
+    def test_mobile_device_context_limits_semantic_provider_to_one_context_per_page(self) -> None:
+        with _server() as origin, TemporaryDirectory() as directory:
+            html = """<!doctype html><html lang='pt-BR'><head><title>Mobile AI</title></head>
+<body><main><h1>Mobile AI</h1><p>Conteúdo técnico para validar custo por dispositivo.</p></main></body></html>"""
+            provider = OpenAIProvider(api_key="x", transport=_success_transport())
+            with patch.dict(os.environ, {DEVICE_CONTEXT_ENV: "mobile"}, clear=False):
+                result = run_audit(
+                    f"{origin}/",
+                    audits_root=Path(directory),
+                    project_name="M18 mobile only",
+                    max_pages=1,
+                    semantic_provider=provider,
+                    discovery_engine=DiscoveryEngine(HttpClient(timeout=1)),
+                    renderer=_FixtureRenderer(html),
+                    lazy_probe=lambda url, device: None,
+                )
+
+            connection = sqlite3.connect(result.audit_root / "audit.db")
+            try:
+                devices = {row[0] for row in connection.execute("SELECT DISTINCT device FROM page_snapshots")}
+                attempts = list(connection.execute("SELECT device FROM ai_provider_attempts WHERE audit_id=?", (result.audit_id,)))
+            finally:
+                connection.close()
+            self.assertEqual(devices, {"MOBILE"})
+            self.assertEqual(len(attempts), 1)
+            self.assertEqual({row[0] for row in attempts}, {"MOBILE"})
+            self.assertTrue((result.audit_root / "report" / "mobile.html").is_file())
+            self.assertFalse((result.audit_root / "report" / "desktop.html").exists())
 
 
 if __name__ == "__main__":

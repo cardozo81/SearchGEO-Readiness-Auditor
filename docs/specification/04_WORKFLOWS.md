@@ -1,12 +1,13 @@
 # WORKFLOWS.md
 
-**Status:** APPROVED — extended by M13 Actionable GEO Report
+**Status:** APPROVED — reconciliado com SCORE-GEO-002, device context configurável e REPORT-SITE-GEO-001
 
 ## 1. Princípios
 
 - Evidence before conclusion.
 - Failure isolation.
-- Desktop/Mobile isolation.
+- Desktop/Mobile isolation quando ambos forem selecionados.
+- Escopo explícito de dispositivo.
 - AI optionality.
 - Reliability disclosure.
 - Actionable remediation must remain evidence-bound.
@@ -23,7 +24,7 @@
 - WF-GEO-008 Compare Desktop and Mobile
 - WF-GEO-009 Consolidate Findings and Scores
 - WF-GEO-010 Generate Recommendations and Remediation
-- WF-GEO-011 Generate Static Actionable HTML Report
+- WF-GEO-011 Generate Static Actionable HTML Report Site
 - WF-GEO-012 Complete Audit
 
 ## 3. WF-GEO-001
@@ -31,20 +32,22 @@
 Fluxo:
 
 Initialize
+→ Resolve Device Context
 → Discover
 → For each Page
-→ Desktop Snapshot
-→ Mobile Snapshot
+→ Snapshot(s) dos dispositivos selecionados
 → Technical
 → Extract
 → Semantic/Fallback
-→ Compare
+→ Compare quando Desktop + Mobile estiverem no escopo
 → Findings
 → Scores
 → Priority
 → Remediation
-→ HTML
+→ Report Site
 → Complete
+
+A CLI resolve `mobile|desktop|both`, com default `mobile`. Chamadas internas que não passam por essa configuração podem preservar comportamento legado definido pela arquitetura, desde que não alterem o contrato público da CLI.
 
 ## 4. WF-GEO-002 Initialize Audit
 
@@ -53,7 +56,8 @@ Initialize
 - criar diretórios;
 - inicializar persistência;
 - detectar capabilities;
-- determinar FULL / DEGRADED / NO_AI.
+- determinar FULL / DEGRADED / NO_AI;
+- resolver contexto de dispositivo efetivo.
 
 Falha de BR-GEO-001 encerra a auditoria.
 
@@ -80,10 +84,10 @@ O estado necessário para explicar discovery no relatório deve ser persistido c
 
 ## 6. WF-GEO-004 Acquire Page Snapshot
 
-Executar separadamente:
+Executar separadamente para cada dispositivo selecionado no audit:
 
-- DESKTOP;
-- MOBILE.
+- `MOBILE` quando `mobile` ou `both`;
+- `DESKTOP` quando `desktop` ou `both`.
 
 Passos:
 
@@ -92,6 +96,8 @@ Passos:
 3. browser render;
 4. rendered DOM capture;
 5. snapshot metadata.
+
+Não produzir snapshot do dispositivo não selecionado apenas para manter simetria de relatório ou IA.
 
 ## 7. WF-GEO-005 Technical Analysis
 
@@ -114,7 +120,7 @@ Sempre verificar applicability e dependencies antes da regra.
 Entrada:
 
 - RAW;
-- Rendered DOM.
+- Rendered DOM dos contextos selecionados.
 
 Saída:
 
@@ -148,7 +154,7 @@ Deterministic components
 ### DEGRADED
 
 Provider falhou
-→ fallback
+→ fallback permitido pelo contrato do provider/routing
 → limitation codes
 → UNKNOWN quando necessário
 
@@ -156,9 +162,11 @@ Business Rules nunca dependem diretamente de provider específico.
 
 O relatório reutiliza SemanticAssessment, reasoning_summary, entities, intents e evidence_ids já persistidos. Não existe segunda chamada livre de IA apenas para redigir recomendações.
 
+O provider semântico só pode ser chamado para contexto de dispositivo efetivamente selecionado e materializado.
+
 ## 10. WF-GEO-008 Desktop × Mobile
 
-Compara resultados dos snapshots e avaliações.
+Quando `both` estiver selecionado, compara resultados dos snapshots e avaliações.
 
 Resultado:
 
@@ -168,6 +176,8 @@ Resultado:
 - UNKNOWN.
 
 Finding somente para diferença material.
+
+Quando o audit for `mobile` ou `desktop`, BR-GEO-052 deve ser `NOT_APPLICABLE` com reason code `DEVICE_COMPARISON_DISABLED_BY_CONTEXT`. Isso representa ausência intencional de universo comparativo, não snapshot faltante nem falha de rendering.
 
 ## 11. WF-GEO-009 Findings and Scores
 
@@ -180,7 +190,9 @@ Finding somente para diferença material.
 - resolver consolidation;
 - validar BR-GEO-054.
 
-M13 não altera `SCORE-GEO-001`.
+Baseline vigente: `SCORE-GEO-002`.
+
+Score, Coverage e Confidence têm semânticas diferentes. Confidence baixa qualifica a força da conclusão; não significa, isoladamente, baixa qualidade textual do website.
 
 ## 12. WF-GEO-010 Recommendations and Remediation
 
@@ -217,35 +229,38 @@ Invariantes:
 
 Sem IA, recipes técnicas continuam funcionando.
 
-## 13. WF-GEO-011 Actionable HTML Report
+## 13. WF-GEO-011 Actionable HTML Report Site
 
-Saída:
+Ponto de entrada público:
 
-`report.html`
+`report/index.html`
 
-Sem backend, servidor, CDN ou internet obrigatória.
+Arquivos públicos complementares:
 
-Ordem executiva de referência:
+```text
+report/mobile.html       # somente quando Mobile foi auditado
+report/desktop.html      # somente quando Desktop foi auditado
+report/remediation.html
+report/ai-usage.html
+report/references.html
+report/css/site.css
+```
 
-1. Compatibilidade GEO geral por dispositivo;
-2. Cobertura e confiabilidade;
-3. Principais oportunidades;
-4. Score GEO — Desktop;
-5. Score GEO — Mobile;
-6. Plano de correção priorizado;
-7. Correções técnicas detalhadas;
-8. Análise de conteúdo e semântica;
-9. Entidades e intenções;
-10. Citation Readiness / Evidence Trust;
-11. Cobertura do Crawl;
-12. Limitações;
-13. Detalhes técnicos;
-14. Metodologia/interpretação;
-15. Glossário.
+Sem backend, servidor, CDN ou internet obrigatória para leitura local do resultado.
+
+A projeção deve separar por domínio:
+
+1. visão executiva, Score/Coverage/Confidence e limitações em `index.html`;
+2. scorecard, findings, evidências e avaliações por dispositivo em `mobile.html` / `desktop.html`;
+3. plano de correção e diagnóstico por ocorrência em `remediation.html`;
+4. telemetria operacional de IA em `ai-usage.html`;
+5. metodologia, classificação de fontes e referências técnicas em `references.html`.
+
+Todos os HTMLs finais compartilham navegação e `report/css/site.css`. CSS inline/embutido não é contrato do report site final.
 
 ### Regra de compatibilidade
 
-`OVERALL_READINESS` somente é exibido como nota quando o score persistido está consolidado.
+`OVERALL_READINESS` somente é exibido como nota quando o score persistido possui valor consolidável segundo `SCORE-GEO-002`.
 
 Quando não for consolidável:
 
@@ -272,16 +287,23 @@ Trecho HTML original não persistido para esta evidência.
 
 WF-GEO-011 reabre Pages, Audit limitations e Evidence de robots/sitemap/HTTP para explicar descoberta, max_pages, fontes e limitações de crawl. Não recebe `DiscoveryResult` em memória.
 
+### Fonte de verdade
+
+O report site é projeção para leitura humana. `audit.db` + artifacts persistidos continuam sendo a fonte de verdade. O gerador não recalcula score/findings nem executa IA.
+
 ## 14. WF-GEO-012 Complete Audit
 
 Verificar:
 
-- report;
+- `report/index.html` reabrível;
+- páginas condicionais coerentes com os dispositivos auditados;
+- CSS compartilhado reabrível;
 - metadata;
 - finding integrity;
 - score reproducibility;
 - limitations;
-- artifacts.
+- artifacts;
+- ausência de HTML público legado na raiz após materialização bem-sucedida.
 
 Resultados:
 

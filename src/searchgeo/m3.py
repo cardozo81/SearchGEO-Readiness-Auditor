@@ -1,4 +1,4 @@
-"""M3 execution glue: browser rendering and independent Desktop/Mobile snapshots."""
+"""M3 execution glue: browser rendering and independent device snapshots."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 from typing import Protocol
 
+from searchgeo.device_context import runtime_devices
 from searchgeo.domain import DeviceContext, Evidence, EvidenceType, PageSnapshot, new_id, utc_now
 from searchgeo.m14_persistence import ElementObservation, M14Persistence
 from searchgeo.m2 import M2ExecutionResult
@@ -21,7 +22,7 @@ from searchgeo.rendering import (
 
 
 _RENDERING_MODE = "PLAYWRIGHT_CHROMIUM"
-_DEVICES = (DeviceContext.DESKTOP, DeviceContext.MOBILE)
+_DEVICES = (DeviceContext.DESKTOP, DeviceContext.MOBILE)  # legacy internal reference; runtime selection is configurable.
 _TITLE_ELEMENT_RE = re.compile(r"<title\b[^>]*>.*?</title\s*>", re.IGNORECASE | re.DOTALL)
 
 
@@ -50,13 +51,20 @@ def execute_m3(
     *,
     renderer: Renderer | None = None,
 ) -> M3ExecutionResult:
-    """Render every M2 page independently for Desktop and Mobile and persist snapshots."""
+    """Render every M2 page for the configured device context and persist snapshots.
+
+    ``SEARCHGEO_DEVICE_CONTEXT`` accepts ``mobile``, ``desktop`` or ``both``.
+    When M3 is called directly without that environment variable, the legacy
+    internal behavior remains both devices. The CLI always resolves an explicit
+    context and defaults it to mobile.
+    """
 
     active_renderer: Renderer = renderer or BrowserRenderer()
     renderer_context = active_renderer if isinstance(active_renderer, BrowserRenderer) else nullcontext(active_renderer)
     snapshot_ids: dict[str, dict[DeviceContext, str]] = {}
     visual_artifact_refs: dict[str, dict[DeviceContext, str | None]] = {}
     failures: list[RenderFailure] = []
+    devices = runtime_devices()
 
     with M14Persistence(workspace) as m14, renderer_context as session_renderer:
         for discovered in m2_result.discovery.pages:
@@ -75,7 +83,7 @@ def execute_m3(
 
             per_device: dict[DeviceContext, str] = {}
             per_device_visual: dict[DeviceContext, str | None] = {}
-            for device in _DEVICES:
+            for device in devices:
                 try:
                     render_result = session_renderer.render(url, device)
                 except Exception:
@@ -107,6 +115,7 @@ def execute_m3(
                 }
                 browser_metadata["render_succeeded"] = render_result.succeeded
                 browser_metadata["visual_artifact_ref"] = visual_artifact_ref
+                browser_metadata["audit_device_context"] = [item.value for item in devices]
 
                 snapshot = PageSnapshot(
                     snapshot_id=snapshot_id,

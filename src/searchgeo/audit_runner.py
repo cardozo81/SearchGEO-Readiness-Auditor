@@ -35,6 +35,7 @@ from searchgeo.m18_persistence import persist_provider_runtime
 from searchgeo.m18_reporting import enrich_written_reports
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
 from searchgeo.pre_scoring_rules import execute_pre_scoring_rules
+from searchgeo.report_site import materialize_report_site
 from searchgeo.semantic import NoneProvider, SemanticAnalysisProvider
 from searchgeo.url_utils import normalize_url, normalized_origin
 
@@ -65,10 +66,10 @@ def run_audit(
 ) -> AuditRunResult:
     """Execute the approved pipeline and leave a reopenable local audit workspace.
 
-    ``target`` may be one URL/domain or an explicit sequence of URLs.  A
+    ``target`` may be one URL/domain or an explicit sequence of URLs. A
     sequence always means URL_SET, even when normalization/deduplication leaves
-    a single unique URL.  This prevents an explicit set from silently falling
-    back to the ordinary crawl-expansion behavior of single-target mode.
+    a single unique URL. This prevents an explicit set from silently falling
+    back to ordinary crawl-expansion behavior.
     """
 
     explicit_url_set = not isinstance(target, str)
@@ -104,6 +105,7 @@ def run_audit(
         "desktop_mobile",
         "visual_snapshot",
         "dom_element_observation",
+        "static_report_site",
     ]
     if target_type is TargetType.URL_SET:
         capabilities.append("url_set")
@@ -132,8 +134,6 @@ def run_audit(
         persistence.audits.add(audit)
         persistence.targets.add(audit_target)
         with M14Persistence(workspace) as m14:
-            # Persist the deduplicated input universe plus separate raw/unique
-            # counts so the report can state exactly what the operator supplied.
             normalized_per_raw = _normalized_per_raw(raw_targets)
             input_pairs: list[tuple[str, str]] = []
             seen: set[str] = set()
@@ -237,10 +237,7 @@ def run_audit(
             )
 
             _set_status(persistence, audit_id, AuditStatus.RECOMMENDING)
-            all_finding_ids = _unique(
-                findings_before_integrity,
-                pre_scoring.finding_ids,
-            )
+            all_finding_ids = _unique(findings_before_integrity, pre_scoring.finding_ids)
             m10 = execute_m10(
                 audit_id=audit_id,
                 finding_ids=all_finding_ids,
@@ -259,7 +256,15 @@ def run_audit(
                 persistence=persistence,
                 workspace=workspace,
             )
+            # M11/M18 keep their established intermediate HTML contracts. The
+            # final user-facing projection is then normalized into report/ with
+            # one shared external stylesheet and domain-specific pages.
             enrich_written_reports(audit_id=audit_id, workspace=workspace)
+            report_path = materialize_report_site(
+                audit_id=audit_id,
+                workspace=workspace,
+                report_id=m11.report_id,
+            )
 
             current = persistence.audits.get(audit_id)
             if current is None:
@@ -274,7 +279,7 @@ def run_audit(
             return AuditRunResult(
                 audit_id=audit_id,
                 audit_root=workspace.root,
-                report_path=workspace.root / m11.file_path,
+                report_path=report_path,
                 completion_status=completion,
                 audited_pages=len(m2.page_ids),
                 finding_count=len(all_finding_ids),
