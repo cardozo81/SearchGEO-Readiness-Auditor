@@ -1,6 +1,6 @@
 # TECHNICAL_ARCHITECTURE.md
 
-**Status:** APPROVED — M20 + REPORT-SITE-GEO-001
+**Status:** APPROVED — M21 + M20 + REPORT-SITE-GEO-001
 
 ## 1. Estilo arquitetural
 
@@ -12,7 +12,8 @@ Não exige:
 - database server;
 - Docker;
 - daemon/background worker;
-- IA externa.
+- IA externa;
+- PageSpeed Insights ou CrUX para a auditoria SearchGEO principal.
 
 ## 2. Runtime
 
@@ -21,7 +22,8 @@ Não exige:
 - SQLite embarcado;
 - filesystem local;
 - HTTP/HTTPS para target;
-- HTTPS para provider externo somente quando habilitado.
+- HTTPS para provider externo somente quando habilitado;
+- HTTPS para PageSpeed/CrUX somente quando M21 external collection estiver habilitada.
 
 ## 3. Pipeline
 
@@ -40,9 +42,20 @@ CLI
 → M11/M18 intermediate reporting
 → report-site finalization
 → M20 report projection/navigation enrichment
+→ M21 optional external Web Performance enrichment
+   → PageSpeed Insights/Lighthouse lab
+   → CrUX field data quando disponível/configurado
+   → persistence + raw JSON artifacts
+   → web-performance.html + summary/references enrichment
 ```
 
-Invariante: M20 começa somente depois de scoring/findings/priorização concluídos. A etapa pode criar apenas objetos auxiliares M20; não altera os objetos já avaliados.
+Invariantes:
+
+- M20 começa somente depois de scoring/findings/priorização concluídos e não altera os objetos já avaliados;
+- M21 ocorre depois da auditoria principal e é fail-open;
+- M21 não cria RuleExecution, Finding, Recommendation ou ScoreContribution;
+- M21 não executa LLM;
+- PageSpeed/CrUX indisponível não invalida `SCORE-GEO-002`.
 
 ## 4. Device context
 
@@ -68,6 +81,13 @@ Precedência:
 
 M3 renderiza somente o conjunto selecionado. Downstream trabalha sobre os snapshots realmente materializados. Nenhum provider semântico nem M20 deve ser chamado para dispositivo não renderizado.
 
+M21 também usa somente snapshots existentes:
+
+```text
+MOBILE  → PageSpeed strategy=mobile  → CrUX formFactor=PHONE
+DESKTOP → PageSpeed strategy=desktop → CrUX formFactor=DESKTOP
+```
+
 Chamadas internas diretas a M3 sem variável preservam `both` para compatibilidade interna/testes.
 
 ## 5. Persistência
@@ -92,7 +112,15 @@ content_remediation_attempts
 jsonld_remediation_suggestions
 ```
 
-Essas tabelas são auxiliares e não participam do denominador de scoring.
+M21 adiciona entidades auxiliares separadas:
+
+```text
+web_performance_runs
+web_performance_observations
+web_performance_attempts
+```
+
+Tabelas M20/M21 não participam do denominador de scoring nem substituem as tabelas normativas de RuleExecution/Score.
 
 ## 6. Artifacts
 
@@ -103,11 +131,20 @@ Podem incluir:
 - conteúdo principal;
 - structured data;
 - screenshots;
-- evidence materializada.
+- evidence materializada;
+- respostas JSON PageSpeed/CrUX quando M21 executar coleta externa com sucesso.
 
 Os artifacts são referenciados por caminhos relativos ao workspace.
 
 M20 reutiliza artifacts persistidos e não refaz crawling/rendering.
+
+M21 escreve respostas externas reabríveis em:
+
+```text
+artifacts/web-performance/
+```
+
+Esses JSONs preservam o payload utilizado na projeção sem persistir API key.
 
 ## 7. IA
 
@@ -126,6 +163,8 @@ AUTO router
 M18 persiste sessão/tentativas da finalidade de análise semântica. IA não executa scoring.
 
 M20, quando habilitado, cria uma sessão de remediação derivada dos providers M18 ainda saudáveis. Não existe segunda credencial/model surface. M20 preserva quarantine anterior e executa failover/URL pinning próprio para a finalidade de remediação, mantendo telemetria separada.
+
+M21 não usa `SemanticAnalysisProvider`, não chama OpenAI/DeepSeek/MiMo e não acrescenta consumo LLM.
 
 ## 8. M20
 
@@ -159,7 +198,69 @@ A orientação JSON-LD é determinística e independente da ativação da chamad
 
 Sem JSON-LD, o módulo pode produzir um baseline conservador `WebPage` com valores persistidos. Com JSON-LD, realiza revisão genérica não destrutiva e não substitui graphs existentes.
 
-## 9. Scoring
+## 9. M21 — External Web Performance Evidence
+
+### 9.1 Ativação
+
+Coleta externa é `false` por padrão. Os controles públicos incluem:
+
+```text
+--web-performance / --no-web-performance
+--web-performance-max-pages
+--web-performance-timeout-seconds
+--web-performance-field-source auto|pagespeed|crux|none
+--lighthouse-categories
+```
+
+Com M21 desligado, auditorias reais podem materializar estado `DISABLED` e a página explicativa, mas não fazem requisição PageSpeed/CrUX.
+
+### 9.2 PageSpeed Insights
+
+Uma chamada por snapshot/dispositivo selecionado solicita as categorias configuradas, com default:
+
+```text
+performance
+accessibility
+best-practices
+seo
+```
+
+Persistem-se somente valores efetivamente retornados, incluindo versão/fetch time Lighthouse e métricas de laboratório relevantes.
+
+### 9.3 Core Web Vitals / CrUX
+
+Política default `auto`:
+
+1. usar field data CrUX devolvido pelo PageSpeed quando utilizável;
+2. se ausente e existir `SEARCHGEO_CRUX_API_KEY`, consultar CrUX API direta;
+3. sem dados suficientes, manter `INCOMPLETE`/`UNAVAILABLE` sem website finding.
+
+`pagespeed`, `crux` e `none` permitem controlar explicitamente a fonte/ausência de field data.
+
+### 9.4 Credenciais e consumo
+
+Credenciais isoladas:
+
+```text
+SEARCHGEO_PAGESPEED_API_KEY
+SEARCHGEO_CRUX_API_KEY
+```
+
+Elas nunca substituem nem reutilizam:
+
+```text
+OPENAI_API_KEY
+DEEPSEEK_API_KEY
+MIMO_API_KEY
+```
+
+`--web-performance-max-pages` limita logical pages externas; `0` significa todas. Em `both`, cada página pode produzir dois contextos PageSpeed. Timeout não gera retry automático.
+
+### 9.5 Falha
+
+Após `run_audit` concluir, M21 é enrichment. Falha inesperada deve ser registrada/logada como problema operacional de coleta e não destruir o resultado principal já produzido.
+
+## 10. Scoring
 
 `SCORE-GEO-002` é determinístico sobre RuleExecutions persistidas.
 
@@ -167,13 +268,15 @@ A camada de scoring não deve reexecutar website ou IA.
 
 M20 é estritamente downstream e não pode invalidar ou recalcular scoring já concluído.
 
-## 10. Reporting interno
+M21 também é estritamente externo ao scoring. Nenhum Lighthouse score, LCP/INP/CLS, PageSpeed category score ou estado CWV é automaticamente convertido em peso, RuleResult, ScoreContribution, Coverage, Confidence ou Overall Readiness.
+
+## 11. Reporting interno
 
 M11/M15/M16/M17/M18 preservam seus contratos intermediários para compatibilidade de testes/módulos.
 
 Durante `run_audit`, esses HTMLs intermediários não são o contrato final do usuário.
 
-## 11. Report site final
+## 12. Report site final
 
 O contrato final materializa:
 
@@ -184,6 +287,7 @@ report/
 ├─ desktop.html            # condicional
 ├─ remediation.html
 ├─ content-suggestions.html
+├─ web-performance.html
 ├─ ai-usage.html
 ├─ references.html
 └─ css/
@@ -196,19 +300,22 @@ Após materialização bem-sucedida, intermediários `report.html` e `remediatio
 
 `m20_reporting` é uma projeção sobre dados já persistidos: escreve `content-suggestions.html`, conecta a navegação compartilhada e inclui a telemetria M20 em `ai-usage.html`. O renderer não chama provider.
 
-## 12. Separação de domínio na apresentação
+`m21_reporting` projeta `web-performance.html`, adiciona resumo ao `index.html`, referências oficiais em `references.html` e link de navegação compartilhada. Não reexecuta PageSpeed/CrUX e não recalcula `SCORE-GEO-002`.
 
-- `index.html`: visão executiva/readiness;
+## 13. Separação de domínio na apresentação
+
+- `index.html`: visão executiva/readiness + resumo M21 claramente externo;
 - `mobile.html`: evidência e resultados Mobile;
 - `desktop.html`: evidência e resultados Desktop;
 - `remediation.html`: causa/prioridade/correção;
 - `content-suggestions.html`: texto opcional e JSON-LD advisory;
+- `web-performance.html`: Lighthouse lab, CrUX/Core Web Vitals e telemetria de coleta externa;
 - `ai-usage.html`: operação/telemetria M18 e M20, separadas por finalidade;
-- `references.html`: fontes e metodologia.
+- `references.html`: fontes, metodologia e referências M21.
 
-Essa separação impede que falha de provider seja percebida como finding do website.
+Essa separação impede confundir falha de provider IA ou serviço de medição externa com finding do website.
 
-## 13. CSS
+## 14. CSS
 
 Todas as páginas finais referenciam:
 
@@ -218,7 +325,7 @@ report/css/site.css
 
 CSS inline/embutido não pertence ao contrato final do report site.
 
-## 14. Segurança
+## 15. Segurança
 
 Secrets nunca devem ser persistidos em:
 
@@ -231,7 +338,9 @@ Payload estruturado exibido deve passar por escaping/redaction apropriado.
 
 M20 não persiste headers de autenticação nem bodies de erro de provider não sanitizados.
 
-## 15. Fonte de verdade
+M21 não persiste API keys, URL de requisição contendo `key=`, headers de autenticação ou corpo de erro externo não sanitizado. Artifacts são apenas respostas de sucesso utilizadas na projeção.
+
+## 16. Fonte de verdade
 
 ```text
 audit.db + artifacts
@@ -241,7 +350,9 @@ HTML é projeção. Report generation não pode recalcular Score/Finding nem cha
 
 M20 external calls, quando habilitadas, ocorrem **antes** da materialização final e persistem o resultado; a projeção HTML apenas lê o estado reabrível.
 
-## 16. Reprodutibilidade
+M21 external calls, quando habilitadas, ocorrem como enrichment após a auditoria principal. Depois de persistidas as tabelas/artifacts M21, `web-performance.html` é reabrível sem nova chamada.
+
+## 17. Reprodutibilidade
 
 Versionar:
 
@@ -250,6 +361,7 @@ Versionar:
 - rendering policy;
 - prompt/contract semântico quando aplicável;
 - contrato M20;
+- contrato M21 e interpretação de field/lab data;
 - scoring;
 - prioritization;
 - reporting contract.

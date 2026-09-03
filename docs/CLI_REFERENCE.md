@@ -30,6 +30,11 @@ searchgeo audit [target ...]
   [--ai-provider none|openai|deepseek|mimo|auto]
   [--ai-model MODEL_ID]
   [--ai-content-remediation | --no-ai-content-remediation]
+  [--web-performance | --no-web-performance]
+  [--web-performance-max-pages N]
+  [--web-performance-timeout-seconds SECONDS]
+  [--web-performance-field-source auto|pagespeed|crux|none]
+  [--lighthouse-categories LIST]
 ```
 
 ### Glossário completo de argumentos
@@ -41,13 +46,19 @@ searchgeo audit [target ...]
 | `--project TEXT` | texto | hostname/target | Nome humano da auditoria. |
 | `--language CODE` | texto | `pt-BR` | Contexto primário de idioma. |
 | `--market CODE` | texto | `BR` | Contexto de mercado. |
-| `--max-pages N` | inteiro > 0 | `100` | Limite determinístico. Em `URL_SET`, deve ser >= quantidade de URLs únicas fornecidas. |
+| `--max-pages N` | inteiro > 0 | `100` | Limite determinístico da auditoria. Em `URL_SET`, deve ser >= quantidade de URLs únicas fornecidas. |
 | `--audits-root PATH` | diretório | `audits` | Raiz local dos workspaces. |
-| `--device-context` | `mobile`, `desktop`, `both` | `mobile`* | Controla rendering e os contextos semânticos/IA. `*` Pode ser definido por `SEARCHGEO_DEVICE_CONTEXT` quando a flag não é passada. |
+| `--device-context` | `mobile`, `desktop`, `both` | `mobile`* | Controla rendering e os contextos semânticos/IA; também limita M21 aos snapshots realmente materializados. `*` Pode ser definido por `SEARCHGEO_DEVICE_CONTEXT` quando a flag não é passada. |
 | `--ai-provider` | `none`, `openai`, `deepseek`, `mimo`, `auto` | `none` | Provider semântico. A credencial deve pertencer ao produto/plano de API compatível. |
 | `--ai-model MODEL_ID` | model ID suportado | default do provider | Somente para provider explícito. Não pode ser combinado com `--ai-provider auto`. |
 | `--ai-content-remediation` | boolean flag | `false`* | Habilita M20 para sugerir texto exato com base em findings/evidências persistidos. `*` Pode ser definido por `SEARCHGEO_AI_CONTENT_REMEDIATION`. |
 | `--no-ai-content-remediation` | boolean flag | — | Força M20 textual desligado mesmo quando a variável de ambiente está habilitada. |
+| `--web-performance` | boolean flag | `false`* | Habilita M21: PageSpeed/Lighthouse + Core Web Vitals/CrUX quando disponível. `*` Pode ser definido por `SEARCHGEO_WEB_PERFORMANCE`. Não altera `SCORE-GEO-002`. |
+| `--no-web-performance` | boolean flag | — | Força M21 desligado mesmo quando `SEARCHGEO_WEB_PERFORMANCE=true`. |
+| `--web-performance-max-pages N` | inteiro >= 0 | `10`* | Limita páginas lógicas enviadas aos serviços externos M21; `0` = todas. `*` Pode vir de `SEARCHGEO_WEB_PERFORMANCE_MAX_PAGES`. |
+| `--web-performance-timeout-seconds SECONDS` | número finito > 0 | `60`* | Timeout por request PageSpeed/CrUX. `*` Pode vir de `SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS`. Sem retry automático. |
+| `--web-performance-field-source` | `auto`, `pagespeed`, `crux`, `none` | `auto`* | Política de field data. `crux` exige `SEARCHGEO_CRUX_API_KEY`. `*` Pode vir de `SEARCHGEO_WEB_PERFORMANCE_FIELD_SOURCE`. |
+| `--lighthouse-categories LIST` | lista separada por vírgulas | `performance,accessibility,best-practices,seo`* | Categorias oficiais aceitas. `*` Pode vir de `SEARCHGEO_LIGHTHOUSE_CATEGORIES`. |
 
 ## Contexto de dispositivo
 
@@ -75,17 +86,24 @@ searchgeo audit https://example.com --device-context both
 
 `mobile` produz apenas snapshots Mobile; `desktop`, apenas Desktop; `both`, ambos e habilita a comparação Desktop × Mobile completa. M7/M20 só podem chamar provider para snapshots realmente materializados.
 
+Quando M21 está habilitado, o mesmo universo de snapshots controla PageSpeed/CrUX:
+
+```text
+MOBILE  → PageSpeed strategy=mobile  → CrUX PHONE
+DESKTOP → PageSpeed strategy=desktop → CrUX DESKTOP
+```
+
 Chamadas internas diretas a M3 sem a variável preservam `both` por compatibilidade interna/testes; isso não altera o default público da CLI.
 
 ## Exemplos de execução
 
-### Mobile + sem IA — defaults
+### Mobile + sem IA + sem medição externa — defaults
 
 ```powershell
 searchgeo audit https://example.com --project "Exemplo"
 ```
 
-Nenhuma chamada externa. A revisão determinística de JSON-LD continua disponível em `report/content-suggestions.html`.
+Não há chamada de IA nem PageSpeed/CrUX por default. A revisão determinística de JSON-LD continua disponível em `report/content-suggestions.html`. `SCORE-GEO-002` continua sendo calculado conforme as regras aplicáveis.
 
 ### Mobile + OpenAI
 
@@ -108,6 +126,57 @@ searchgeo audit https://example.com `
 ```
 
 M20 é uma finalidade posterior à avaliação: não altera Score, Coverage, Confidence, RuleExecution ou Finding e exige revisão humana antes de qualquer publicação.
+
+### Mobile + Lighthouse/Core Web Vitals, sem IA
+
+```powershell
+searchgeo audit https://example.com `
+  --ai-provider none `
+  --device-context mobile `
+  --web-performance
+```
+
+M21 não chama LLM. O consumo externo adicional é PageSpeed e, conforme a política configurada e disponibilidade de chave, CrUX.
+
+### Web Performance com limite de consumo
+
+```powershell
+searchgeo audit https://example.com `
+  --max-pages 100 `
+  --web-performance `
+  --web-performance-max-pages 5 `
+  --web-performance-timeout-seconds 45
+```
+
+Neste exemplo o crawl pode auditar até 100 páginas, porém no máximo 5 páginas lógicas entram em M21. Com `--device-context mobile`, isso representa no máximo 5 contextos PageSpeed; com `both`, até 10 contextos PageSpeed.
+
+### Lighthouse somente, sem field data
+
+```powershell
+searchgeo audit https://example.com `
+  --web-performance `
+  --web-performance-field-source none
+```
+
+### CrUX direto como field data
+
+```powershell
+$env:SEARCHGEO_CRUX_API_KEY = "<google-api-key>"
+searchgeo audit https://example.com `
+  --web-performance `
+  --web-performance-field-source crux
+```
+
+PageSpeed continua sendo usado para Lighthouse lab; CrUX API direta fornece field data.
+
+### PageSpeed com chave opcional
+
+```powershell
+$env:SEARCHGEO_PAGESPEED_API_KEY = "<google-api-key>"
+searchgeo audit https://example.com --web-performance
+```
+
+A chave PageSpeed não é credencial de IA e nunca é persistida no `audit.db`, artifacts ou HTML.
 
 ### URL_SET
 
@@ -163,13 +232,112 @@ Se JSON-LD não existe, o auditor pode propor um baseline `WebPage` com dados ef
 
 JSON-LD é `OPCIONAL / REFORÇO`, não requisito universal GEO nem garantia de rich result.
 
+## M21 — Web Performance externo
+
+### Natureza
+
+M21 apresenta métricas externas de web performance separadas do modelo heurístico SearchGEO:
+
+```text
+SCORE-GEO-002  → readiness heurístico interno
+Lighthouse     → laboratório externo
+CrUX/CWV       → experiência real agregada quando há amostra suficiente
+```
+
+Nenhum cálculo faz média ou combinação automática entre esses três conceitos.
+
+### Precedência de ativação
+
+1. `--web-performance` ou `--no-web-performance`;
+2. `SEARCHGEO_WEB_PERFORMANCE`;
+3. `false`.
+
+Valores booleanos aceitos na variável:
+
+```text
+true / false
+1 / 0
+yes / no
+on / off
+```
+
+### Field source
+
+`auto`:
+
+1. executa PageSpeed para Lighthouse;
+2. usa CrUX field data vindo na resposta PageSpeed enquanto disponível;
+3. se não vier field data e `SEARCHGEO_CRUX_API_KEY` existir, consulta CrUX API direta;
+4. sem amostra, registra `UNAVAILABLE/INCOMPLETE`, não website FAIL.
+
+`pagespeed`: não faz fallback CrUX direto.
+
+`crux`: exige `SEARCHGEO_CRUX_API_KEY`; field data vem da CrUX API direta.
+
+`none`: Lighthouse lab continua, field data fica desabilitado.
+
+### Core Web Vitals
+
+Thresholds oficiais atuais de boa experiência no percentil 75:
+
+```text
+LCP <= 2500 ms
+INP <= 200 ms
+CLS <= 0.10
+```
+
+Assessment M21:
+
+```text
+PASS
+FAIL
+INCOMPLETE
+UNAVAILABLE
+```
+
+`INCOMPLETE`/`UNAVAILABLE` qualificam a medição e não são penalidade do website.
+
+### Lighthouse
+
+Quando retornados pelo PageSpeed, são persistidos/exibidos:
+
+```text
+Performance
+Accessibility
+Best Practices
+SEO
+FCP
+Speed Index
+LCP
+TBT
+CLS
+Lighthouse version/fetch time
+```
+
+O score Lighthouse é apresentado exatamente como score Lighthouse; não recebe o nome `Score GEO`.
+
+### Custos/quota
+
+M21 não gera tokens de OpenAI/DeepSeek/MiMo.
+
+O consumo potencial é de APIs Google:
+
+- PageSpeed Insights;
+- CrUX API direta somente quando configurada/política exigir.
+
+Use `--web-performance-max-pages` para limitar volume. `0` significa todos os pages auditados e deve ser usado conscientemente em auditorias grandes.
+
+PageSpeed suporta uso sem chave em cenário ad hoc/baixo volume segundo documentação oficial, mas chave é recomendada para automação frequente. CrUX API direta exige chave.
+
 ## Providers de IA e compatibilidade de plano
 
 Antes de preencher uma variável de credencial, confirme o produto/plano. Consulte [AI_GUIDE.md](AI_GUIDE.md).
 
 ### `none`
 
-Nenhuma chamada externa. Regras semantic-only sem evidência suficiente permanecem `UNKNOWN`. Se M20 textual estiver habilitado, ele registra `NOT_CONFIGURED` sem abortar; JSON-LD determinístico permanece disponível.
+Nenhuma chamada de IA externa. Regras semantic-only sem evidência suficiente permanecem `UNKNOWN`. Se M20 textual estiver habilitado, ele registra `NOT_CONFIGURED` sem abortar; JSON-LD determinístico permanece disponível.
+
+A opção `--web-performance` é independente de `--ai-provider`: pode ser usada com `none`, porque PageSpeed/CrUX não são SemanticProviders.
 
 ### `openai`
 
@@ -214,7 +382,17 @@ A cadeia é formada uma vez com providers elegíveis/configurados. O primeiro re
 
 ## Isolamento de credenciais
 
-Cada provider usa apenas sua própria credencial. `OPENAI_API_KEY` não pode preencher ausência de `DEEPSEEK_API_KEY` ou `MIMO_API_KEY`, e vice-versa. Essa regra também é coberta por teste de regressão para impedir chamadas externas acidentais com credencial ambiental.
+Cada provider/serviço usa apenas sua própria credencial:
+
+```text
+OPENAI_API_KEY                 → OpenAI SemanticProvider/M20
+DEEPSEEK_API_KEY               → DeepSeek SemanticProvider/M20
+MIMO_API_KEY                   → MiMo SemanticProvider/M20
+SEARCHGEO_PAGESPEED_API_KEY    → PageSpeed Insights M21
+SEARCHGEO_CRUX_API_KEY         → CrUX API M21
+```
+
+Não existe fallback de uma família de credencial para outra.
 
 ## Modelos aceitos
 
@@ -240,7 +418,7 @@ Em `auto`, modelos são definidos pelas variáveis específicas do provider; `--
 | Variável | Default | Uso |
 |---|---|---|
 | `SEARCHGEO_DEVICE_CONTEXT` | `mobile` na CLI | `mobile`, `desktop`, `both`. |
-| `SEARCHGEO_AI_TIMEOUT_SECONDS` | `180` | Timeout por chamada externa; número finito > 0. |
+| `SEARCHGEO_AI_TIMEOUT_SECONDS` | `180` | Timeout por chamada de IA externa; número finito > 0. |
 | `SEARCHGEO_AI_CONTENT_REMEDIATION` | `false` | Habilita/desabilita M20 textual quando a flag não é usada. |
 | `OPENAI_API_KEY` | — | Credencial da OpenAI API Platform. |
 | `DEEPSEEK_API_KEY` | — | Credencial da DeepSeek API. |
@@ -248,6 +426,13 @@ Em `auto`, modelos são definidos pelas variáveis específicas do provider; `--
 | `SEARCHGEO_OPENAI_MODEL` | `gpt-5.6-terra` | Model OpenAI no AUTO/env. |
 | `SEARCHGEO_DEEPSEEK_MODEL` | `deepseek-v4-pro` | Model DeepSeek. |
 | `SEARCHGEO_MIMO_MODEL` | `mimo-v2.5-pro` | Model MiMo. |
+| `SEARCHGEO_WEB_PERFORMANCE` | `false` | Habilita M21 externo. |
+| `SEARCHGEO_WEB_PERFORMANCE_MAX_PAGES` | `10` | Máximo de páginas lógicas no M21; `0` = todas. |
+| `SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS` | `60` | Timeout PageSpeed/CrUX por chamada. |
+| `SEARCHGEO_WEB_PERFORMANCE_FIELD_SOURCE` | `auto` | `auto`, `pagespeed`, `crux`, `none`. |
+| `SEARCHGEO_LIGHTHOUSE_CATEGORIES` | todas as quatro | Lista CSV de categorias Lighthouse. |
+| `SEARCHGEO_PAGESPEED_API_KEY` | — | Chave Google opcional para PageSpeed. Nunca persistida. |
+| `SEARCHGEO_CRUX_API_KEY` | — | Chave Google necessária para CrUX API direta. Nunca persistida. |
 
 ## Provider sem chave
 
@@ -255,13 +440,19 @@ Provider explícito sem token fica `NOT_CONFIGURED`, não chama API e não é af
 
 Credencial de produto/plano incompatível não deve ser tratada como válida apenas porque a variável existe.
 
+M21 possui regra diferente porque PageSpeed pode operar sem chave. `field_source=crux` é rejeitado antes da auditoria se `SEARCHGEO_CRUX_API_KEY` não estiver configurada.
+
 ## Falha / quota / crédito / timeout
 
-Provider explícito não faz cross-provider fallback. `auto` pode quarantinar provider falho e seguir para outro saudável conforme contrato. Não há retry automático de timeout.
+Provider de IA explícito não faz cross-provider fallback. `auto` pode quarantinar provider falho e seguir para outro saudável conforme contrato. Não há retry automático de timeout.
 
 Antes de concluir “sem crédito”, verifique produto/plano, endpoint, tipo de chave, limite de gasto e model access. No MiMo, `401` pode indicar mistura Token Plan/PAYG e `402` no endpoint PAYG representa saldo PAYG insuficiente.
 
+PageSpeed/CrUX são fail-open em relação à auditoria principal: falha/quota/timeout é registrada como estado operacional M21 e não cria finding do website nem recalcula SCORE-GEO-002.
+
 ## Saída da CLI
+
+Exemplo com M21 desligado:
 
 ```text
 Auditoria concluída: AUD-...
@@ -269,12 +460,22 @@ Status: COMPLETE_WITH_LIMITATIONS
 Páginas auditadas: ...
 Contexto de dispositivo: MOBILE
 Sugestões de conteúdo por IA: DESABILITADAS
+Web Performance externo: DESABILITADO (DISABLED; páginas 0; contextos 0/0)
 Problemas identificados: ...
 Recomendações: ...
 Relatório: audits\AUD-...\report\index.html
 Relatório por problemas: audits\AUD-...\report\remediation.html
 Conteúdo e JSON-LD: audits\AUD-...\report\content-suggestions.html
+Core Web Vitals e Lighthouse: audits\AUD-...\report\web-performance.html
 ```
+
+Exemplo habilitado com coleta parcial:
+
+```text
+Web Performance externo: HABILITADO (PARTIAL; páginas 5; contextos 4/5)
+```
+
+`PARTIAL` não significa baixa qualidade do website; significa que pelo menos um contexto externo não produziu medição utilizável.
 
 ## Estrutura do report site
 
@@ -285,13 +486,14 @@ report/
 ├─ desktop.html            # condicional
 ├─ remediation.html
 ├─ content-suggestions.html
+├─ web-performance.html
 ├─ ai-usage.html
 ├─ references.html
 └─ css/
    └─ site.css
 ```
 
-M18/M20 telemetry fica em `ai-usage.html`; sugestões textuais e revisão JSON-LD ficam em `content-suggestions.html`.
+M18/M20 telemetry fica em `ai-usage.html`; sugestões textuais e revisão JSON-LD ficam em `content-suggestions.html`; PageSpeed/Lighthouse/CrUX e sua telemetria ficam em `web-performance.html`.
 
 ## Regras de target
 
