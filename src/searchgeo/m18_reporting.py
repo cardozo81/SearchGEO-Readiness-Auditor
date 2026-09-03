@@ -13,10 +13,10 @@ from searchgeo.persistence import AuditWorkspace
 
 _CSS = """
 <style>
-.m18-ai{margin:2rem 0;padding:1.25rem;border:1px solid #d7dce2;border-radius:12px;background:#fff}
+.m18-ai{margin:2rem 0;padding:1.25rem;border:1px solid #d7dce2;border-radius:12px;background:#fff;min-width:0;max-width:100%}
 .m18-ai h2,.m18-ai h3{margin-top:.25rem}.m18-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;margin:1rem 0}
 .m18-metric{padding:.75rem;border:1px solid #e2e6ea;border-radius:8px;min-width:0}.m18-metric strong{display:block;font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;margin-bottom:.3rem}
-.m18-table-wrap{overflow-x:auto}.m18-ai table{border-collapse:collapse;width:100%;font-size:.86rem}.m18-ai th,.m18-ai td{border-bottom:1px solid #e5e7eb;padding:.55rem;text-align:left;vertical-align:top;white-space:nowrap}
+.m18-table-wrap{display:block;width:100%;max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain}.m18-ai table{border-collapse:collapse;width:100%;min-width:1050px;font-size:.86rem}.m18-ai th,.m18-ai td{border-bottom:1px solid #e5e7eb;padding:.55rem;text-align:left;vertical-align:top;white-space:nowrap}
 .m18-ai td.m18-error{max-width:28rem;overflow:hidden;text-overflow:ellipsis}.m18-note{font-size:.9rem;color:#4b5563}
 </style>
 """
@@ -27,16 +27,16 @@ def enrich_report_html(html: str, *, audit_id: str, workspace: AuditWorkspace) -
     if session is None:
         return html
     html = _correct_legacy_ai_metrics(html, session, attempts)
-    block = _CSS + _report_section(session, attempts, snapshot_count)
-    return _insert_before_body(html, block)
+    html = _insert_before_head_end(html, _CSS)
+    return _insert_before_main_end_or_body(html, _report_section(session, attempts, snapshot_count))
 
 
 def enrich_remediation_html(html: str, *, audit_id: str, workspace: AuditWorkspace) -> str:
     session, attempts, snapshot_count = _load(audit_id, workspace)
     if session is None:
         return html
-    block = _CSS + _remediation_context(session, attempts, snapshot_count)
-    return _insert_before_body(html, block)
+    html = _insert_before_head_end(html, _CSS)
+    return _insert_before_main_end_or_body(html, _remediation_context(session, attempts, snapshot_count))
 
 
 def enrich_written_reports(*, audit_id: str, workspace: AuditWorkspace) -> None:
@@ -259,8 +259,18 @@ def _json_list(value: Any) -> list[Any]:
     return parsed if isinstance(parsed, list) else []
 
 
-def _insert_before_body(html: str, block: str) -> str:
-    marker = "</body>"
+def _insert_before_head_end(html: str, block: str) -> str:
+    marker = "</head>"
     if marker in html:
         return html.replace(marker, block + marker, 1)
+    return block + html
+
+
+def _insert_before_main_end_or_body(html: str, block: str) -> str:
+    main_marker = "</main>"
+    if main_marker in html:
+        return html.replace(main_marker, block + main_marker, 1)
+    body_marker = "</body>"
+    if body_marker in html:
+        return html.replace(body_marker, block + body_marker, 1)
     return html + block
