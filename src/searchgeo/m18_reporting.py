@@ -18,6 +18,8 @@ _CSS = """
 .m18-metric{padding:.75rem;border:1px solid #e2e6ea;border-radius:8px;min-width:0}.m18-metric strong{display:block;font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;margin-bottom:.3rem}
 .m18-table-wrap{display:block;width:100%;max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain}.m18-ai table{border-collapse:collapse;width:100%;min-width:1050px;font-size:.86rem}.m18-ai th,.m18-ai td{border-bottom:1px solid #e5e7eb;padding:.55rem;text-align:left;vertical-align:top;white-space:nowrap}
 .m18-ai td.m18-error{max-width:28rem;overflow:hidden;text-overflow:ellipsis}.m18-note{font-size:.9rem;color:#4b5563}
+@media(min-width:821px){.page.m15-main{box-sizing:border-box;width:calc(100% - var(--m15-sidebar));max-width:1280px;margin-right:0;min-width:0}}
+@media(max-width:820px){.page.m15-main{width:100%;max-width:100%}}
 </style>
 """
 
