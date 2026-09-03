@@ -55,6 +55,26 @@ Chamadas internas diretas a M3 sem a variável continuam usando ambos os disposi
 
 ## Configuração de IA
 
+### Regra antes de configurar uma chave
+
+Não trate “tenho plano/créditos no fornecedor” como equivalente a “tenho API utilizável pelo SearchGEO”. Valide sempre:
+
+1. produto/plano de API;
+2. tipo de credencial;
+3. endpoint correspondente;
+4. saldo/quota/permissão/model access;
+5. termos de uso aplicáveis ao workload automatizado.
+
+Resumo atual:
+
+| Provider | Configuração aceita no SearchGEO | Não confundir com |
+|---|---|---|
+| OpenAI | API key da OpenAI API Platform com billing/quota válidos | assinatura/créditos do ChatGPT, que possuem billing separado |
+| DeepSeek | API key da DeepSeek API com saldo concedido e/ou recarregado | existência da chave sem saldo disponível |
+| Xiaomi MiMo | chave Pay-as-you-go `sk-...` para `https://api.xiaomimimo.com/v1` | Token Plan `tp-...`, que usa Base URL dedicada e não é suportado/adequado ao auditor automatizado atual |
+
+Detalhes e fontes oficiais: [AI_GUIDE.md](AI_GUIDE.md).
+
 ### Desabilitada
 
 ```powershell
@@ -66,36 +86,52 @@ Nenhuma API externa é chamada.
 ### OpenAI
 
 ```powershell
-$env:OPENAI_API_KEY = "<chave>"
+$env:OPENAI_API_KEY = "<chave-da-API-Platform>"
 searchgeo audit https://example.com --ai-provider openai
 ```
 
 Default: `gpt-5.6-terra`.
 
+A assinatura ChatGPT, inclusive paga, não substitui billing da API Platform. A chave deve pertencer à organização/projeto de API com saldo/quota, limites de gasto e acesso ao modelo compatíveis.
+
 ### DeepSeek
 
 ```powershell
-$env:DEEPSEEK_API_KEY = "<chave>"
+$env:DEEPSEEK_API_KEY = "<chave-da-DeepSeek-API>"
 searchgeo audit https://example.com --ai-provider deepseek
 ```
 
 Default: `deepseek-v4-pro`.
 
+O saldo total da API pode incluir `granted_balance` e `topped_up_balance`. `HTTP 402` representa saldo insuficiente da conta de API.
+
 ### Xiaomi MiMo
 
+Modo suportado atualmente:
+
 ```powershell
-$env:MIMO_API_KEY = "<chave>"
+$env:MIMO_API_KEY = "<chave-sk-PAYG>"
 searchgeo audit https://example.com --ai-provider mimo
 ```
 
 Default: `mimo-v2.5-pro`.
 
+O adapter atual usa:
+
+```text
+https://api.xiaomimimo.com/v1/responses
+```
+
+Portanto `MIMO_API_KEY` deve ser uma credencial MiMo Pay-as-you-go `sk-...` com saldo PAYG.
+
+**Não configure uma chave Token Plan `tp-...` em `MIMO_API_KEY`.** O Token Plan usa Base URL dedicada por região, possui créditos independentes do PAYG e não é suportado pelo SearchGEO atual. A documentação oficial da MiMo também restringe esse pacote a ferramentas de programação e proíbe automated scripts/custom application backends fora desse escopo.
+
 ### AUTO
 
 ```powershell
-$env:OPENAI_API_KEY = "<chave>"
-$env:DEEPSEEK_API_KEY = "<chave>"
-$env:MIMO_API_KEY = "<chave>"
+$env:OPENAI_API_KEY = "<chave-da-API-Platform>"
+$env:DEEPSEEK_API_KEY = "<chave-da-DeepSeek-API>"
+$env:MIMO_API_KEY = "<chave-sk-PAYG>"
 searchgeo audit https://example.com --ai-provider auto
 ```
 
@@ -108,6 +144,8 @@ O AUTO:
 - não permite que provider posterior sobrescreva o resultado aceito;
 - quarantina provider após falha qualificadora.
 
+O runtime atual não valida preventivamente todos os produtos/planos comerciais externos. Em especial, uma chave MiMo `tp-...` pode existir na variável e ainda assim ser incompatível com o endpoint atual. Por isso a validação de plano acima é requisito operacional do usuário.
+
 ## Modelos suportados
 
 ```text
@@ -117,6 +155,8 @@ MIMO:     mimo-v2.5-pro | mimo-v2.5
 ```
 
 `--ai-model` funciona somente para provider explícito. Em `auto`, use as variáveis de modelo específicas.
+
+Model ID suportado pelo SearchGEO não garante que a conta/plano externo possua acesso operacional ao modelo. Permissões, tiers, quotas e limites do provider podem variar.
 
 ## Variáveis de provider
 
@@ -166,13 +206,15 @@ AUTO:
 - provider sem chave não entra na cadeia;
 - se nenhum for elegível, nenhuma chamada externa é feita.
 
+Uma variável existente com credencial do produto errado não equivale a configuração válida do ponto de vista comercial/operacional. Exemplo: `MIMO_API_KEY=tp-...` não é configuração suportada pelo SearchGEO atual.
+
 ## Dispositivo × IA
 
 Para uma auditoria de uma página:
 
 ```text
 mobile  -> no máximo um contexto semântico externo da página
- desktop -> no máximo um contexto semântico externo da página
+desktop -> no máximo um contexto semântico externo da página
 both    -> até dois contextos, Mobile e Desktop
 ```
 
@@ -221,6 +263,8 @@ Não há atualmente configuração pública para:
 - Docker daemon;
 - execução distribuída;
 - retry automático de IA;
-- geração automática de conteúdo por IA.
+- geração automática de conteúdo por IA;
+- Base URL customizada de provider pela CLI;
+- uso do Xiaomi MiMo Token Plan `tp-...`.
 
 A futura sugestão opcional de conteúdo por IA está fora do baseline atual e deve permanecer desligada por padrão quando implementada.
