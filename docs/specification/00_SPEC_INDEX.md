@@ -1,6 +1,6 @@
 # SearchGEO Readiness Auditor — Specification Index
 
-**Status:** APPROVED BASELINE + M14/M15/M16 EVOLUTIONS  
+**Status:** APPROVED BASELINE + M14/M15/M16/M17 EVOLUTIONS  
 **Baseline:** MVP Functional Specification  
 **Idioma normativo:** Português, preservando identificadores e termos técnicos quando necessário.
 
@@ -31,6 +31,7 @@ Os documentos presentes neste diretório prevalecem sobre interpretações infor
 15. `14_MULTI_URL_VISUAL_EVIDENCE_REMEDIATION.md`
 16. `15_ERROR_CENTRIC_REPORT_UX.md`
 17. `16_ROOT_CAUSE_ELEMENT_REMEDIATION.md`
+18. `17_REMEDIATION_PRECISION_REPORT_CONSISTENCY.md`
 
 ## 3. Precedência documental
 
@@ -112,6 +113,10 @@ Define a evolução M15: segundo HTML orientado a problema (`remediation.html`),
 ### `16_ROOT_CAUSE_ELEMENT_REMEDIATION.md`
 
 Define a evolução M16: causa raiz evidence-backed por finding, classificação de precisão da localização, mapeamento de elemento(s)/selector quando comprovável, observado versus esperado, mudança exata, critérios de aceite e revalidação em `report.html` e `remediation.html`.
+
+### `17_REMEDIATION_PRECISION_REPORT_CONSISTENCY.md`
+
+Define a evolução M17: reason code específico, separação entre elemento/selector observado e alvo técnico, semântica coerente de actionability/prioridade/IA, redução de duplicação e diagnóstico de integridade RuleExecution → Finding.
 
 ## 5. Regra de mudança
 
