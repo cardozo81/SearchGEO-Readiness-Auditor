@@ -18,7 +18,7 @@ from searchgeo.m17_precision import materialize_m17_precision
 from searchgeo.m17_reporting import M17RemediationReportBuilder, M17ReportBuilder
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
 from searchgeo import reporting as reporting_module
-from searchgeo.reporting import ReportPersistence, write_report
+from searchgeo.reporting import ReportPersistence, _redact, write_report
 from searchgeo.remediation import recipe_for
 
 # REPORT-GEO-003 remains the page-oriented report contract. M17 tightens the
@@ -132,12 +132,17 @@ def _collapsed_trace_details(audit_id: str, workspace: AuditWorkspace) -> str:
             "SELECT remediation_group_id,title FROM recommendations WHERE audit_id=? ORDER BY recommendation_id",
             (audit_id,),
         )
+        evidence_rows = list(connection.execute(
+            "SELECT evidence_id,observed_value FROM evidence WHERE audit_id=? ORDER BY evidence_id",
+            (audit_id,),
+        ).fetchall())
     finally:
         connection.close()
 
     if not findings:
         return ""
 
+    evidence_by_id = {str(row["evidence_id"]): row for row in evidence_rows}
     titles_by_group: dict[str, list[str]] = {}
     for row in recommendations:
         titles_by_group.setdefault(str(row["remediation_group_id"]), []).append(str(row["title"]))
@@ -168,17 +173,49 @@ def _collapsed_trace_details(audit_id: str, workspace: AuditWorkspace) -> str:
             f"<h5>Recomendação técnica registrada</h5><ul>{recommendations_html}</ul>"
             if recommendations_html else ""
         )
+        evidence_block = _sanitized_evidence_block(
+            tuple(str(item) for item in _json_list(finding["evidence_ids"])),
+            evidence_by_id,
+        )
         blocks.append(
             "<details class='m17-compat-trace'>"
             f"<summary>Rastreabilidade técnica compatível · {escape(rule_id)}</summary>"
             f"<p><strong>Problema encontrado:</strong> {escape(problem)}</p>"
             f"<p><strong>Recipe técnica:</strong> {escape(recipe.title)}</p>"
-            f"{recommendation_block}{example}"
+            f"{recommendation_block}{evidence_block}{example}"
             f"<h5>Critério de aceite</h5><ul>{acceptance}</ul>"
             f"<h5>Como revalidar</h5><ol>{validation}</ol>"
             "</details>"
         )
     return "<div class='m17-compat-traces'>" + "".join(blocks) + "</div>"
+
+
+def _sanitized_evidence_block(
+    evidence_ids: tuple[str, ...],
+    evidence_by_id: dict[str, sqlite3.Row],
+) -> str:
+    entries: list[str] = []
+    for evidence_id in evidence_ids:
+        row = evidence_by_id.get(evidence_id)
+        if row is None:
+            continue
+        raw = row["observed_value"]
+        try:
+            parsed = json.loads(str(raw)) if isinstance(raw, str) else raw
+        except (TypeError, ValueError, json.JSONDecodeError):
+            parsed = str(raw)
+        sanitized = _redact(parsed)
+        if isinstance(sanitized, (dict, list, tuple)):
+            rendered = json.dumps(sanitized, ensure_ascii=False, indent=2, sort_keys=True)
+        else:
+            rendered = str(sanitized)
+        entries.append(
+            f"<div class='evidence'><strong>{escape(evidence_id)}</strong>"
+            f"<pre><code>{escape(rendered)}</code></pre></div>"
+        )
+    if not entries:
+        return ""
+    return "<h5>Evidência sanitizada</h5>" + "".join(entries)
 
 
 def _compat_problem_description(rule_id: str, observed: dict[str, Any], title: str) -> str:
