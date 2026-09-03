@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import ipaddress
 import logging
+import math
 import os
 from pathlib import Path
 import re
@@ -19,6 +20,8 @@ from searchgeo.m18_ai import build_semantic_provider
 
 _LOGGER = logging.getLogger(__name__)
 _DOMAIN_LABEL = re.compile(r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)$")
+_DEFAULT_AI_TIMEOUT_SECONDS = 180.0
+_AI_TIMEOUT_ENV = "SEARCHGEO_AI_TIMEOUT_SECONDS"
 
 
 def _valid_hostname(hostname: str) -> bool:
@@ -107,10 +110,37 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _configured_ai_timeout_seconds() -> float:
+    raw = os.environ.get(_AI_TIMEOUT_ENV)
+    if raw is None or not raw.strip():
+        return _DEFAULT_AI_TIMEOUT_SECONDS
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{_AI_TIMEOUT_ENV} must be a positive number of seconds") from exc
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError(f"{_AI_TIMEOUT_ENV} must be a positive finite number of seconds")
+    return value
+
+
+def _apply_ai_timeout(provider, timeout: float):
+    routed = getattr(provider, "providers", None)
+    if isinstance(routed, tuple):
+        for item in routed:
+            if hasattr(item, "timeout"):
+                item.timeout = timeout
+    elif hasattr(provider, "timeout"):
+        provider.timeout = timeout
+    return provider
+
+
 def _semantic_provider(args: argparse.Namespace):
     if args.ai_provider == "auto" and args.ai_model:
         raise ValueError("--ai-model cannot be used with --ai-provider=auto; configure per-provider SEARCHGEO_*_MODEL variables")
-    return build_semantic_provider(args.ai_provider, model_override=args.ai_model)
+    provider = build_semantic_provider(args.ai_provider, model_override=args.ai_model)
+    if args.ai_provider == "none":
+        return provider
+    return _apply_ai_timeout(provider, _configured_ai_timeout_seconds())
 
 
 def _audit_targets(args: argparse.Namespace) -> tuple[str, ...]:
