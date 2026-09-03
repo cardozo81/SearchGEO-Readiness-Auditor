@@ -18,16 +18,26 @@ def _dump(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
 
-def _resolve_session_status(*, strategy: str, enabled: bool, audit_mode: str, provider_states: dict[str, str]) -> tuple[str, bool]:
-    """Resolve operational AI session status without confusing explicit-provider failure with AUTO chain exhaustion."""
+def _resolve_session_status(
+    *,
+    strategy: str,
+    enabled: bool,
+    configured: bool,
+    audit_mode: str,
+    provider_states: dict[str, str],
+) -> tuple[str, bool]:
+    """Resolve operational AI status without conflating selection, configuration and failure."""
 
     chain_exhausted = (
         strategy == "AUTO"
+        and configured
         and bool(provider_states)
         and all(value == "QUARANTINED_FOR_AUDIT" for value in provider_states.values())
     )
-    if not enabled:
+    if strategy == "NONE" or not enabled:
         return "DISABLED", chain_exhausted
+    if not configured:
+        return "NOT_CONFIGURED", chain_exhausted
     if chain_exhausted:
         return "CHAIN_EXHAUSTED", chain_exhausted
     if audit_mode == "FULL":
@@ -353,9 +363,17 @@ def persist_provider_runtime(*, audit_id: str, provider: Any, workspace: AuditWo
         successes = [item for item in history if item.status.value == "SUCCESS"]
         strategy = str(snapshot.get("strategy") or "NONE")
         states = dict(snapshot.get("provider_states") or {})
+        enabled = strategy != "NONE"
+        if strategy == "SINGLE_PROVIDER":
+            configured = bool(getattr(provider, "api_key", None))
+        elif strategy == "AUTO":
+            configured = bool(snapshot.get("configured_chain"))
+        else:
+            configured = False
         status, chain_exhausted = _resolve_session_status(
             strategy=strategy,
-            enabled=bool(snapshot.get("enabled")),
+            enabled=enabled,
+            configured=configured,
             audit_mode=audit_mode,
             provider_states=states,
         )
@@ -371,7 +389,7 @@ def persist_provider_runtime(*, audit_id: str, provider: Any, workspace: AuditWo
         session = AiAuditSession(
             audit_id=audit_id,
             strategy=strategy,
-            enabled=bool(snapshot.get("enabled")),
+            enabled=enabled,
             initial_provider=snapshot.get("initial_provider"),
             initial_model=snapshot.get("initial_model"),
             initial_reasoning_profile=snapshot.get("initial_reasoning_profile"),
@@ -386,9 +404,11 @@ def persist_provider_runtime(*, audit_id: str, provider: Any, workspace: AuditWo
         )
         store.upsert_session(session)
         _LOGGER.info(
-            "AI session audit_id=%s strategy=%s status=%s effective_provider=%s effective_model=%s attempts=%s successful_attempts=%s",
+            "AI session audit_id=%s strategy=%s enabled=%s configured=%s status=%s effective_provider=%s effective_model=%s attempts=%s successful_attempts=%s",
             audit_id,
             session.strategy,
+            session.enabled,
+            configured,
             session.status,
             session.effective_provider,
             session.effective_model,
