@@ -25,6 +25,30 @@ jobs:
           git fetch origin main
           git rebase origin/main
           git push --force-with-lease origin HEAD:m18-multi-ai-provider-routing
+      - name: Normalize M18 documentation EOF
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          paths = [
+              'docs/AI_GUIDE.md',
+              'docs/CONFIGURATION.md',
+              'docs/OUTPUTS_AND_ARTIFACTS.md',
+              'docs/TROUBLESHOOTING.md',
+              'docs/USER_GUIDE.md',
+              'docs/specification/00_SPEC_INDEX.md',
+              'docs/specification/09_IMPLEMENTATION_PLAN.md',
+          ]
+          for name in paths:
+              path = Path(name)
+              path.write_text(path.read_text(encoding='utf-8').rstrip() + '\n', encoding='utf-8')
+          PY
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add docs
+            git commit -m "docs(m18): normalize markdown eof"
+            git push origin HEAD:m18-multi-ai-provider-routing
+          fi
       - run: python -m pip install -e .
       - run: python -m unittest tests.test_m18_multi_ai_provider -v
       - run: python -m unittest discover -s tests -v
