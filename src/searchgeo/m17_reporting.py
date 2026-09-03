@@ -14,10 +14,11 @@ from searchgeo.m16_reporting import M16RemediationReportBuilder, M16ReportBuilde
 from searchgeo.m16_root_cause import AffectedElement, RootCauseAnalysis
 from searchgeo.m17_precision import M17PrecisionPersistence, RootCausePrecision
 from searchgeo.persistence import AuditWorkspace
+from searchgeo.remediation import recipe_for
 
 
 _M17_CSS = r"""
-.m17-precision{border-left-color:#1d4ed8}.m17-precision-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:10px 0}.m17-precision-grid>div{background:#fff;border:1px solid #e5e7eb;border-radius:9px;padding:10px;min-width:0}.m17-precision-grid small{display:block;color:#667085;font-size:.72rem}.m17-precision-grid strong{display:block;margin-top:3px;overflow-wrap:anywhere}.m17-target{background:#eff6ff;border:1px solid #bfdbfe;border-radius:9px;padding:12px;margin:10px 0}.m17-target code{font-size:.82rem}.m17-link{border-top:1px solid #dbe3ef;margin-top:12px;padding-top:11px}.m17-link a{font-weight:800;color:#1d4ed8}.m17-integrity{margin-top:16px}.m17-integrity.ok{border-left:4px solid #16803c}.m17-integrity.warn{border-left:4px solid #d92d20}.m17-action-note{font-size:.86rem;color:#667085}.m17-occurrence{margin:12px 0;padding:12px;border:1px solid #d0d5dd;border-radius:10px;background:#fff}.m17-occurrence summary{cursor:pointer;font-weight:800}@media(max-width:900px){.m17-precision-grid{grid-template-columns:1fr}}
+.m17-precision{border-left-color:#1d4ed8}.m17-precision-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:10px 0}.m17-precision-grid>div{background:#fff;border:1px solid #e5e7eb;border-radius:9px;padding:10px;min-width:0}.m17-precision-grid small{display:block;color:#667085;font-size:.72rem}.m17-precision-grid strong{display:block;margin-top:3px;overflow-wrap:anywhere}.m17-target{background:#eff6ff;border:1px solid #bfdbfe;border-radius:9px;padding:12px;margin:10px 0}.m17-target code{font-size:.82rem}.m17-link{border-top:1px solid #dbe3ef;margin-top:12px;padding-top:11px}.m17-link a{font-weight:800;color:#1d4ed8}.m17-integrity{margin-top:16px}.m17-integrity.ok{border-left:4px solid #16803c}.m17-integrity.warn{border-left:4px solid #d92d20}.m17-action-note{font-size:.86rem;color:#667085}.m17-occurrence{margin:12px 0;padding:12px;border:1px solid #d0d5dd;border-radius:10px;background:#fff}.m17-occurrence summary{cursor:pointer;font-weight:800}.m17-trace-table td,.m17-trace-table th{font-size:.82rem}.m17-trace-table code{overflow-wrap:anywhere}@media(max-width:900px){.m17-precision-grid{grid-template-columns:1fr}}
 """
 
 _AI_USED_SENTENCE = (
@@ -32,10 +33,8 @@ class M17ReportBuilder(M16ReportBuilder):
     def __init__(self) -> None:
         super().__init__()
         self._m17_precision: dict[str, RootCausePrecision] = {}
-        self._m17_workspace: AuditWorkspace | None = None
 
     def build(self, *, audit_id: str, workspace: AuditWorkspace) -> str:
-        self._m17_workspace = workspace
         with M17PrecisionPersistence(workspace) as store:
             self._m17_precision = {item.finding_id: item for item in store.list_for_audit(audit_id)}
         html = super().build(audit_id=audit_id, workspace=workspace)
@@ -55,7 +54,7 @@ class M17ReportBuilder(M16ReportBuilder):
         html = _replace_section(
             html,
             "Correções técnicas detalhadas",
-            _compact_detailed_corrections(),
+            _compact_detailed_corrections(audit_id, workspace),
         )
         html = _inject_integrity(html, integrity)
         return html
@@ -69,9 +68,8 @@ class M17ReportBuilder(M16ReportBuilder):
         observations: list[sqlite3.Row],
         priority: str,
     ) -> str:
-        # Deliberately bypass M16's generic block. M17 uses the same persisted M16
-        # analysis plus the additive precision record and keeps implementation
-        # detail centralized in remediation.html.
+        # Bypass M16's generic block. M17 keeps evidence/location in report.html
+        # and centralizes the full recipe in remediation.html.
         html = M15ReportBuilder._finding_detail(
             self,
             finding=finding,
@@ -172,6 +170,7 @@ def _precision_block(
     reason = precision.reason_code or "NÃO DETERMINADO"
     elements = _elements_table(analysis.affected_elements, precision.observed_element_status)
     observed = _json_pre(analysis.observed_value)
+    recipe = recipe_for(analysis.rule_id)
     details = ""
     if full:
         acceptance = "".join(f"<li>{escape(item)}</li>" for item in analysis.acceptance_criteria)
@@ -202,6 +201,7 @@ def _precision_block(
         <div><small>Regra</small><strong>{escape(analysis.rule_id)}</strong></div>
       </div>
       <p><strong>Causa raiz:</strong> {escape(precision.precise_cause_summary)}</p>
+      <p class="m17-action-note"><strong>Recipe técnica:</strong> {escape(recipe.title)}</p>
       <h5>Elemento(s) efetivamente observado(s)</h5>{elements}
       <div class="m17-target"><strong>Alvo técnico da correção — não confundir com elemento observado</strong><br>
         Elemento/estrutura: <code>{escape(target_element)}</code><br>
@@ -283,19 +283,17 @@ def _load_report_state(
             """,
             (audit_id,),
         ).fetchall())
-        try:
-            semantic = list(connection.execute(
-                """
-                SELECT sa.provider, sa.model, sa.result
-                FROM semantic_assessments sa
-                JOIN page_snapshots ps ON ps.snapshot_id=sa.snapshot_id
-                JOIN pages p ON p.page_id=ps.page_id
-                WHERE p.audit_id=?
-                """,
-                (audit_id,),
-            ).fetchall())
-        except sqlite3.OperationalError:
-            semantic = []
+        semantic = _query_optional(
+            connection,
+            """
+            SELECT sa.provider, sa.model, sa.result
+            FROM semantic_assessments sa
+            JOIN page_snapshots ps ON ps.snapshot_id=sa.snapshot_id
+            JOIN pages p ON p.page_id=ps.page_id
+            WHERE p.audit_id=?
+            """,
+            (audit_id,),
+        )
         actionable = list(connection.execute(
             """
             SELECT re.* FROM rule_executions re
@@ -312,15 +310,13 @@ def _load_report_state(
             ).fetchall()
         }
         orphan = [row for row in actionable if str(row["rule_execution_id"]) not in mapped]
-        unexpected = [
-            row for row in findings if str(row["rule_result"]) not in {"FAIL", "WARNING"}
-        ]
+        unexpected = [row for row in findings if str(row["rule_result"]) not in {"FAIL", "WARNING"}]
         return findings, semantic, {"orphan": orphan, "unexpected": unexpected}
     finally:
         connection.close()
 
 
-def _ai_disclaimer(rows: list[sqlite3.Row]) -> str:
+def _ai_disclaimer(rows: list[Any]) -> str:
     providers = {str(row["provider"]).upper() for row in rows if row["provider"]}
     if "OPENAI" in providers and "UNAVAILABLE" in providers:
         return (
@@ -357,9 +353,7 @@ def _inject_actionability_metrics(html: str, findings: list[sqlite3.Row]) -> str
         f"<div class='metric'><small>Revisões recomendadas</small><strong>{counts[Actionability.REVIEW_RECOMMENDED]}</strong></div>"
         f"<div class='metric'><small>Melhorias opcionais</small><strong>{counts[Actionability.OPTIONAL_IMPROVEMENT]}</strong></div>"
     )
-    pattern = re.compile(
-        r"(<div class='metric'><small>Findings identificados</small><strong>\d+</strong></div>)"
-    )
+    pattern = re.compile(r"(<div class='metric'><small>Findings identificados</small><strong>\d+</strong></div>)")
     return pattern.sub(r"\1" + extra, html, count=1)
 
 
@@ -367,16 +361,17 @@ def _prioritized_action_plan(audit_id: str, workspace: AuditWorkspace) -> str:
     connection = sqlite3.connect(workspace.database)
     connection.row_factory = sqlite3.Row
     try:
-        groups = {
-            str(row["group_id"]): row
-            for row in connection.execute(
-                "SELECT * FROM remediation_groups WHERE audit_id=?", (audit_id,)
-            ).fetchall()
-        }
-        recommendations = list(connection.execute(
+        group_rows = _query_optional(
+            connection,
+            "SELECT * FROM remediation_groups WHERE audit_id=?",
+            (audit_id,),
+        )
+        groups = {str(row["group_id"]): row for row in group_rows}
+        recommendations = _query_optional(
+            connection,
             "SELECT * FROM recommendations WHERE audit_id=? ORDER BY priority_score DESC,recommendation_id",
             (audit_id,),
-        ).fetchall())
+        )
         finding_rows = list(connection.execute(
             """
             SELECT f.*, re.result AS rule_result, re.observed_value AS execution_observed_value
@@ -446,11 +441,49 @@ def _priority_action_note(action: Actionability, priority: str) -> str:
     return f"{priority} ordena este item dentro de sua classe de actionability; prioridade não altera o RuleResult."
 
 
-def _compact_detailed_corrections() -> str:
-    return """
+def _compact_detailed_corrections(audit_id: str, workspace: AuditWorkspace) -> str:
+    connection = sqlite3.connect(workspace.database)
+    connection.row_factory = sqlite3.Row
+    try:
+        rows = list(connection.execute(
+            """
+            SELECT f.*, re.result AS rule_result, re.observed_value AS execution_observed_value
+            FROM findings f JOIN rule_executions re ON re.rule_execution_id=f.rule_execution_id
+            WHERE f.audit_id=? ORDER BY f.rule_id,f.finding_id
+            """,
+            (audit_id,),
+        ).fetchall())
+    finally:
+        connection.close()
+
+    trace_rows: list[str] = []
+    for row in rows:
+        action = classify_actionability(
+            row["rule_result"],
+            rule_id=str(row["rule_id"]),
+            observed_value=_json_object(row["execution_observed_value"]),
+        )
+        evidence_ids = [str(item) for item in _json_list(row["evidence_ids"])]
+        recipe = recipe_for(str(row["rule_id"]))
+        trace_rows.append(
+            "<tr>"
+            f"<td><code>{escape(str(row['rule_id']))}</code></td>"
+            f"<td>{escape(label_for(action))}</td>"
+            f"<td>{escape(recipe.title)}</td>"
+            f"<td><code>{escape(', '.join(evidence_ids) or 'NÃO DETERMINADO')}</code></td>"
+            "</tr>"
+        )
+    table = (
+        "<div class='table-wrap'><table class='m17-trace-table'><thead><tr>"
+        "<th>Regra</th><th>Actionability</th><th>Recipe técnica</th><th>Evidências</th>"
+        "</tr></thead><tbody>" + "".join(trace_rows) + "</tbody></table></div>"
+        if trace_rows else "<p class='muted'>Nenhum finding persistido para remediação.</p>"
+    )
+    return f"""
     <section>
       <h2>Correções técnicas detalhadas</h2>
-      <p class="section-intro">Para reduzir duplicação, o diagnóstico técnico por ocorrência aparece uma vez em cada finding da seção Página por página. A receita comum, os critérios de aceite, a revalidação e todas as ocorrências ficam consolidados em <code>remediation.html</code>.</p>
+      <p class="section-intro">Para reduzir duplicação, o diagnóstico técnico por ocorrência aparece uma vez em cada finding da seção Página por página. Esta tabela preserva a rastreabilidade mínima entre regra, actionability, recipe e evidências. Exemplo, aceite, revalidação e todas as ocorrências ficam consolidados em <code>remediation.html</code>.</p>
+      {table}
       <p class="m17-link"><a href="remediation.html">Abrir achados e remediações agrupados →</a></p>
     </section>
     """
@@ -465,7 +498,7 @@ def _inject_integrity(html: str, integrity: dict[str, list[sqlite3.Row]]) -> str
             "Todas as execuções FAIL/WARNING possuem finding correspondente e todos os findings apontam para resultado acionável.</div>"
         )
     else:
-        rows = []
+        rows: list[str] = []
         for row in orphan:
             rows.append(
                 f"<tr><td>EXECUÇÃO SEM FINDING</td><td>{escape(str(row['rule_id']))}</td><td>{escape(str(row['result']))}</td><td>{escape(str(row['device'] or 'GLOBAL'))}</td><td class='mono'>{escape(str(row['rule_execution_id']))}</td></tr>"
@@ -486,11 +519,17 @@ def _inject_integrity(html: str, integrity: dict[str, list[sqlite3.Row]]) -> str
 
 
 def _replace_section(html: str, heading: str, replacement: str) -> str:
-    pattern = re.compile(
-        rf"<section>\s*<h2>{re.escape(heading)}</h2>.*?</section>",
-        re.DOTALL,
-    )
+    pattern = re.compile(rf"<section>\s*<h2>{re.escape(heading)}</h2>.*?</section>", re.DOTALL)
     return pattern.sub(replacement, html, count=1)
+
+
+def _query_optional(connection: sqlite3.Connection, sql: str, params: tuple[Any, ...]) -> list[sqlite3.Row]:
+    try:
+        return list(connection.execute(sql, params).fetchall())
+    except sqlite3.OperationalError as exc:
+        if "no such table" in str(exc).lower():
+            return []
+        raise
 
 
 def _priority_state(priority: str) -> str:
