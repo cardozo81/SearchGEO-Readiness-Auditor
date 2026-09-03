@@ -25,6 +25,7 @@ from searchgeo.semantic_persistence import SemanticPersistence
 
 _RULE_ID = "BR-GEO-052"
 _RULE_VERSION = "1"
+_DEVICE_COMPARISON_DISABLED_REASON = "DEVICE_COMPARISON_DISABLED_BY_CONTEXT"
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,7 +95,7 @@ def execute_m8(
                 # required snapshot is missing from the operator-selected scope.
                 outcome = DeviceComparisonOutcome.NOT_APPLICABLE
                 result = RuleResult.NOT_APPLICABLE
-                reason = "DEVICE_COMPARISON_NOT_SELECTED"
+                reason = _DEVICE_COMPARISON_DISABLED_REASON
                 changed_fields = []
                 material_fields = []
                 desktop_observed = None
@@ -133,8 +134,8 @@ def execute_m8(
                 result=result,
                 observed_value=observed,
                 expected_condition=(
-                    "material Desktop/Mobile differences are explicitly classified; "
-                    "difference alone is not treated as a defect"
+                    "material Desktop/Mobile differences are explicitly classified when both "
+                    "device contexts are selected; difference alone is not treated as a defect"
                 ),
                 evidence_ids=(evidence.evidence_id,),
                 executed_at=utc_now(),
