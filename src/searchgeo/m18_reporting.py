@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from html import escape
 import json
-from pathlib import Path
 import re
 import sqlite3
 from typing import Any
@@ -51,6 +50,10 @@ def enrich_written_reports(*, audit_id: str, workspace: AuditWorkspace) -> None:
         remediation.write_text(enrich_remediation_html(remediation.read_text(encoding="utf-8"), audit_id=audit_id, workspace=workspace), encoding="utf-8")
 
 
+def _provider_configured(session: sqlite3.Row) -> bool:
+    return bool(session["enabled"]) and str(session["status"]) != "NOT_CONFIGURED"
+
+
 def _correct_legacy_ai_metrics(html: str, session: sqlite3.Row, attempts: list[sqlite3.Row]) -> str:
     success = [row for row in attempts if row["status"] == "SUCCESS"]
     if success:
@@ -68,6 +71,8 @@ def _correct_legacy_ai_metrics(html: str, session: sqlite3.Row, attempts: list[s
     if success:
         models = sorted({str(row["model"]) for row in success if row["model"]})
         model_display = ", ".join(models) or "NÃO APLICÁVEL"
+    elif str(session["status"]) == "NOT_CONFIGURED":
+        model_display = str(session["initial_model"] or "NÃO CONFIGURADO") + " · PROVIDER NÃO CONFIGURADO"
     elif bool(session["enabled"]):
         model_display = str(session["initial_model"] or "CONFIGURADO · NÃO CONFIRMADO PELA API")
     else:
@@ -104,6 +109,7 @@ def _load(audit_id: str, workspace: AuditWorkspace) -> tuple[sqlite3.Row | None,
 
 def _report_section(session: sqlite3.Row, attempts: list[sqlite3.Row], snapshot_count: int) -> str:
     enabled = bool(session["enabled"])
+    configured = _provider_configured(session)
     success = [row for row in attempts if row["status"] == "SUCCESS"]
     provider_counts: dict[str, set[str]] = {}
     for row in success:
@@ -116,13 +122,16 @@ def _report_section(session: sqlite3.Row, attempts: list[sqlite3.Row], snapshot_
         effective = "NÃO HOUVE RESULTADO SEMÂNTICO VÁLIDO"
 
     metrics = (
-        _metric("IA habilitada", "SIM" if enabled else "NÃO")
+        _metric("IA habilitada pelo comando", "SIM" if enabled else "NÃO")
+        + _metric("Provider configurado", "SIM" if configured else "NÃO")
         + _metric("Estratégia", str(session["strategy"]))
         + _metric("Provider inicialmente selecionado", initial or "NÃO APLICÁVEL")
         + _metric("Provider efetivamente utilizado", effective)
         + _metric("Modelo efetivo", str(session["effective_model"] or "NÃO APLICÁVEL"))
         + _metric("Profundidade", str(session["effective_reasoning_profile"] or session["initial_reasoning_profile"] or "NÃO APLICÁVEL"))
         + _metric("Status", str(session["status"]))
+        + _metric("Chamadas externas realizadas", str(len(attempts)))
+        + _metric("Tentativas com sucesso", str(len(success)))
         + _metric("URLs analisadas com sucesso por provider", counts_html)
     )
     chain = " → ".join(
@@ -137,7 +146,7 @@ def _report_section(session: sqlite3.Row, attempts: list[sqlite3.Row], snapshot_
     return (
         "<section id='ai-runtime' class='m18-ai'>"
         "<h2>Uso de IA — execução e telemetria</h2>"
-        "<p class='m18-note'>A indisponibilidade de um provider é limitação operacional da auditoria; não é finding GEO e não reduz o Score do website.</p>"
+        "<p class='m18-note'>A indisponibilidade ou falta de configuração de um provider é limitação operacional da auditoria; não é finding GEO e não reduz o Score do website.</p>"
         f"<div class='m18-grid'>{metrics}</div>"
         f"<p><strong>Cadeia inicial imutável:</strong> {chain}</p>"
         f"<p><strong>Cobertura semântica externa:</strong> {escape(coverage)}</p>"
@@ -157,14 +166,18 @@ def _remediation_context(session: sqlite3.Row, attempts: list[sqlite3.Row], snap
     limitations: list[str] = []
     if session["status"] == "CHAIN_EXHAUSTED":
         limitations.append("AI_PROVIDER_CHAIN_EXHAUSTED")
+    if session["status"] == "NOT_CONFIGURED":
+        limitations.append("provider de IA selecionado, mas sem configuração/credencial elegível")
     if any(row["status"] != "SUCCESS" for row in attempts):
         limitations.append("houve tentativa(s) de provider sem resultado válido")
     if not bool(session["enabled"]):
-        limitations.append("IA externa desabilitada/não configurada")
+        limitations.append("IA externa desabilitada")
     return (
         "<section id='ai-remediation-context' class='m18-ai'>"
         "<h2>Contexto da análise semântica</h2>"
+        f"<p><strong>Provider configurado:</strong> {'SIM' if _provider_configured(session) else 'NÃO'}</p>"
         f"<p><strong>Provider efetivo:</strong> {escape(effective or 'NENHUM')}</p>"
+        f"<p><strong>Chamadas externas:</strong> {len(attempts)}</p>"
         f"<p><strong>Cobertura semântica:</strong> {escape(coverage)}</p>"
         f"<p><strong>Limitações:</strong> {escape('; '.join(limitations) if limitations else 'NENHUMA LIMITAÇÃO DE PROVIDER COM IMPACTO DE COBERTURA')}</p>"
         "<p class='m18-note'>Este bloco é informativo. Falha de IA não é atribuída ao website e não cria finding nem recommendation GEO.</p>"
