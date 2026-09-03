@@ -145,7 +145,7 @@ class OpenAIProviderHardeningTests(unittest.TestCase):
     def test_cli_uses_hardened_provider(self) -> None:
         parser = build_parser()
         args = parser.parse_args([
-            "audit", "https://example.com", "--ai-provider", "openai", "--ai-model", "gpt-test",
+            "audit", "https://example.com", "--ai-provider", "openai", "--ai-model", "gpt-5.6-terra",
         ])
         provider = _semantic_provider(args)
         self.assertIsInstance(provider, OpenAIProvider)
