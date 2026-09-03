@@ -6,6 +6,20 @@ on:
       - report-static-site-metrics-grounding
 
 jobs:
+  docs-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan legacy public report paths in Markdown
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          for path in [Path('README.md'), *Path('docs').rglob('*.md')]:
+              for number, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+                  if 'report.html' in line or 'remediation.html' in line:
+                      print(f'{path}:{number}: {line}')
+          PY
+
   test:
     runs-on: ubuntu-latest
     steps:
