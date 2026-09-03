@@ -1,345 +1,293 @@
-# Referência completa da CLI
+# CLI_REFERENCE.md
 
-Esta é a referência operacional dos parâmetros expostos pelo executável `searchgeo` na baseline atual. Em caso de divergência, `searchgeo --help`, `searchgeo audit --help` e `src/searchgeo/cli.py` representam a interface efetivamente implementada.
+Referência operacional da linha de comando do SearchGEO Readiness Auditor.
 
-## Sintaxe
-
-```text
-searchgeo [opções globais] audit [target ...] [opções do audit]
-```
-
-No PowerShell, opções globais como `--config` devem ser colocadas antes do subcomando `audit`:
-
-```powershell
-searchgeo --config .\searchgeo.toml audit https://example.com --project "Exemplo"
-```
-
-## Opções globais
-
-| Parâmetro | Tipo | Default | Obrigatório | Efeito |
-|---|---|---:|---:|---|
-| `-h`, `--help` | flag | — | Não | Exibe ajuda do nível atual e encerra. |
-| `--version` | flag | — | Não | Exibe a versão instalada e encerra. |
-| `--config PATH` | path | configuração interna padrão | Não | Carrega `searchgeo.toml`; atualmente o TOML expõe configuração de logging da aplicação. |
-
-## Subcomando `audit`
-
-O único subcomando operacional atual é:
-
-```powershell
-searchgeo audit ...
-```
-
-### Glossário de todos os parâmetros do `audit`
-
-| Parâmetro | Tipo/valores | Default | Obrigatório | Descrição operacional |
-|---|---|---:|---:|---|
-| `target` | um ou mais domínios/URLs HTTP(S) posicionais | — | Condicional | Um target é obrigatório, diretamente ou via `--urls-file`. Um único positional mantém o modo clássico; múltiplos positionals formam `URL_SET`. |
-| `--urls-file PATH` | arquivo UTF-8 | — | Condicional | Lê um domínio/URL por linha. Linhas vazias e linhas iniciadas por `#` são ignoradas. O uso deste parâmetro define `URL_SET`, mesmo que reste só uma URL válida. |
-| `--project TEXT` | texto | — | Não | Nome humano do projeto gravado na auditoria e exibido nos relatórios. |
-| `--language CODE` | texto | `pt-BR` | Não | Contexto de idioma principal para conteúdo/análise/relatório. Não traduz automaticamente o site. |
-| `--market CODE` | texto | `BR` | Não | Contexto de mercado usado pela análise. |
-| `--max-pages N` | inteiro `> 0` | `100` | Não | Limite determinístico de páginas auditadas. Valor `0` ou negativo é rejeitado. |
-| `--audits-root PATH` | diretório | `audits` | Não | Raiz onde serão criados `AUD-*`, `audit.db`, relatórios e artifacts. |
-| `--ai-provider` | `none`, `openai`, `deepseek`, `mimo`, `auto` | `none` | Não | Seleciona o modo de IA semântica. `none` desabilita IA; provider explícito usa apenas ele; `auto` monta cadeia elegível e permite failover. |
-| `--ai-model MODEL_ID` | model ID suportado | default do provider | Não | Override apenas para provider explícito. É inválido com `--ai-provider auto`. O modelo precisa estar no allowlist do provider. |
-| `-h`, `--help` | flag | — | Não | Exibe ajuda específica do subcomando `audit`. |
-
-## Regras de `target`
-
-O valor pode ser domínio ou URL HTTP(S):
+## Sintaxe global
 
 ```text
-example.com
-https://example.com/
-https://example.com/produto?canal=web
-http://localhost:8000/
+searchgeo [--config PATH] [--version] [-h|--help] audit [target ...] [opções]
 ```
 
-Validações implementadas:
+## Parâmetros globais
 
-- apenas `http` e `https`;
-- hostname, IP ou `localhost` válidos;
-- credenciais embutidas na URL (`user:password@host`) são rejeitadas;
-- porta inválida é rejeitada;
-- domínio sem scheme não pode conter path, query ou fragment; nesses casos informe `http://` ou `https://`;
-- espaços no target são rejeitados.
+| Parâmetro | Default | Descrição |
+|---|---|---|
+| `-h`, `--help` | — | Ajuda do comando atual. |
+| `--version` | — | Exibe versão do package. |
+| `--config PATH` | — | Caminho de `searchgeo.toml`; atualmente usado para configuração de logging. |
 
-## Entrada de uma URL
+## `searchgeo audit`
+
+```text
+searchgeo audit [target ...]
+  [--urls-file PATH]
+  [--project TEXT]
+  [--language CODE]
+  [--market CODE]
+  [--max-pages N]
+  [--audits-root PATH]
+  [--device-context mobile|desktop|both]
+  [--ai-provider none|openai|deepseek|mimo|auto]
+  [--ai-model MODEL_ID]
+```
+
+### Glossário completo de argumentos
+
+| Argumento | Tipo / valores | Default | Regra |
+|---|---|---|---|
+| `target` | domínio ou URL HTTP(S), zero ou mais posicionais | — | Ao menos um target deve vir por posição ou `--urls-file`. Um target posicional usa modo tradicional; dois ou mais formam `URL_SET`. |
+| `--urls-file PATH` | arquivo UTF-8 | — | Uma URL/domínio por linha; vazias e linhas iniciadas por `#` são ignoradas. O modo é `URL_SET` mesmo se sobrar uma URL válida. |
+| `--project TEXT` | texto | hostname/target | Nome humano da auditoria. |
+| `--language CODE` | texto | `pt-BR` | Contexto primário de idioma. |
+| `--market CODE` | texto | `BR` | Contexto de mercado. |
+| `--max-pages N` | inteiro > 0 | `100` | Limite determinístico. Em `URL_SET`, deve ser >= quantidade de URLs únicas fornecidas. |
+| `--audits-root PATH` | diretório | `audits` | Raiz local dos workspaces. |
+| `--device-context` | `mobile`, `desktop`, `both` | `mobile`* | Controla rendering e os contextos semânticos/IA. `*` Pode ser definido por `SEARCHGEO_DEVICE_CONTEXT` quando a flag não é passada. |
+| `--ai-provider` | `none`, `openai`, `deepseek`, `mimo`, `auto` | `none` | Provider semântico. |
+| `--ai-model MODEL_ID` | model ID suportado | default do provider | Somente para provider explícito. Não pode ser combinado com `--ai-provider auto`. |
+
+## Contexto de dispositivo
+
+A precedência é:
+
+1. `--device-context`;
+2. `SEARCHGEO_DEVICE_CONTEXT`;
+3. default CLI `mobile`.
+
+Valores válidos:
+
+```text
+mobile
+ desktop
+both
+```
+
+> O espaço antes de `desktop` acima é apenas visual; o valor aceito é `desktop`.
+
+Forma recomendada:
 
 ```powershell
-searchgeo audit https://example.com --project "Site"
+searchgeo audit https://example.com --device-context mobile
+searchgeo audit https://example.com --device-context desktop
+searchgeo audit https://example.com --device-context both
 ```
 
-## Entrada de várias URLs diretamente
+Ou por ambiente:
+
+```powershell
+$env:SEARCHGEO_DEVICE_CONTEXT = "mobile"
+```
+
+`mobile` produz apenas snapshots Mobile. Com IA habilitada, somente esses snapshots entram no fluxo semântico, reduzindo chamadas e custo em comparação a `both`.
+
+`desktop` faz o mesmo para Desktop. `both` produz os dois contextos e habilita a comparação Desktop × Mobile completa.
+
+Chamadas internas diretas a M3 sem a variável preservam o comportamento legado `both`; essa exceção existe para compatibilidade de API interna/testes e não altera o default da CLI.
+
+## Exemplos de execução
+
+### Mobile + sem IA — defaults
+
+```powershell
+searchgeo audit https://example.com --project "Exemplo"
+```
+
+### Mobile + OpenAI
+
+```powershell
+$env:OPENAI_API_KEY = "<chave>"
+searchgeo audit https://example.com `
+  --project "Exemplo" `
+  --device-context mobile `
+  --ai-provider openai
+```
+
+### Desktop apenas
+
+```powershell
+searchgeo audit https://example.com --device-context desktop
+```
+
+### Comparação completa
+
+```powershell
+searchgeo audit https://example.com --device-context both
+```
+
+### URL_SET
 
 ```powershell
 searchgeo audit `
   https://example.com/ `
   https://example.com/produto `
   https://example.com/faq `
-  --project "Site"
+  --project "Exemplo" `
+  --max-pages 3
 ```
 
-As URLs explícitas pertencem ao mesmo `audit_id` e devem respeitar as regras de origem do auditor.
-
-## Entrada por arquivo
-
-`urls.txt`:
-
-```text
-# páginas comerciais
-https://example.com/
-https://example.com/produto
-
-# suporte
-https://example.com/faq
-```
-
-Execução:
+### Arquivo
 
 ```powershell
-searchgeo audit --urls-file .\urls.txt --project "Site"
+searchgeo audit --urls-file .\urls.txt --project "Exemplo"
 ```
 
-É permitido combinar positionals e `--urls-file`; os valores são reunidos antes da validação/deduplicação da auditoria.
+## Providers de IA
 
-# IA — parâmetros e variáveis relacionadas
+### `none`
 
-As variáveis abaixo não são parâmetros CLI, mas alteram a execução de `--ai-provider`.
+Nenhuma chamada externa. Regras semantic-only sem evidência suficiente permanecem `UNKNOWN`. Isso pode reduzir Coverage/Consolidation, mas não é `FAIL` do website.
 
-## Timeout global das chamadas de IA
-
-| Variável | Default | Efeito |
-|---|---:|---|
-| `SEARCHGEO_AI_TIMEOUT_SECONDS` | `180` | Timeout por chamada externa de IA, em segundos. Aplica-se ao provider explícito e a todos os providers elegíveis de `auto`. Deve ser número finito maior que zero. |
-
-Exemplo:
-
-```powershell
-$env:SEARCHGEO_AI_TIMEOUT_SECONDS = "240"
-searchgeo audit https://example.com --ai-provider openai
-```
-
-O timeout não cria retry automático. Uma expiração continua sendo `TIMEOUT_ERROR`; o SearchGEO não repete silenciosamente a mesma requisição, evitando duplicação potencial de consumo.
-
-| Provider | API key | Modelo por ambiente | Reasoning por ambiente | Default atual |
-|---|---|---|---|---|
-| OpenAI | `OPENAI_API_KEY` | `SEARCHGEO_OPENAI_MODEL` | `SEARCHGEO_OPENAI_REASONING_EFFORT` | `gpt-5.6-terra` / `HIGH` |
-| DeepSeek | `DEEPSEEK_API_KEY` | `SEARCHGEO_DEEPSEEK_MODEL` | `SEARCHGEO_DEEPSEEK_REASONING_EFFORT` | `deepseek-v4-pro` / `HIGH` |
-| Xiaomi MiMo | `MIMO_API_KEY` | `SEARCHGEO_MIMO_MODEL` | `SEARCHGEO_MIMO_REASONING_EFFORT` | `mimo-v2.5-pro` / `HIGH` (`THINKING_ENABLED` no relatório) |
-
-Modelos aceitos pelo código:
-
-```text
-OPENAI:   gpt-5.6-sol | gpt-5.6-terra | gpt-5.6-luna
-DEEPSEEK: deepseek-v4-pro | deepseek-v4-flash
-MIMO:     mimo-v2.5-pro | mimo-v2.5
-```
-
-## Sem IA
-
-```powershell
-searchgeo audit https://example.com --ai-provider none
-```
-
-É também o default quando `--ai-provider` é omitido. O pipeline determinístico continua; regras semantic-only sem evidência suficiente permanecem `UNKNOWN`. Ausência de IA não é `FAIL` do website.
-
-## Um único provider
-
-OpenAI:
+### `openai`
 
 ```powershell
 $env:OPENAI_API_KEY = "<chave>"
 searchgeo audit https://example.com --ai-provider openai
 ```
 
-DeepSeek:
+Default:
+
+```text
+gpt-5.6-terra
+```
+
+### `deepseek`
 
 ```powershell
 $env:DEEPSEEK_API_KEY = "<chave>"
 searchgeo audit https://example.com --ai-provider deepseek
 ```
 
-MiMo:
+Default:
+
+```text
+deepseek-v4-pro
+```
+
+### `mimo`
 
 ```powershell
 $env:MIMO_API_KEY = "<chave>"
 searchgeo audit https://example.com --ai-provider mimo
 ```
 
-Override explícito de modelo:
-
-```powershell
-$env:DEEPSEEK_API_KEY = "<chave>"
-searchgeo audit https://example.com --ai-provider deepseek --ai-model deepseek-v4-flash
-```
-
-Provider explícito **não faz fallback para outro fornecedor**. Se a primeira chamada qualificadora falhar, o provider fica `QUARANTINED_FOR_AUDIT` e não é consultado novamente no mesmo audit; contextos sem resultado válido degradam para `UNKNOWN` quando dependem da IA.
-
-## Vários providers com `auto`
-
-Configure quantos providers quiser e selecione `auto`:
-
-```powershell
-$env:OPENAI_API_KEY = "<chave-openai>"
-$env:DEEPSEEK_API_KEY = "<chave-deepseek>"
-$env:MIMO_API_KEY = "<chave-mimo>"
-searchgeo audit --urls-file .\urls.txt --project "Site" --ai-provider auto
-```
-
-`AUTO` não significa chamada paralela a todos os providers. Ele cria, no início do audit, uma cadeia imutável apenas com configurações elegíveis e chama providers sequencialmente conforme necessidade.
-
-Ordem inicial de confiabilidade SearchGEO para os defaults:
-
-1. OpenAI `gpt-5.6-terra` — rank 2;
-2. DeepSeek `deepseek-v4-pro` — rank 3;
-3. MiMo `mimo-v2.5-pro` — rank 4.
-
-Se um model environment override selecionar outro modelo suportado, o rank correspondente desse modelo é usado.
-
-### Provider habilitado no comando, mas sem token
-
-Provider explícito sem sua API key retorna `NOT_CONFIGURED`. Nenhuma chamada externa é feita. A auditoria segue em `NO_AI`/semântica não disponível conforme os contextos e isso não é falha do website.
-
-Em `auto`, provider sem token simplesmente **não entra na cadeia**. Se nenhum provider tiver token/configuração elegível, `AUTO` opera sem chamadas externas e a análise semântica fica sem provider configurado.
-
-A ausência de `DEEPSEEK_API_KEY` ou `MIMO_API_KEY` não interfere em uma execução explícita `--ai-provider openai`. Da mesma forma, cada provider explícito depende apenas da sua própria credencial/configuração.
-
-### Configuração/modelo inválido
-
-Provider explícito com model ID fora do allowlist falha na validação da CLI/configuração antes da auditoria efetiva.
-
-Em `auto`, uma configuração de provider inválida é excluída da cadeia e registrada em `excluded_configurations`; os demais providers elegíveis continuam.
-
-### Erro, timeout, quota ou ausência de créditos
-
-Falhas são classificadas e sanitizadas. As classes atuais incluem:
+Default:
 
 ```text
-AUTH_ERROR
-QUOTA_ERROR
-CREDIT_ERROR
-RATE_LIMIT_ERROR
-MODEL_ERROR
-PERMISSION_ERROR
-NETWORK_ERROR
-TIMEOUT_ERROR
-SERVER_ERROR
-CONTRACT_ERROR
-EMPTY_RESPONSE
-INVALID_RESPONSE
-UNKNOWN_PROVIDER_ERROR
+mimo-v2.5-pro
 ```
 
-Em provider explícito, não existe cross-provider fallback: a sessão fica `DEGRADED` quando a IA não consegue produzir o universo necessário.
+### `auto`
 
-Em `auto`, a falha coloca aquele provider em `QUARANTINED_FOR_AUDIT` e o próximo provider saudável pode ser tentado. Provider quarantined não volta para a cadeia durante o mesmo audit.
+```powershell
+searchgeo audit https://example.com --ai-provider auto
+```
 
-### Lock de provider por URL
+A cadeia é formada uma vez por audit com providers que possuem token e configuração válida. Execução sequencial; primeiro resultado válido encerra o contexto. Providers posteriores não sobrescrevem o resultado aceito.
 
-Quando um provider produz a primeira análise válida de uma URL, essa URL fica fixada naquele provider para manter Desktop/Mobile comparáveis.
+## Modelos aceitos
 
-Depois de um resultado válido, outros providers não são chamados para completar o mesmo contexto. No segundo device, somente o provider já fixado pode ser usado.
+```text
+OPENAI
+  gpt-5.6-sol
+  gpt-5.6-terra
+  gpt-5.6-luna
 
-Se o mesmo provider falhar no segundo device da URL:
+DEEPSEEK
+  deepseek-v4-pro
+  deepseek-v4-flash
 
-- nenhum provider alternativo completa aquela mesma URL;
-- o contexto faltante fica degradado/`UNKNOWN` quando aplicável;
-- o provider falho é quarantined para URLs seguintes;
-- uma URL nova pode iniciar no próximo provider saudável.
+MIMO
+  mimo-v2.5-pro
+  mimo-v2.5
+```
 
-Se todos os providers de `AUTO` forem quarantined, a sessão fica `CHAIN_EXHAUSTED` e a auditoria registra `AI_PROVIDER_CHAIN_EXHAUSTED`. Isso é uma limitação operacional da auditoria, não finding do website.
+Em `auto`, modelos são definidos pelas variáveis específicas de provider; `--ai-model` é rejeitado.
 
-# Saída da execução
+## Variáveis de ambiente
 
-Ao terminar, a CLI imprime:
+| Variável | Default | Uso |
+|---|---|---|
+| `SEARCHGEO_DEVICE_CONTEXT` | `mobile` na CLI | `mobile`, `desktop`, `both`. |
+| `SEARCHGEO_AI_TIMEOUT_SECONDS` | `180` | Timeout por chamada externa de IA; número finito > 0. |
+| `OPENAI_API_KEY` | — | Credencial OpenAI. |
+| `DEEPSEEK_API_KEY` | — | Credencial DeepSeek. |
+| `MIMO_API_KEY` | — | Credencial MiMo. |
+| `SEARCHGEO_OPENAI_MODEL` | `gpt-5.6-terra` | Model OpenAI no AUTO/configuração por env. |
+| `SEARCHGEO_DEEPSEEK_MODEL` | `deepseek-v4-pro` | Model DeepSeek. |
+| `SEARCHGEO_MIMO_MODEL` | `mimo-v2.5-pro` | Model MiMo. |
+
+Variáveis adicionais de reasoning/depth existentes no contrato M18 continuam documentadas em [AI_GUIDE.md](AI_GUIDE.md).
+
+## Provider sem chave
+
+Provider explícito sem token:
+
+- fica operacionalmente `NOT_CONFIGURED`;
+- não chama API;
+- auditoria continua em modo sem IA efetiva/degradado conforme o restante do pipeline;
+- outras chaves ausentes não interferem.
+
+Em `auto`, providers sem token são excluídos da cadeia.
+
+## Falha / quota / crédito / timeout
+
+Provider explícito:
+
+- não faz cross-provider fallback;
+- após falha qualificadora é quarantined para o restante do audit.
+
+`auto`:
+
+- provider falho é quarantined;
+- próximo provider saudável pode atender URLs/contextos elegíveis seguintes;
+- se a cadeia inteira falhar, estado operacional `CHAIN_EXHAUSTED`.
+
+Não há retry automático de timeout, evitando potencial duplicação de consumo.
+
+## Saída da CLI
+
+Exemplo:
 
 ```text
 Auditoria concluída: AUD-...
-Status: ...
+Status: COMPLETE_WITH_LIMITATIONS
 Páginas auditadas: ...
+Contexto de dispositivo: MOBILE
 Problemas identificados: ...
 Recomendações: ...
-Relatório: audits\AUD-...\report.html
-Relatório por problemas: audits\AUD-...\remediation.html
+Relatório: audits\AUD-...\report\index.html
+Relatório por problemas: audits\AUD-...\report\remediation.html
 ```
 
-## Uso de IA no `report.html`
+O ponto de entrada é `report/index.html`.
 
-A seção **Uso de IA — execução e telemetria** mostra, quando M18 está materializado:
-
-- IA habilitada;
-- estratégia (`NONE`, `SINGLE_PROVIDER`, `AUTO`);
-- provider/model inicial e efetivo;
-- profundidade/reasoning normalizado;
-- status da sessão;
-- cadeia configurada;
-- failover observado;
-- cobertura por URL/device;
-- uma linha por tentativa com URL, device, provider, model, status, tokens, custo estimado, duração e erro sanitizado.
-
-A tabela permanece dentro do bloco principal do relatório e usa rolagem horizontal interna quando a largura das colunas excede o espaço disponível.
-
-`ESTIMATED_COST` é estimativa calculada pelo catálogo local versionado; não é invoice nem billing do provider e não participa do score.
-
-## Persistência de uso de IA no `audit.db`
-
-As tabelas M18 são:
+## Estrutura do report site
 
 ```text
-ai_audit_sessions
-ai_provider_attempts
-provider_pricing_catalog
+report/
+├─ index.html
+├─ mobile.html          # se Mobile foi auditado
+├─ desktop.html         # se Desktop foi auditado
+├─ remediation.html
+├─ ai-usage.html
+├─ references.html
+└─ css/
+   └─ site.css
 ```
 
-Tokens ausentes no retorno do provider ficam `NULL`. API keys, header `Authorization`, corpo sensível integral e chain-of-thought não são persistidos.
+A telemetria de IA fica em `ai-usage.html`, separada do readiness do website. Referências oficiais, metodologia e fórmulas ficam em `references.html`.
 
-## Logging do processo
+## Regras de target
 
-O SearchGEO emite logging operacional sanitizado conforme `log_level`. Para M18, cada tentativa registra provider/model/status/duração/tokens/custo estimado/error_class e existe um resumo da sessão. O log não inclui API key, Authorization ou corpo integral da requisição.
+- somente HTTP/HTTPS;
+- domínio sem scheme é aceito quando não contém path/query/fragment;
+- URL com path/query/fragment deve incluir `http://` ou `https://`;
+- credenciais embutidas na URL são rejeitadas;
+- URLs de um mesmo audit `URL_SET` devem pertencer à mesma origem normalizada.
 
-A baseline atual **não cria um `audit.log` por auditoria**. O registro persistente de uso é `audit.db` + `report.html`; logs do processo seguem o handler padrão configurado pela aplicação.
-
-# Exemplos completos
-
-Sem IA, uma URL:
-
-```powershell
-searchgeo audit https://example.com --project "Institucional" --max-pages 10
-```
-
-Sem IA, conjunto de URLs:
+## Ajuda local
 
 ```powershell
-searchgeo audit --urls-file .\urls.txt --project "Institucional" --max-pages 20 --ai-provider none
-```
-
-OpenAI explícito:
-
-```powershell
-$env:OPENAI_API_KEY = "<chave>"
-searchgeo audit https://example.com --project "Institucional" --ai-provider openai --ai-model gpt-5.6-terra
-```
-
-OpenAI com timeout ampliado explicitamente pelo ambiente:
-
-```powershell
-$env:OPENAI_API_KEY = "<chave>"
-$env:SEARCHGEO_AI_TIMEOUT_SECONDS = "240"
-searchgeo audit https://example.com --project "Institucional" --ai-provider openai --ai-model gpt-5.6-terra
-```
-
-AUTO multi-provider:
-
-```powershell
-$env:OPENAI_API_KEY = "<chave-openai>"
-$env:DEEPSEEK_API_KEY = "<chave-deepseek>"
-searchgeo audit --urls-file .\urls.txt --project "Institucional" --ai-provider auto
-```
-
-Com configuração de logging:
-
-```powershell
-searchgeo --config .\searchgeo.toml audit https://example.com --project "Institucional" --ai-provider none
+searchgeo --help
+searchgeo audit --help
 ```
