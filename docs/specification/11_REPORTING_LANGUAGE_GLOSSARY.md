@@ -1,6 +1,6 @@
 # REPORTING_LANGUAGE_GLOSSARY.md
 
-**Status:** APPROVED — extended by M13 Actionable GEO Report
+**Status:** APPROVED — extended through M21 Web Performance Evidence
 
 ## 1. Regra editorial
 
@@ -101,6 +101,30 @@ NOT_APPLICABLE
 ERROR
 → Erro de execução da análise
 
+Core Web Vitals
+→ Core Web Vitals (métricas de experiência real; preservar nome oficial)
+
+Lighthouse Performance
+→ Lighthouse Performance (score de laboratório; não traduzir como Score GEO)
+
+CrUX / Chrome UX Report
+→ CrUX / Chrome UX Report (dados agregados de usuários reais)
+
+Field data
+→ Dados de campo / experiência real agregada
+
+Lab data
+→ Dados de laboratório
+
+LCP
+→ Largest Contentful Paint (LCP)
+
+INP
+→ Interaction to Next Paint (INP)
+
+CLS
+→ Cumulative Layout Shift (CLS)
+
 ## 3. Estado geral quando Overall não é consolidável
 
 Quando `OVERALL_READINESS` não possuir valor consolidado, o relatório deve usar explicitamente:
@@ -137,7 +161,9 @@ Estados textuais possíveis incluem:
 - CRÍTICO;
 - PARCIAL;
 - NÃO DETERMINADO;
-- NÃO CONSOLIDADO.
+- NÃO CONSOLIDADO;
+- INCOMPLETO;
+- INDISPONÍVEL.
 
 ## 5. Classificação textual de score válido
 
@@ -149,6 +175,8 @@ Estados textuais possíveis incluem:
 | 40–59 | Baixa |
 | 0–39 | Crítica |
 | sem resultado válido | Não Determinada |
+
+A tabela acima é classificação interna para scores SearchGEO válidos. Ela não deve ser reutilizada automaticamente para classificar `Lighthouse Performance`, cujo score pertence à metodologia externa do Lighthouse.
 
 A cor do resultado geral deve respeitar também Consolidation. Um valor não consolidável não deve receber apresentação de resultado geral válido.
 
@@ -168,7 +196,17 @@ Exemplos:
 - SSR;
 - CSR;
 - Playwright;
-- Chromium.
+- Chromium;
+- PageSpeed Insights;
+- Lighthouse;
+- CrUX;
+- Core Web Vitals;
+- LCP;
+- INP;
+- CLS;
+- FCP;
+- TBT;
+- Speed Index.
 
 Primeira ocorrência pode usar:
 
@@ -177,6 +215,10 @@ Canonical (URL canônica)
 Soft 404 (página com semântica de erro sem status HTTP apropriado)
 
 Client-Side Rendering — CSR (renderização no navegador)
+
+CrUX (Chrome UX Report — dados agregados de usuários reais)
+
+Lighthouse Performance (score de laboratório do Lighthouse)
 
 ## 7. Seção de interpretação
 
@@ -188,7 +230,7 @@ Deve explicar separadamente:
 
 ### Compatibilidade GEO
 
-Quão preparado está o site segundo score consolidado.
+Quão preparado está o site segundo score consolidado SearchGEO.
 
 ### Cobertura da Análise
 
@@ -223,6 +265,16 @@ Ordem recomendada de ação considerando gravidade, impacto, confiabilidade e fa
 ### Desktop e Mobile
 
 São contextos independentes e podem apresentar resultados diferentes.
+
+### Web Performance externo
+
+`Core Web Vitals` e `Lighthouse` devem aparecer como evidência complementar, não como dimensões implícitas do Score GEO.
+
+- Lighthouse = laboratório;
+- CrUX/Core Web Vitals = dados de campo agregados quando disponíveis;
+- `PASS` de Core Web Vitals não significa “GEO aprovado”;
+- `FAIL` de Core Web Vitals não substitui `SCORE-GEO-002` nem cria finding SearchGEO automaticamente;
+- `INCOMPLETE`/`UNAVAILABLE` significa falta de base externa suficiente, não defeito comprovado do site.
 
 ## 8. Linguagem de remediação
 
@@ -266,7 +318,38 @@ Quando IA externa for usada, o relatório deve indicar que análises semânticas
 
 O relatório não deve sugerir que a IA “deu a nota GEO”; score oficial continua determinístico.
 
-## 10. Restrições
+M21 não é telemetria de IA. PageSpeed/CrUX devem aparecer como serviços externos de medição e nunca como provider semântico.
+
+## 10. Linguagem M21 obrigatória
+
+Preferir:
+
+```text
+Lighthouse Performance: 91/100
+Core Web Vitals: PASS
+Fonte de campo: CrUX
+Escopo: URL
+SCORE-GEO-002: permanece independente
+```
+
+Evitar:
+
+```text
+Score GEO Lighthouse
+Google confirmou o Score GEO
+Core Web Vitals determinou a nota GEO
+Sem dados CrUX = site reprovado
+```
+
+Quando M21 estiver desabilitado:
+
+`A coleta externa de Web Performance foi desabilitada. Nenhuma requisição PageSpeed/CrUX foi realizada. O SCORE-GEO-002 permanece disponível normalmente.`
+
+Quando houver falha externa:
+
+`A coleta de Web Performance ficou incompleta por indisponibilidade/erro do serviço externo. Essa limitação não foi convertida em problema do website nem alterou o SCORE-GEO-002.`
+
+## 11. Restrições
 
 Nunca usar linguagem que prometa:
 
@@ -286,4 +369,6 @@ Nunca recomendar ou afirmar sem base:
 - claim factual;
 - informação comercial.
 
-O produto mede readiness e oferece remediação evidence-backed.
+Nunca representar PageSpeed, Lighthouse ou CrUX como certificação GEO/AEO oficial.
+
+O produto mede readiness, oferece remediação evidence-backed e pode apresentar sinais Web Performance externos de forma separada.
