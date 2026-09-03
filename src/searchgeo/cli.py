@@ -337,6 +337,9 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(str(exc))
 
     if args.command == "audit":
+        web_result = None
+        web_report_path: Path | None = None
+        web_runtime_failed = False
         try:
             targets = _audit_targets(args)
             if args.max_pages <= 0:
@@ -364,16 +367,27 @@ def main(argv: list[str] | None = None) -> int:
                     semantic_provider=provider,
                     content_remediation=content_remediation,
                 )
-                workspace = AuditWorkspace.open(result.audit_root)
-                web_result = execute_m21(
-                    audit_id=result.audit_id,
-                    workspace=workspace,
-                    config=web_performance,
-                )
-                web_report_path = enrich_m21_report_site(
-                    audit_id=result.audit_id,
-                    workspace=workspace,
-                )
+                # M21 is strictly opt-in. With the default OFF, the CLI does
+                # not reopen the workspace or perform any extra post-processing.
+                # Once the core audit is complete, an unexpected M21 problem is
+                # fail-open with respect to the already valid SearchGEO result.
+                if web_performance.enabled:
+                    try:
+                        workspace = AuditWorkspace.open(result.audit_root)
+                        web_result = execute_m21(
+                            audit_id=result.audit_id,
+                            workspace=workspace,
+                            config=web_performance,
+                        )
+                        web_report_path = enrich_m21_report_site(
+                            audit_id=result.audit_id,
+                            workspace=workspace,
+                        )
+                    except (OSError, ValueError, RuntimeError):
+                        web_runtime_failed = True
+                        _LOGGER.exception(
+                            "External web-performance enrichment failed after core audit completion"
+                        )
             finally:
                 if previous_device_context is None:
                     os.environ.pop(DEVICE_CONTEXT_ENV, None)
@@ -388,12 +402,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Páginas auditadas: {result.audited_pages}")
         print(f"Contexto de dispositivo: {device_context.upper()}")
         print(f"Sugestões de conteúdo por IA: {'HABILITADAS' if content_remediation else 'DESABILITADAS'}")
-        print(
-            "Web Performance externo: "
-            f"{'HABILITADO' if web_performance.enabled else 'DESABILITADO'} "
-            f"({web_result.status}; páginas {web_result.pages_considered}; "
-            f"contextos {web_result.successful_contexts}/{web_result.context_attempts})"
-        )
+        if not web_performance.enabled:
+            print("Web Performance externo: DESABILITADO")
+        elif web_result is not None:
+            print(
+                "Web Performance externo: HABILITADO "
+                f"({web_result.status}; páginas {web_result.pages_considered}; "
+                f"contextos {web_result.successful_contexts}/{web_result.context_attempts})"
+            )
+        elif web_runtime_failed:
+            print(
+                "Web Performance externo: HABILITADO (INCOMPLETO por erro operacional do enriquecimento; "
+                "o resultado SearchGEO principal foi preservado)"
+            )
         print(f"Problemas identificados: {result.finding_count}")
         print(f"Recomendações: {result.recommendation_count}")
         print(f"Relatório: {result.report_path}")
@@ -403,7 +424,7 @@ def main(argv: list[str] | None = None) -> int:
         content_path = result.audit_root / "report" / "content-suggestions.html"
         if content_path.is_file():
             print(f"Conteúdo e JSON-LD: {content_path}")
-        if web_report_path.is_file():
+        if web_report_path is not None and web_report_path.is_file():
             print(f"Core Web Vitals e Lighthouse: {web_report_path}")
         return 0
 
