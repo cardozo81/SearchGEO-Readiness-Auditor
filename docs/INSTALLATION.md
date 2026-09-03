@@ -87,26 +87,30 @@ O report deve conter `mobile.html` e `desktop.html`.
 
 Nenhum SDK adicional de provider é necessário.
 
-OpenAI:
+Antes de configurar uma credencial, confirme que ela pertence ao **produto de API suportado**, não apenas a uma assinatura interativa do fornecedor. A matriz completa está em [AI_GUIDE.md](AI_GUIDE.md).
+
+OpenAI — usar chave da **API Platform** com billing/quota e acesso ao modelo. Assinatura/créditos do ChatGPT não são saldo da API:
 
 ```powershell
-$env:OPENAI_API_KEY = "<chave>"
+$env:OPENAI_API_KEY = "<chave-da-API-Platform>"
 searchgeo audit https://example.com --max-pages 1 --ai-provider openai
 ```
 
-DeepSeek:
+DeepSeek — usar chave da DeepSeek API com saldo concedido e/ou recarregado disponível:
 
 ```powershell
-$env:DEEPSEEK_API_KEY = "<chave>"
+$env:DEEPSEEK_API_KEY = "<chave-da-DeepSeek-API>"
 searchgeo audit https://example.com --max-pages 1 --ai-provider deepseek
 ```
 
-MiMo:
+MiMo — o SearchGEO atual suporta o modo **Pay-as-you-go** com chave `sk-...`:
 
 ```powershell
-$env:MIMO_API_KEY = "<chave>"
+$env:MIMO_API_KEY = "<chave-sk-PAYG>"
 searchgeo audit https://example.com --max-pages 1 --ai-provider mimo
 ```
+
+Não use MiMo Token Plan `tp-...`: ele usa Base URL dedicada, créditos independentes e não é suportado pelo adapter atual. A documentação oficial da MiMo também restringe o Token Plan a ferramentas de programação e proíbe automated scripts/custom application backends fora desse escopo.
 
 Telemetria:
 
