@@ -1,6 +1,6 @@
 # SearchGEO Readiness Auditor — Specification Index
 
-**Status:** APPROVED BASELINE + M14/M15/M16/M17/M18 + SCORE-GEO-002 EVOLUTIONS  
+**Status:** APPROVED BASELINE + M14/M15/M16/M17/M18 + SCORE-GEO-002 + REPORT-SITE-GEO-001  
 **Baseline:** MVP Functional Specification  
 **Idioma normativo:** Português, preservando identificadores e termos técnicos quando necessário.
 
@@ -8,7 +8,7 @@
 
 Este diretório constitui a fonte normativa do SearchGEO Readiness Auditor.
 
-Uma IA, desenvolvedor ou ferramenta que assuma o projeto não deve depender do histórico de chats para descobrir requisitos já formalizados.
+Uma IA, desenvolvedor ou ferramenta que assuma o projeto não deve depender do histórico de chats para descobrir requisitos formalizados.
 
 Os documentos presentes neste diretório prevalecem sobre interpretações informais do histórico de conversa.
 
@@ -53,79 +53,98 @@ Nenhuma decisão funcional deve ser alterada silenciosamente durante implementa�
 ## 4. Documentos
 
 ### `01_PROJECT_CHARTER_SCOPE.md`
-Define propósito, escopo, princípios, MVP, exclusões e critérios de aceite.
+Propósito, escopo, princípios, exclusões e critérios de aceite.
 
 ### `02_DOMAIN_MODEL.md`
-Define entidades, relacionamentos, identificadores, estados e invariantes.
+Entidades, relacionamentos, identificadores, estados e invariantes.
 
 ### `03_BUSINESS_RULES.md`
-Define as 54 Business Rules `BR-GEO-001` a `BR-GEO-054`.
+Business Rules `BR-GEO-001` a `BR-GEO-054`.
 
 ### `04_WORKFLOWS.md`
-Define `WF-GEO-001` a `WF-GEO-012` e a ordem de execução.
+Workflows `WF-GEO-001` a `WF-GEO-012` e ordem de execução.
 
 ### `05_SCORING_MODEL.md`
-Define Score, Coverage, Confidence, Consolidation Status, aplicabilidade de dimensão e agregações. Baseline vigente: `SCORE-GEO-002`.
+Score, Coverage, Confidence, Consolidation, aplicabilidade e agregações. Baseline vigente: `SCORE-GEO-002`. Confidence representa força da conclusão, não qualidade textual isolada.
 
 ### `06_PRIORITIZATION_MODEL.md`
-Define Severity, Impact, Effort, Confidence e Priority.
+Severity, Impact, Effort, Confidence e Priority.
 
 ### `07_FUNCTIONAL_REQUIREMENTS.md`
-Define requisitos `FR-GEO-*` e `NFR-GEO-*`.
+Requisitos `FR-GEO-*` e `NFR-GEO-*`. Inclui `FR-GEO-073..079` para device context e report site.
 
 ### `08_TECHNICAL_ARCHITECTURE.md`
-Define a arquitetura local, modular e sem serviços obrigatórios.
+Arquitetura local/modular, seleção de dispositivo e finalização do report site.
 
 ### `09_IMPLEMENTATION_PLAN.md`
-Define a baseline de marcos e suas evoluções formalizadas.
+Baseline de marcos e evoluções formalizadas. Quando descrição histórica de output conflitar com `FR-GEO-046`/REPORT-SITE-GEO-001, prevalece o contrato final `report/`.
 
 ### `10_DECISIONS.md`
-Registra decisões humanas consolidadas e pendências corporativas. D-037 formaliza `SCORE-GEO-002`.
+Decisões humanas consolidadas e pendências corporativas. D-037 formaliza `SCORE-GEO-002`.
 
 ### `11_REPORTING_LANGUAGE_GLOSSARY.md`
-Define linguagem e apresentação do relatório HTML.
+Linguagem e apresentação do relatório.
 
 ### `12_AI_HANDOFF.md`
-Instrui qualquer IA que passe a trabalhar no projeto.
+Instruções para continuidade por IA/desenvolvedor.
 
 ### `13_MODEL_ROUTING_POLICY.md`
-Define qual classe de IA/modelo deve ser usada de acordo com esforço e criticidade.
+Política de uso de modelos conforme esforço/criticidade.
 
 ### `14_MULTI_URL_VISUAL_EVIDENCE_REMEDIATION.md`
-Define a evolução M14: auditoria explícita multi-URL em um único `audit_id`, recursos de domínio, screenshots, `ElementObservation`, actionability, referências técnicas e a distinção obrigatória entre zero calculado e ausência de cálculo.
+Evolução M14: multi-URL, recursos de domínio, screenshots, ElementObservation, actionability, referências e distinção entre zero calculado e ausência de cálculo.
 
 ### `15_ERROR_CENTRIC_REPORT_UX.md`
-Define a evolução M15: segundo HTML orientado a problema (`remediation.html`), separação global versus página, navegação lateral por path, refinamento tipográfico, guia das dez dimensões do Score GEO e interpretação consolidada ao fim do relatório.
+M15 histórico evoluído por `REPORT-SITE-GEO-001`: visão por domínio, páginas Mobile/Desktop, remediação, telemetria IA, referências, menu compartilhado e CSS externo.
 
 ### `16_ROOT_CAUSE_ELEMENT_REMEDIATION.md`
-Define a evolução M16: causa raiz evidence-backed por finding, classificação de precisão da localização, mapeamento de elemento(s)/selector quando comprovável, observado versus esperado, mudança exata, critérios de aceite e revalidação em `report.html` e `remediation.html`.
+M16: causa raiz evidence-backed, localização, observado versus esperado, mudança exata, aceite e revalidação.
 
 ### `17_REMEDIATION_PRECISION_REPORT_CONSISTENCY.md`
-Define a evolução M17: reason code específico, separação entre elemento/selector observado e alvo técnico, semântica coerente de actionability/prioridade/IA, redução de duplicação e diagnóstico de integridade RuleExecution → Finding.
+M17: reason code, observado versus alvo técnico, consistência e redução de duplicação.
 
 ### `18_MULTI_AI_PROVIDER_ROUTING.md`
-Define M18: multi-provider, roteamento determinístico, failover, quarantine por audit, URL lock e telemetria de uso/custo de IA. M18 não altera scoring.
+M18: multi-provider, routing determinístico, failover, quarantine, URL lock e telemetria. Não altera scoring.
 
 ### `19_SCORE_APPLICABILITY_GEO_MINIMUMS.md`
-Define `SCORE-GEO-002`, separando `NOT_APPLICABLE` legítimo de `NOT_CONSOLIDATED`, formalizando JSON-LD como reforço opcional e documentando premissas mínimas/contextuais de GEO.
+`SCORE-GEO-002`, `NOT_APPLICABLE` versus `NOT_CONSOLIDATED`, JSON-LD opcional e premissas mínimas/contextuais.
 
-## 5. Regra de mudança
+## 5. REPORT-SITE-GEO-001
 
-Mudanças que afetem:
+A evolução de apresentação está formalizada por `FR-GEO-046`, `FR-GEO-047`, `FR-GEO-063`, `FR-GEO-070` e `FR-GEO-073..079`, além de `08_TECHNICAL_ARCHITECTURE.md` e `15_ERROR_CENTRIC_REPORT_UX.md`.
 
-- escopo;
-- Business Rules;
-- scoring;
-- priorização;
-- interpretação do relatório;
-- requisitos corporativos;
+Contrato público:
 
-devem ser registradas como decisão explícita antes de alterar a baseline.
+```text
+<AUD-ID>/report/index.html
+<AUD-ID>/report/mobile.html       # condicional
+<AUD-ID>/report/desktop.html      # condicional
+<AUD-ID>/report/remediation.html
+<AUD-ID>/report/ai-usage.html
+<AUD-ID>/report/references.html
+<AUD-ID>/report/css/site.css
+```
+
+Default de dispositivo da CLI: `mobile`. `desktop` e `both` são seleções explícitas/parametrizáveis.
+
+## 6. Fonte externa e heurística
+
+O SearchGEO não deve representar seu score ou thresholds como standard GEO/AEO universal.
+
+Referências primárias atuais incluem Google Search Central, OpenAI Help Center, Schema.org, WHATWG e IETF/RFC. O guia oficial do Google de 2026 para recursos generativos reforça fundamentos de SEO e não cria markup especial GEO/AEO obrigatório.
+
+Heurísticas BR-GEO sem equivalente normativo devem permanecer identificadas como heurísticas/baseline interna.
+
+## 7. Regra de mudança
+
+Mudanças que afetem escopo, Business Rules, scoring, priorização, interpretação do relatório, device context público ou requisitos corporativos devem ser reconciliadas nesta baseline antes da conclusão do merge.
 
 Decisões puramente internas de implementação podem ser tomadas sem aprovação humana quando não alterarem comportamento funcional.
 
 ## M18 — Multi-AI Provider Abstraction, Reliability Routing & Usage Telemetry
-Fonte normativa específica: `18_MULTI_AI_PROVIDER_ROUTING.md`. M18 é extensão de infraestrutura; não altera Business Rules, PRIORITY-GEO-001, actionability, Desktop/Mobile nem a semântica de UNKNOWN.
+
+Fonte normativa específica: `18_MULTI_AI_PROVIDER_ROUTING.md`. M18 não altera Business Rules, PRIORITY-GEO-001, actionability nem semântica de UNKNOWN.
 
 ## SCORE-GEO-002 — Aplicabilidade e premissas mínimas GEO
+
 Fonte normativa específica: `19_SCORE_APPLICABILITY_GEO_MINIMUMS.md`. Mantém as dez dimensões, mas dimensões integralmente e legitimamente `NOT_APPLICABLE` não bloqueiam nem reduzem o Overall.
