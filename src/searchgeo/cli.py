@@ -187,32 +187,34 @@ def main(argv: list[str] | None = None) -> int:
             if args.max_pages <= 0:
                 raise ValueError("--max-pages must be greater than zero")
 
-            # Resolve once per run and freeze it in the process environment so
-            # rendering (M3) and every downstream consumer see the same device
-            # universe. CLI default is MOBILE to avoid unnecessary browser/AI
-            # work; --device-context or SEARCHGEO_DEVICE_CONTEXT can override.
+            # Resolve once per run so rendering and semantic analysis share the
+            # same device universe. The environment value is scoped to this CLI
+            # invocation and restored afterward, which prevents state leakage in
+            # embedded/test processes that call main() more than once.
             device_context = configured_device_context(cli_value=args.device_context, default="mobile")
+            previous_device_context = os.environ.get(DEVICE_CONTEXT_ENV)
             os.environ[DEVICE_CONTEXT_ENV] = device_context
-
-            provider = _semantic_provider(args)
-            # A urls file is an explicit URL_SET by definition, even when it
-            # contains one URL after comments/blank lines are removed. Direct
-            # CLI input remains backward compatible: one positional target is
-            # the classic single-target mode; multiple positionals are URL_SET.
-            audit_target: str | tuple[str, ...] = (
-                targets
-                if args.urls_file or len(targets) > 1
-                else targets[0]
-            )
-            result = run_audit(
-                audit_target,
-                audits_root=Path(args.audits_root),
-                project_name=args.project,
-                language=args.language,
-                market=args.market,
-                max_pages=args.max_pages,
-                semantic_provider=provider,
-            )
+            try:
+                provider = _semantic_provider(args)
+                audit_target: str | tuple[str, ...] = (
+                    targets
+                    if args.urls_file or len(targets) > 1
+                    else targets[0]
+                )
+                result = run_audit(
+                    audit_target,
+                    audits_root=Path(args.audits_root),
+                    project_name=args.project,
+                    language=args.language,
+                    market=args.market,
+                    max_pages=args.max_pages,
+                    semantic_provider=provider,
+                )
+            finally:
+                if previous_device_context is None:
+                    os.environ.pop(DEVICE_CONTEXT_ENV, None)
+                else:
+                    os.environ[DEVICE_CONTEXT_ENV] = previous_device_context
         except (OSError, ValueError, RuntimeError) as exc:
             _LOGGER.exception("Audit failed")
             parser.error(str(exc))
