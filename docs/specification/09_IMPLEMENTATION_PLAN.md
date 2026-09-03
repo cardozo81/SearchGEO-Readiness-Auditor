@@ -1,6 +1,6 @@
 # IMPLEMENTATION_PLAN.md
 
-**Status:** APPROVED — extended through M16
+**Status:** APPROVED — extended through M17
 
 ## M0 — Bootstrap
 
@@ -309,6 +309,51 @@ Critérios de conclusão:
 9. suíte determinística permanece verde;
 10. diff final não contém workflow temporário nem secrets.
 
+## M17 — Remediation Precision + Report Consistency
+
+Objetivo: tornar o diagnóstico técnico inequívoco para implementação e alinhar os dois relatórios à actionability real, sem alterar regras, scoring ou prioridade.
+
+Implementar:
+
+- projeção aditiva `root_cause_precision` por `finding_id`;
+- `reason_code` evidence-backed com precedência sobre resumo genérico da família da regra;
+- causa precisa para condições conhecidas, como `CANONICAL_ABSENT`;
+- separação explícita entre estado/selector do elemento observado e elemento/selector alvo da correção;
+- estados `PRESENT`, `ABSENT`, `CONTEXT_ONLY`, `NOT_APPLICABLE` e `NOT_DETERMINED` para elemento observado;
+- selector técnico alvo derivado deterministicamente da regra/recipe sem ser apresentado como observação;
+- copy de IA distinguindo ausência, tentativa sem sucesso, sucesso e disponibilidade parcial;
+- resumo executivo separando Findings, ações necessárias, revisões e melhorias opcionais;
+- plano priorizado que combina actionability e prioridade sem converter WARNING em FAIL;
+- `report.html` mais compacto, preservando causa, evidência, recipe e rastreabilidade mínima;
+- `remediation.html` como projeção completa da recipe e dos diagnósticos por ocorrência;
+- evidência sanitizada reutilizando a política de redaction existente;
+- diagnóstico explícito de integridade RuleExecution → Finding;
+- regressão multi-URL com a mesma regra em páginas distintas.
+
+Restrições:
+
+- preservar Business Rules e RuleResult;
+- preservar `SCORE-GEO-001`, `PRIORITY-GEO-001`, severity, actionability, Coverage, Confidence e Consolidation;
+- não criar Finding automaticamente para corrigir divergência de integridade;
+- não apresentar selector alvo como selector observado;
+- não inventar HTML ou causa técnica;
+- não expor credenciais ou valores sensíveis em evidências de rastreabilidade;
+- não introduzir nova chamada de IA para redigir remediações.
+
+Critérios de conclusão:
+
+1. reason específico prevalece quando persistido;
+2. canonical ausente mostra elemento `ABSENT`, selector observado `NÃO APLICÁVEL` e selector alvo separado;
+3. tentativa OpenAI indisponível não é descrita como análise externa concluída;
+4. resumo diferencia Finding de ação necessária/revisão/melhoria;
+5. `REVIEW_RECOMMENDED · P1` permanece semanticamente revisão;
+6. `report.html` reduz duplicação mantendo rastreabilidade mínima e evidência sanitizada;
+7. `remediation.html` preserva exemplo, decisão humana, aceite e revalidação por ocorrência;
+8. RuleExecution FAIL/WARNING sem Finding é sinalizada explicitamente;
+9. teste de duas páginas comprova um grupo transversal e diagnósticos independentes;
+10. suíte determinística permanece verde;
+11. diff final não contém workflow temporário nem secrets.
+
 ## Stable Local Baseline
 
 Critérios:
@@ -323,16 +368,18 @@ Critérios:
 - rules;
 - findings;
 - causa raiz e localização técnica evidence-backed;
+- distinção entre elemento observado e alvo técnico da correção;
 - IA opcional;
 - coverage/confidence;
 - scoring;
 - prioritization;
-- `report.html` orientado a página;
-- `remediation.html` orientado a problema;
+- `report.html` orientado a página e diagnóstico;
+- `remediation.html` orientado a problema/remediação completa;
+- integridade RuleExecution → Finding explicitável;
 - limitações explícitas;
 - testes críticos.
 
-Após M16, a baseline de reporting possui duas projeções complementares do mesmo estado persistido e uma camada aditiva de causa raiz/remediação por ocorrência.
+Após M17, a baseline de reporting possui duas projeções complementares, causa raiz por ocorrência e uma camada aditiva de precisão de diagnóstico/remediação sem alterar os contratos de scoring ou regras.
 
 Git/GitHub já são utilizados a partir do M0 para controle de versão e repositório de desenvolvimento. A adoção antecipada de Git/GitHub é uma decisão de processo de desenvolvimento e não torna GitHub dependência de execução do produto.
 
