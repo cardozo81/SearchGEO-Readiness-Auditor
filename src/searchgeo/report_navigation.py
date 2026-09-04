@@ -28,14 +28,18 @@ _NAV_ASIDE_RE = re.compile(
 )
 
 
-def available_navigation(report_dir: Path) -> tuple[tuple[str, str], ...]:
-    """Return canonical menu items whose target pages currently exist."""
-    return tuple((label, filename) for label, filename in NAV_ITEMS if (report_dir / filename).is_file())
+def available_navigation(report_dir: Path, current: str | None = None) -> tuple[tuple[str, str], ...]:
+    """Return canonical menu items available in the current report projection."""
+    return tuple(
+        (label, filename)
+        for label, filename in NAV_ITEMS
+        if (report_dir / filename).is_file() or filename == current
+    )
 
 
 def render_report_navigation(report_dir: Path, current: str) -> str:
     """Render the canonical report menu with only ``current`` marked active."""
-    links = available_navigation(report_dir)
+    links = available_navigation(report_dir, current)
     rendered = "".join(
         f"<a class='{'active' if filename == current else ''}' href='{escape(filename)}'>{escape(label)}</a>"
         for label, filename in links
