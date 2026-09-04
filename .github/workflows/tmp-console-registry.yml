@@ -1,0 +1,43 @@
+name: tmp-console-registry
+
+on:
+  push:
+    branches:
+      - feature/interactive-execution-console
+
+jobs:
+  validate-console-registry:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install clean editable package
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+      - name: Compile package
+        shell: pwsh
+        run: python -m compileall -q src tests
+      - name: Validate timezone and canonical registry
+        shell: pwsh
+        run: |
+          python -c "from zoneinfo import ZoneInfo; assert str(ZoneInfo('America/Sao_Paulo')) == 'America/Sao_Paulo'"
+          python -c "from searchgeo.provider_registry import auto_provider_ids,provider_registrations; assert tuple(x.id for x in provider_registrations()) == ('openai','deepseek','mimo','xai','qwen','gemini','anthropic'); assert auto_provider_ids() == ('openai','deepseek','mimo')"
+      - name: Console focused tests
+        shell: pwsh
+        run: |
+          python -m unittest tests.test_interactive_console
+          python -m unittest tests.test_console_provider_registry
+      - name: CLI provider surface
+        shell: pwsh
+        run: |
+          searchgeo --version
+          searchgeo audit --help | Tee-Object -Variable help
+          if (($help -join "`n") -notmatch "xai" -or ($help -join "`n") -notmatch "qwen" -or ($help -join "`n") -notmatch "gemini" -or ($help -join "`n") -notmatch "anthropic") { throw "provider extension choices missing from CLI" }
+      - name: Console startup and clean exit
+        shell: pwsh
+        run: python -c "from unittest.mock import patch; import searchgeo.interactive_console as c; p=patch('builtins.input', return_value='Q'); p.start(); assert c.main() == 0; p.stop()"
