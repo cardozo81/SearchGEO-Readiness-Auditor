@@ -19,13 +19,19 @@ Compatibilidade = **provider + produto/plano de API + credencial + endpoint + mo
 
 | Provider | Produto/plano | SearchGEO atual | Limitação principal |
 |---|---|---|---|
-| OpenAI | API Platform com API key da organização/projeto e billing/quota/model access | **Suportado** | billing de ChatGPT e API é separado |
+| OpenAI | API Platform com API key da organização/projeto e billing/quota/model access | **Suportado / QUALIFIED** | billing de ChatGPT e API é separado |
 | OpenAI | ChatGPT Free/Go/Plus/Pro/Business/Enterprise/Edu e créditos do produto ChatGPT/Codex | **Não são saldo de API** | assinatura/crédito interativo não substitui billing da API |
-| DeepSeek | DeepSeek API com `granted_balance` e/ou `topped_up_balance` | **Suportado** | `402` indica saldo insuficiente |
-| Xiaomi MiMo | PAYG, chave `sk-...`, `https://api.xiaomimimo.com/v1` | **Suportado** | exige saldo PAYG e acesso ao modelo |
+| DeepSeek | DeepSeek API com saldo disponível | **Suportado / PROVISIONAL** | key isolada não garante saldo/quota |
+| Xiaomi MiMo | PAYG, chave `sk-...`, `https://api.xiaomimimo.com/v1` | **Suportado / PROVISIONAL** | exige saldo PAYG e acesso ao modelo |
 | Xiaomi MiMo | Token Plan `tp-...`, Base URL `token-plan-...` | **Não suportado / não usar** | produto, endpoint e créditos independentes; termos/restrições próprios |
+| xAI / Grok | xAI API com key e modelo suportado | **PROVISIONAL / explicit-only** | disponibilidade no produto Grok não implica credencial/API compatível |
+| Alibaba Qwen | Model Studio/DashScope com key, região e endpoint compatíveis | **PROVISIONAL / explicit-only** | key e endpoint precisam pertencer à mesma região/workspace |
+| Google Gemini | Gemini API com key e endpoint/modelo suportados | **PROVISIONAL / explicit-only** | outras credenciais Google não são intercambiáveis automaticamente |
+| Anthropic Claude | Anthropic API com key e modelo suportado | **PROVISIONAL / explicit-only** | assinatura Claude não é saldo da API |
 
 Antes de habilitar um provider, confirme produto/plano, credencial, endpoint, saldo/quota/permissões e acesso ao modelo. Não altere endpoint/credencial para contornar restrições comerciais ou de uso.
+
+Os quatro providers adicionais permanecem fora de `AUTO` até qualificação humana com credenciais reais. Consulte [AI_PROVIDER_EXTENSIONS.md](AI_PROVIDER_EXTENSIONS.md) para endpoints, aliases, variáveis e gate de promoção.
 
 Fontes oficiais de plano/billing:
 
@@ -36,6 +42,10 @@ Fontes oficiais de plano/billing:
 - MiMo Token Plan: <https://mimo.mi.com/docs/en-US/tokenplan/Token%20Plan/subscription>
 - MiMo `tp-...` × `sk-...`: <https://mimo.mi.com/docs/en-US/tokenplan/Token%20Plan/quick-access>
 - MiMo errors: <https://mimo.mi.com/docs/en-US/api/guidance/error-codes>
+- xAI: <https://docs.x.ai/>
+- Alibaba Model Studio/Qwen: <https://www.alibabacloud.com/help/en/model-studio/>
+- Gemini API: <https://ai.google.dev/gemini-api/docs>
+- Anthropic API: <https://platform.claude.com/docs/>
 
 Planos/termos externos podem mudar; a documentação do provider prevalece.
 
@@ -86,9 +96,44 @@ Default `mimo-v2.5-pro` / `THINKING_ENABLED`; `mimo-v2.5` também é aceito. End
 
 **Não use Token Plan `tp-...`.** Ele possui Base URL e créditos separados. `tp-...` no endpoint PAYG pode resultar em `401`; `sk-...` com saldo PAYG insuficiente pode resultar em `402`.
 
+## Providers adicionais — seleção explícita
+
+Os aliases e IDs aceitos são:
+
+```text
+xai / grok
+qwen
+gemini
+anthropic / claude
+```
+
+Defaults atuais:
+
+```text
+XAI:       grok-4.6
+QWEN:      qwen3.8-max
+GEMINI:    gemini-3.8-flash
+ANTHROPIC: claude-sonnet-5
+```
+
+Variáveis de credencial:
+
+```text
+XAI_API_KEY
+DASHSCOPE_API_KEY
+GEMINI_API_KEY
+ANTHROPIC_API_KEY
+```
+
+Provider adicional sem sua própria key termina como `NOT_CONFIGURED`, com zero chamada externa. Não existe fallback para OpenAI/DeepSeek/MiMo quando a seleção é explícita.
+
+O caminho de sucesso real desses quatro adapters continua pendente quando não há credencial externa disponível. Isso não autoriza remover `PROVISIONAL` nem incluí-los em `AUTO`.
+
+Detalhamento completo: [AI_PROVIDER_EXTENSIONS.md](AI_PROVIDER_EXTENSIONS.md).
+
 ## Isolamento de credenciais
 
-Cada provider usa somente sua própria credencial. Ausência de `DEEPSEEK_API_KEY` ou `MIMO_API_KEY` nunca autoriza fallback para `OPENAI_API_KEY`. O mesmo princípio vale para testes: fixtures de ausência de token neutralizam credenciais reais do ambiente para impedir chamadas pagas acidentais.
+Cada provider usa somente sua própria credencial. Ausência de `DEEPSEEK_API_KEY`, `MIMO_API_KEY`, `XAI_API_KEY`, `DASHSCOPE_API_KEY`, `GEMINI_API_KEY` ou `ANTHROPIC_API_KEY` nunca autoriza reutilizar a key de outro provider. O mesmo princípio vale para testes: fixtures de ausência de token neutralizam credenciais reais do ambiente para impedir chamadas pagas acidentais.
 
 ## Provider explícito e AUTO
 
@@ -96,7 +141,9 @@ Provider explícito não faz cross-provider fallback. Uma falha qualificadora po
 
 `auto` cria uma cadeia imutável com providers elegíveis/configurados. O primeiro resultado válido encerra o contexto; provider falho pode ser quarantined. URL lock evita completar a mesma URL com provedores diferentes depois de pinning válido.
 
-Preferência default: OpenAI `gpt-5.6-terra` → DeepSeek `deepseek-v4-pro` → MiMo `mimo-v2.5-pro`.
+Preferência homologada: OpenAI `gpt-5.6-terra` → DeepSeek `deepseek-v4-pro` → MiMo `mimo-v2.5-pro`.
+
+xAI, Qwen, Gemini e Anthropic/Claude são `explicit-only` e não entram nessa cadeia enquanto permanecerem `PROVISIONAL`.
 
 ## Timeout
 
