@@ -12,6 +12,7 @@ from searchgeo.console_config import (
     PROVIDERS,
     SUPPORTED_MODELS,
     State,
+    apply_environment_defaults,
     is_secret,
     provider_capabilities,
     validate_env_value,
@@ -65,6 +66,8 @@ def _environment_menu(state: State) -> None:
             except (ValueError, OverflowError) as exc:
                 state.error = str(exc)
                 continue
+        issues = apply_environment_defaults(state, names={name})
+        state.error = "; ".join(issues)
         for selection, provider in PROVIDERS.items():
             if KEY_ENV[provider] == name:
                 state.runtime_blocks.pop(selection, None)
@@ -172,6 +175,8 @@ def _menu(state: State) -> str:
 
 def main() -> int:
     state = State()
+    issues = apply_environment_defaults(state)
+    state.error = "; ".join(issues)
     while True:
         choice = _menu(state)
         if choice == "Q":
