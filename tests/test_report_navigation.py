@@ -66,6 +66,50 @@ class ReportNavigationTests(unittest.TestCase):
             self.assertNotIn("content-suggestions.html", hrefs)
             self.assertNotIn("web-performance.html", hrefs)
 
+    def test_premium_css_and_br_geo_tooltips_are_shared_and_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            (report_dir / "css").mkdir()
+            (report_dir / "css" / "site.css").write_text("body{margin:0}\n", encoding="utf-8")
+            (report_dir / "index.html").write_text(
+                "<html><body><aside class='app-nav'><nav></nav></aside>"
+                "<main><p>BR-GEO-005 · Página tecnicamente recuperável</p>"
+                "<code>BR-GEO-006</code></main></body></html>",
+                encoding="utf-8",
+            )
+
+            normalize_report_navigation(report_dir)
+            normalize_report_navigation(report_dir)
+
+            css = (report_dir / "css" / "site.css").read_text(encoding="utf-8")
+            html = (report_dir / "index.html").read_text(encoding="utf-8")
+            self.assertEqual(css.count("searchgeo-premium-report-v1"), 1)
+            self.assertEqual(html.count("class='br-rule-tooltip'"), 1)
+            self.assertIn("Severidade HIGH · Verifica se a página é tecnicamente recuperável.", html)
+            self.assertIn("<code>BR-GEO-006</code>", html)
+
+    def test_ai_cost_total_sums_m18_and_m20_without_double_counting(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            (report_dir / "ai-usage.html").write_text(
+                "<html><body><aside class='app-nav'><nav></nav></aside><main>"
+                "<header class='hero'><div class='metric'><small>Custo estimado total</small>"
+                "<strong>0.01000000 USD</strong></div></header>"
+                "<section id='m20-ai-telemetry' class='panel'><div class='metric'>"
+                "<small>Custo estimado</small><strong>0.00250000 USD</strong></div></section>"
+                "</main></body></html>",
+                encoding="utf-8",
+            )
+
+            normalize_report_navigation(report_dir)
+            normalize_report_navigation(report_dir)
+
+            html = (report_dir / "ai-usage.html").read_text(encoding="utf-8")
+            self.assertEqual(html.count("data-api-cost-total='true'"), 1)
+            self.assertIn("Consumo projetado total de APIs com custo estimado: 0.01250000 USD", html)
+            self.assertIn("Análise M18 0.01000000 USD + Remediação M20 0.00250000 USD", html)
+            self.assertIn("não inclui integrações sem estimated_cost persistido", html)
+
 
 if __name__ == "__main__":
     unittest.main()
