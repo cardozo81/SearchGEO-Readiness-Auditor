@@ -229,41 +229,79 @@ def actual_m23_usage(workspace: Path | None) -> SyntheticUsage | None:
         return None
 
 
+def _latest_m23_event(path: Path) -> dict[str, object] | None:
+    if not path.is_file():
+        return None
+    try:
+        with path.open("rb") as stream:
+            stream.seek(0, os.SEEK_END)
+            size = stream.tell()
+            start = max(size - 65536, 0)
+            stream.seek(start)
+            payload = stream.read()
+    except OSError:
+        return None
+    lines = payload.decode("utf-8", errors="replace").splitlines()
+    if start and lines:
+        lines = lines[1:]
+    for line in reversed(lines[-120:]):
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict) and str(event.get("event") or "").startswith("M23_"):
+            return event
+    return None
+
+
 def observe_m23_workspace(workspace: Path, state: State) -> None:
     """Project the latest M23 JSONL event into the single-screen runtime header."""
     path = workspace / "logs" / "audit.log"
-    if not path.is_file():
-        return
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return
-    event = None
-    for line in reversed(lines[-80:]):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(payload, dict) and str(payload.get("event") or "").startswith("M23_"):
-            event = payload
-            break
+    event = _latest_m23_event(path)
     if event is None:
         return
+    from searchgeo.console_runtime import set_runtime_progress
+
     name = str(event.get("event") or "")
     if name == "M23_STARTED" and event.get("enabled"):
         state.status = "SYNTHETIC_APDEX"
         state.operation = "BROWSER:SYNTHETIC_APDEX"
+        set_runtime_progress(state, "Synthetic Apdex M23", 0.0, detail="preparando navegações sintéticas", exact=True)
     elif name == "M23_APDEX_SAMPLE":
         state.status = "SYNTHETIC_APDEX"
         state.operation = "BROWSER:SYNTHETIC_APDEX"
         state.current_url = str(event.get("url") or state.current_url)
         state.current_device = str(event.get("device") or state.current_device).upper()
+        context_index = max(int(event.get("context_index") or 1), 1)
+        context_total = max(int(event.get("context_total") or 1), 1)
+        context_percent = min(max(float(event.get("progress_percent") or 0.0), 0.0), 100.0)
+        overall = min(((context_index - 1) + context_percent / 100.0) / context_total * 100.0, 100.0)
+        valid = int(event.get("valid_samples") or 0)
+        target = int(event.get("target_valid_samples") or 0)
+        attempts = int(event.get("attempt_count") or 0)
+        max_attempts = int(event.get("max_attempts") or 0)
+        detail = (
+            f"contexto {context_index}/{context_total}; válidas {valid}/{target}; "
+            f"tentativas {attempts}/{max_attempts}; último={event.get('classification') or event.get('status') or '-'}"
+        )
+        set_runtime_progress(state, "Synthetic Apdex M23", overall, detail=detail, exact=True)
     elif name == "M23_COMPLETED":
         state.status = "FINALIZING"
         state.operation = "LOCAL:M23_REPORT"
+        set_runtime_progress(
+            state,
+            "Finalização do M23",
+            100.0,
+            detail=(
+                f"M23 concluído: {int(event.get('valid_samples') or 0)} válidas; "
+                f"{int(event.get('invalid_samples') or 0)} inválidas"
+            ),
+            exact=True,
+        )
     elif name in {"M23_RUNTIME_FAILURE", "M23_REPORT_FAILURE"}:
         state.status = "M23_LIMITATION"
         state.operation = "LOCAL:M23_FAIL_OPEN"
+        set_runtime_progress(state, "Limitação operacional M23", 100.0, detail=name, exact=True)
 
 
 def run_audit_from_console(state: State) -> int:
