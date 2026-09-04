@@ -19,6 +19,7 @@ from searchgeo.m21_persistence import (
     WebPerformanceObservation,
     WebPerformanceRun,
 )
+from searchgeo.operational_log import try_append_operational_event
 from searchgeo.persistence import AuditWorkspace
 
 
@@ -144,6 +145,11 @@ class M21ExecutionResult:
     pages_considered: int
     context_attempts: int
     successful_contexts: int
+    pagespeed_attempts: int
+    pagespeed_successes: int
+    crux_attempts: int
+    crux_successes: int
+    partial_contexts: int
     observation_ids: tuple[str, ...]
 
 
@@ -158,6 +164,19 @@ def execute_m21(
     """Collect external lab/field performance evidence without changing SCORE-GEO-002."""
     cfg = (config or WebPerformanceConfig()).validate()
     now = _utc_now()
+    try_append_operational_event(
+        workspace,
+        "M21_STARTED",
+        audit_id=audit_id,
+        enabled=cfg.enabled,
+        field_source=cfg.field_source,
+        max_pages=cfg.max_pages,
+        timeout_seconds=cfg.timeout_seconds,
+        categories=cfg.categories,
+        pagespeed_api_key_configured=bool(cfg.pagespeed_api_key),
+        crux_api_key_configured=bool(cfg.crux_api_key),
+    )
+
     with M21Persistence(workspace) as store:
         if not cfg.enabled:
             store.upsert_run(WebPerformanceRun(
@@ -166,7 +185,34 @@ def execute_m21(
                 pagespeed_successes=0, crux_successes=0, categories=cfg.categories,
                 reason="EXTERNAL_WEB_PERFORMANCE_DISABLED", updated_at=now,
             ))
-            return M21ExecutionResult("DISABLED", False, 0, 0, 0, ())
+            try_append_operational_event(
+                workspace,
+                "M21_COMPLETED",
+                audit_id=audit_id,
+                status="DISABLED",
+                reason="EXTERNAL_WEB_PERFORMANCE_DISABLED",
+                pages_considered=0,
+                context_attempts=0,
+                successful_contexts=0,
+                partial_contexts=0,
+                pagespeed_attempts=0,
+                pagespeed_successes=0,
+                crux_attempts=0,
+                crux_successes=0,
+            )
+            return M21ExecutionResult(
+                status="DISABLED",
+                enabled=False,
+                pages_considered=0,
+                context_attempts=0,
+                successful_contexts=0,
+                pagespeed_attempts=0,
+                pagespeed_successes=0,
+                crux_attempts=0,
+                crux_successes=0,
+                partial_contexts=0,
+                observation_ids=(),
+            )
 
         psi = pagespeed_client or PageSpeedInsightsClient(cfg.pagespeed_api_key)
         crux = crux_client
@@ -183,7 +229,10 @@ def execute_m21(
         selected_page_ids = set(ordered_page_ids if cfg.max_pages == 0 else ordered_page_ids[: cfg.max_pages])
         contexts = [context for context in contexts if context["page_id"] in selected_page_ids]
 
-        attempts = successes = psi_successes = crux_successes = 0
+        attempts = successes = 0
+        psi_attempts = psi_successes = 0
+        crux_attempts = crux_successes = 0
+        partial_contexts = 0
         observation_ids: list[str] = []
 
         for context in contexts:
@@ -203,6 +252,7 @@ def execute_m21(
             psi_http_status: int | None = None
             crux_http_status: int | None = None
 
+            psi_attempts += 1
             try:
                 response = psi.run(url=url, strategy=strategy, categories=cfg.categories, timeout_seconds=cfg.timeout_seconds)
                 psi_payload = response.payload
@@ -215,6 +265,18 @@ def execute_m21(
                     http_status=response.http_status, duration_ms=response.duration_ms, error_code=None,
                     error_message=None, artifact_reference=psi_artifact, created_at=_utc_now(),
                 ))
+                try_append_operational_event(
+                    workspace,
+                    "M21_EXTERNAL_ATTEMPT",
+                    audit_id=audit_id,
+                    service="PAGESPEED_INSIGHTS",
+                    status="SUCCESS",
+                    url=url,
+                    device=device.value,
+                    http_status=response.http_status,
+                    duration_ms=response.duration_ms,
+                    artifact_reference=psi_artifact,
+                )
             except ExternalServiceError as exc:
                 errors.append(f"PAGESPEED:{exc.error_code or exc.http_status or 'ERROR'}")
                 store.add_attempt(WebPerformanceAttempt(
@@ -223,6 +285,20 @@ def execute_m21(
                     http_status=exc.http_status, duration_ms=exc.duration_ms, error_code=exc.error_code,
                     error_message=_bounded(str(exc), 512), artifact_reference=None, created_at=_utc_now(),
                 ))
+                try_append_operational_event(
+                    workspace,
+                    "M21_EXTERNAL_ATTEMPT",
+                    level="WARNING",
+                    audit_id=audit_id,
+                    service="PAGESPEED_INSIGHTS",
+                    status="ERROR",
+                    url=url,
+                    device=device.value,
+                    http_status=exc.http_status,
+                    duration_ms=exc.duration_ms,
+                    error_code=exc.error_code,
+                    error_message=_bounded(str(exc), 512),
+                )
 
             field_data, field_source, field_scope = _field_from_pagespeed(psi_payload)
             direct_crux_requested = cfg.field_source == "crux" or (cfg.field_source == "auto" and field_data is None and crux is not None)
@@ -232,6 +308,7 @@ def execute_m21(
                 field_data, field_source, field_scope = None, None, None
 
             if direct_crux_requested and crux is not None:
+                crux_attempts += 1
                 try:
                     response = crux.query(url=url, form_factor=form_factor, timeout_seconds=cfg.timeout_seconds)
                     crux_payload = response.payload
@@ -244,6 +321,18 @@ def execute_m21(
                         http_status=response.http_status, duration_ms=response.duration_ms, error_code=None,
                         error_message=None, artifact_reference=crux_artifact, created_at=_utc_now(),
                     ))
+                    try_append_operational_event(
+                        workspace,
+                        "M21_EXTERNAL_ATTEMPT",
+                        audit_id=audit_id,
+                        service="CRUX_API",
+                        status="SUCCESS",
+                        url=url,
+                        device=device.value,
+                        http_status=response.http_status,
+                        duration_ms=response.duration_ms,
+                        artifact_reference=crux_artifact,
+                    )
                     parsed = _field_from_crux(crux_payload)
                     if parsed is not None:
                         field_data, field_source, field_scope = parsed, "CRUX_API", _crux_scope(crux_payload)
@@ -255,8 +344,32 @@ def execute_m21(
                         http_status=exc.http_status, duration_ms=exc.duration_ms, error_code=exc.error_code,
                         error_message=_bounded(str(exc), 512), artifact_reference=None, created_at=_utc_now(),
                     ))
+                    try_append_operational_event(
+                        workspace,
+                        "M21_EXTERNAL_ATTEMPT",
+                        level="WARNING",
+                        audit_id=audit_id,
+                        service="CRUX_API",
+                        status="ERROR",
+                        url=url,
+                        device=device.value,
+                        http_status=exc.http_status,
+                        duration_ms=exc.duration_ms,
+                        error_code=exc.error_code,
+                        error_message=_bounded(str(exc), 512),
+                    )
             elif cfg.field_source == "crux" and crux is None:
                 errors.append("CRUX:NOT_CONFIGURED")
+                try_append_operational_event(
+                    workspace,
+                    "M21_EXTERNAL_ATTEMPT",
+                    level="WARNING",
+                    audit_id=audit_id,
+                    service="CRUX_API",
+                    status="NOT_CONFIGURED",
+                    url=url,
+                    device=device.value,
+                )
 
             lab = _parse_lighthouse(psi_payload)
             cwv = _assess_cwv(field_data)
@@ -267,6 +380,8 @@ def execute_m21(
                 status = "SUCCESS" if not errors else "PARTIAL"
             else:
                 status = "UNAVAILABLE"
+            if status == "PARTIAL":
+                partial_contexts += 1
 
             store.add_observation(WebPerformanceObservation(
                 observation_id=observation_id, audit_id=audit_id, page_id=page_id, snapshot_id=snapshot_id,
@@ -289,12 +404,12 @@ def execute_m21(
 
         if attempts == 0:
             run_status, reason = "NO_CONTEXTS", "NO_RENDERED_CONTEXTS"
-        elif successes == attempts:
-            run_status, reason = "SUCCESS", None
-        elif successes > 0:
-            run_status, reason = "PARTIAL", "ONE_OR_MORE_EXTERNAL_CONTEXTS_UNAVAILABLE"
-        else:
+        elif successes == 0:
             run_status, reason = "UNAVAILABLE", "EXTERNAL_WEB_PERFORMANCE_UNAVAILABLE"
+        elif partial_contexts > 0 or successes < attempts:
+            run_status, reason = "PARTIAL", "ONE_OR_MORE_EXTERNAL_COMPONENTS_UNAVAILABLE"
+        else:
+            run_status, reason = "SUCCESS", None
 
         store.upsert_run(WebPerformanceRun(
             audit_id=audit_id, enabled=True, status=run_status, field_source=cfg.field_source,
@@ -303,7 +418,34 @@ def execute_m21(
             categories=cfg.categories, reason=reason, updated_at=_utc_now(),
         ))
 
-    return M21ExecutionResult(run_status, True, len(selected_page_ids), attempts, successes, tuple(observation_ids))
+    try_append_operational_event(
+        workspace,
+        "M21_COMPLETED",
+        audit_id=audit_id,
+        status=run_status,
+        reason=reason,
+        pages_considered=len(selected_page_ids),
+        context_attempts=attempts,
+        successful_contexts=successes,
+        partial_contexts=partial_contexts,
+        pagespeed_attempts=psi_attempts,
+        pagespeed_successes=psi_successes,
+        crux_attempts=crux_attempts,
+        crux_successes=crux_successes,
+    )
+    return M21ExecutionResult(
+        status=run_status,
+        enabled=True,
+        pages_considered=len(selected_page_ids),
+        context_attempts=attempts,
+        successful_contexts=successes,
+        pagespeed_attempts=psi_attempts,
+        pagespeed_successes=psi_successes,
+        crux_attempts=crux_attempts,
+        crux_successes=crux_successes,
+        partial_contexts=partial_contexts,
+        observation_ids=tuple(observation_ids),
+    )
 
 
 def _audit_contexts(workspace: AuditWorkspace, audit_id: str) -> list[dict[str, Any]]:
