@@ -2,6 +2,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
+from searchgeo.console_artifacts import audit_workspace, report_entrypoint
 from searchgeo.console_config import (
     State,
     apply_environment_defaults,
@@ -11,6 +12,7 @@ from searchgeo.console_config import (
     provider_capabilities,
     validate_env_value,
 )
+from searchgeo.console_help import current_cost_summary, environment_help, menu_cost_badges
 
 
 class InteractiveConsoleTests(unittest.TestCase):
@@ -138,6 +140,61 @@ class InteractiveConsoleTests(unittest.TestCase):
         self.assertIn("--web-performance", command)
         self.assertIn("--web-performance-field-source", command)
         self.assertIn("none", command)
+
+    def test_cost_help_surfaces_external_cost_and_volume_multipliers(self) -> None:
+        state = State(
+            ai_provider="openai",
+            content_remediation=True,
+            device="both",
+            web_performance=True,
+            web_max_pages=3,
+        )
+        summary = " ".join(current_cost_summary(state))
+        self.assertIn("cobrança por uso", summary)
+        self.assertIn("acrescentar chamadas de IA", summary)
+        self.assertIn("BOTH", summary)
+        self.assertIn("até 3 página(s)", summary)
+        badges = menu_cost_badges(state)
+        self.assertEqual(badges["ai"], " [CUSTO EXTERNO]")
+        self.assertEqual(badges["remediation"], " [CUSTO IA ADICIONAL]")
+        self.assertEqual(badges["web"], " [QUOTA EXTERNA]")
+
+    def test_environment_help_has_generic_rules_for_future_provider_variables(self) -> None:
+        purpose, cost = environment_help("FUTURE_PROVIDER_API_KEY")
+        self.assertIn("Credencial", purpose)
+        self.assertIn("CUSTO", cost)
+        purpose, cost = environment_help("SEARCHGEO_FUTURE_PROVIDER_MODEL")
+        self.assertIn("modelo", purpose)
+        self.assertIn("preços", cost)
+        purpose, cost = environment_help("SEARCHGEO_FUTURE_PROVIDER_REASONING_EFFORT")
+        self.assertIn("reasoning", purpose)
+        self.assertIn("custo", cost)
+
+    def test_artifact_navigation_resolves_only_the_session_audit(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            wanted = root / "AUD-SESSION"
+            unrelated = root / "AUD-OTHER"
+            (wanted / "report").mkdir(parents=True)
+            unrelated.mkdir()
+            entrypoint = wanted / "report" / "index.html"
+            entrypoint.write_text("<html></html>", encoding="utf-8")
+            state = State(audits_root=str(root), audit_id="AUD-SESSION")
+            self.assertEqual(audit_workspace(state), wanted.resolve())
+            self.assertEqual(report_entrypoint(audit_workspace(state)), entrypoint.resolve())
+            state.audit_id = ""
+            self.assertIsNone(audit_workspace(state))
+
+    def test_report_entrypoint_supports_legacy_fallback_without_hiding_current_layout(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory) / "AUD-X"
+            (workspace / "report").mkdir(parents=True)
+            legacy = workspace / "report.html"
+            legacy.write_text("legacy", encoding="utf-8")
+            self.assertEqual(report_entrypoint(workspace), legacy.resolve())
+            current = workspace / "report" / "index.html"
+            current.write_text("current", encoding="utf-8")
+            self.assertEqual(report_entrypoint(workspace), current.resolve())
 
 
 if __name__ == "__main__":
