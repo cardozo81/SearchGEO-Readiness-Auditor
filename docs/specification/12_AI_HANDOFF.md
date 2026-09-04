@@ -25,7 +25,7 @@ Antes de qualquer novo trabalho:
 1. confirme o HEAD corrente de `main`;
 2. confirme os marcos efetivamente integrados em `main` por commits e PRs merged;
 3. confirme que não existe branch ou PR de marco anterior com conteúdo exclusivo pendente;
-4. leia também todas as especificações evolutivas registradas em `00_SPEC_INDEX.md`, mesmo quando `09_IMPLEMENTATION_PLAN.md` ainda possuir descrições históricas de marcos anteriores;
+4. leia também todas as especificações evolutivas registradas em `00_SPEC_INDEX.md`, incluindo `22_SAFE_AI_PROVIDER_EXTENSIONS.md`;
 5. derive o próximo marco do estado confirmado de `main` + baseline normativa vigente.
 
 `main` é a referência operacional para determinar o que está efetivamente integrado.
@@ -62,7 +62,10 @@ Bloqueio real interrompe a cascata antes de iniciar o marco seguinte.
 - Deterministic First;
 - IA opcional;
 - NoneProvider obrigatório;
-- OpenAI/DeepSeek/MiMo isolados por provider no runtime vigente;
+- OpenAI/DeepSeek/MiMo permanecem baseline M18 e cadeia `AUTO`;
+- xAI/Grok, Qwen, Gemini e Anthropic/Claude são providers de extensão `PROVISIONAL`, explicit-only enquanto não concluído o gate humano;
+- nenhuma key de provider de extensão pode alterar a cadeia `AUTO = OpenAI → DeepSeek → MiMo`;
+- credenciais de todos os providers permanecem isoladas;
 - `SCORE-GEO-002` permanece scoring baseline enquanto não houver nova decisão/versionamento explícito;
 - M20 textual é opcional/advisory e não altera scoring;
 - M21 PageSpeed/CrUX é evidência externa complementar, default OFF para rede externa e não altera scoring;
@@ -70,7 +73,22 @@ Bloqueio real interrompe a cascata antes de iniciar o marco seguinte.
 - relatório HTML estático em português;
 - testes mínimos orientados a risco.
 
-## 6. M21 — regra de continuidade
+## 6. Safe AI Provider Extensions — regra de continuidade
+
+Ao trabalhar com xAI/Qwen/Gemini/Anthropic ou no routing de IA:
+
+1. leia `22_SAFE_AI_PROVIDER_EXTENSIONS.md` e D-039;
+2. preserve `src/searchgeo/m18_ai.py`, `src/searchgeo/cli.py` e `src/searchgeo/m20_ai.py` como core homologado, salvo decisão explícita posterior;
+3. preserve `AUTO = OpenAI → DeepSeek → MiMo` enquanto os providers de extensão estiverem provisórios;
+4. não promova provider para `QUALIFIED` nem o inclua em AUTO apenas porque possui key configurada;
+5. mantenha key/model/endpoint isolados por provider;
+6. preserve schema/evidence validation, fail-closed, quarantine e telemetria normalizada;
+7. M20 de provider de extensão não pode reativar provider quarantined em M7;
+8. preços dos providers provisórios não entram no catálogo homologado sem qualificação específica de preço;
+9. regressão automatizada deve cobrir também a baseline M18 existente;
+10. antes de merge/promoção, exigir smoke humano real dos quatro providers novos e regressão de OpenAI/DeepSeek/MiMo/AUTO.
+
+## 7. M21 — regra de continuidade
 
 Ao trabalhar com Core Web Vitals/Lighthouse:
 
@@ -85,7 +103,7 @@ Ao trabalhar com Core Web Vitals/Lighthouse:
 9. preserve raw response artifacts e telemetria M21 sem secrets;
 10. mantenha `report/web-performance.html` claramente separado de `ai-usage.html` e do score SearchGEO.
 
-## 7. Não reabrir decisões
+## 8. Não reabrir decisões
 
 Não solicitar decisão humana para:
 
@@ -99,7 +117,7 @@ Não solicitar decisão humana para:
 
 Escolha a solução técnica mais simples compatível com a baseline, corrija falhas solucionáveis, revalide e continue.
 
-## 8. Interromper somente diante de blocker real
+## 9. Interromper somente diante de blocker real
 
 A execução deve interromper quando houver pelo menos uma condição que dependa necessariamente de decisão ou ação humana, incluindo:
 
@@ -117,11 +135,13 @@ A execução deve interromper quando houver pelo menos uma condição que depend
 
 Problemas técnicos ordinários e solucionáveis não constituem blocker.
 
-## 9. Pendências humanas de ambiente/corporativas
+Para a expansão de providers, a ausência de credenciais reais não bloqueia implementação/CI/documentação, mas **bloqueia o gate de smoke e, por D-039, o merge/promoção**.
+
+## 10. Pendências humanas de ambiente/corporativas
 
 Permanecem sujeitas às decisões D-028 e D-029, entre elas:
 
-- acesso técnico à OpenAI/provedores IA quando escolhidos;
+- acesso técnico ao(s) provider(s) IA escolhidos;
 - autorização corporativa de IA externa;
 - provider permitido;
 - execução de browser/Chromium;
