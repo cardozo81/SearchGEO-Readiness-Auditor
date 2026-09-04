@@ -8,12 +8,36 @@ Para `searchgeo audit`, argumentos CLI explícitos prevalecem sobre defaults de 
 
 Para `searchgeo-console`:
 
-1. o arquivo `searchgeo-console.ini` fornece os parâmetros persistidos não sensíveis;
-2. variáveis de ambiente continuam disponíveis para credenciais e overrides avançados;
-3. alterações feitas no menu valem para a sessão atual;
-4. `S. Salvar configuração INI` persiste apenas o estado não sensível.
+1. `searchgeo-console.ini` fornece parâmetros persistidos não sensíveis;
+2. variáveis de ambiente ficam disponíveis para credenciais e overrides avançados;
+3. alterações de sessão valem imediatamente para o processo atual;
+4. `S. Salvar configuração INI` persiste somente estado não sensível;
+5. no Windows, secrets podem opcionalmente ser persistidos no ambiente **User** somente por ação explícita no menu de credenciais.
 
 O console nunca grava API keys, tokens, senhas ou credentials no INI.
+
+## Variáveis de ambiente: referência detalhada
+
+A referência completa de **todas as variáveis expostas pelo console**, incluindo finalidade, tipo, domínio aceito, default efetivo, dependências, custo/impacto, exemplos e passo a passo para obtenção das credenciais, está em:
+
+- [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md)
+
+O menu `E. Variáveis de ambiente / credenciais` usa a mesma organização por fronteira funcional:
+
+```text
+1. Aplicação e execução
+2. IA — credenciais
+3. IA — modelos e reasoning
+4. IA — endpoints avançados
+5. Web Performance / Google APIs
+6. Synthetic Apdex
+7. Browser / Playwright
+A. Todas as variáveis
+D. Abrir documentação detalhada
+V. Voltar
+```
+
+Quando existe um default seguro, o menu mostra o **default efetivo** em vez de induzir o usuário a criar uma variável redundante. Variáveis de segredo e valores semanticamente obrigatórios sem default, como o threshold T do Synthetic Apdex quando a medição é habilitada, continuam exigindo entrada explícita.
 
 ## Arquivo INI do console
 
@@ -75,6 +99,8 @@ audits-root             = audits
 Synthetic Apdex         = off
 ```
 
+Esses defaults tornam possível uma primeira auditoria local sem preencher a lista de variáveis: para o cenário sem IA e sem integrações externas, basta informar o alvo.
+
 ## IA
 
 Providers concretos suportados pelo registry:
@@ -116,11 +142,11 @@ GEMINI_API_KEY
 ANTHROPIC_API_KEY
 ```
 
-A existência da variável não garante saldo, quota, plano compatível ou acesso ao modelo.
+A existência da variável não garante saldo, quota, plano compatível ou acesso ao modelo. Consulte [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md) para o procedimento de criação de cada chave.
 
 ### Modelos defaults públicos
 
-Quando não há override explícito, o SearchGEO privilegia o modelo mais simples disponível na integração atual:
+Sem override explícito:
 
 ```text
 OPENAI     gpt-5.6-luna
@@ -148,9 +174,7 @@ GEMINI     LOW
 ANTHROPIC  LOW
 ```
 
-Variáveis existentes ou adicionadas pelo adapter continuam sendo respeitadas como overrides. O console expõe o esforço diretamente na opção 4 quando há controle validado para aquele provider.
-
-Qwen permanece `PROVIDER_DEFAULT` porque o adapter atual não expõe um controle de reasoning validado.
+Variáveis de reasoning continuam sendo respeitadas como overrides quando o adapter possui controle validado. Qwen permanece `PROVIDER_DEFAULT` porque o adapter atual não expõe um controle de reasoning validado.
 
 ### Timeout de IA
 
@@ -228,7 +252,7 @@ Default:
 performance,accessibility,best-practices,seo
 ```
 
-A ausência de uma categoria configurada deve aparecer como **não solicitada**, não como falha do website.
+O editor de variáveis rejeita categorias desconhecidas ou duplicadas. A ausência de uma categoria configurada deve aparecer como **não solicitada**, não como falha do website.
 
 ## Synthetic Apdex
 
@@ -257,7 +281,7 @@ delay                  = 1 s
 concorrência           = 1; máximo 2
 ```
 
-O timeout do Synthetic Apdex é distinto do timeout PageSpeed e do timeout de IA.
+O timeout do Synthetic Apdex é distinto do timeout PageSpeed e do timeout de IA. T não recebe um valor arbitrário: ele precisa ser informado quando a feature é habilitada.
 
 ## Dispositivo
 
@@ -278,10 +302,13 @@ Default: `mobile`.
 ## Segurança
 
 - use variáveis de ambiente ou secret manager apropriado para credenciais;
-- o console permite inserir/remover credenciais, mas não as persiste no INI;
-- secrets são mascarados como `[SET]`;
+- o console permite inserir/remover credenciais sem gravá-las no INI;
+- no Windows, a persistência opcional de secret usa somente o escopo `User` e exige confirmação explícita;
+- a sessão atual prevalece sobre valores herdados do SO durante o processo aberto;
+- secrets são mascarados como `[SET]` e a origem é exibida sem revelar o valor;
 - logs e relatórios não devem registrar valores de segredo;
-- não assuma que uma credencial configurada implica crédito/quota.
+- não assuma que uma credencial configurada implica crédito/quota;
+- variáveis de ambiente persistidas não equivalem a um secret manager.
 
 ## Identificadores internos
 
@@ -289,6 +316,7 @@ Tabelas, eventos, módulos e documentação normativa podem manter identificador
 
 ## Documentos relacionados
 
+- [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md)
 - [INTERACTIVE_CONSOLE.md](INTERACTIVE_CONSOLE.md)
 - [CLI_REFERENCE.md](CLI_REFERENCE.md)
 - [AI_GUIDE.md](AI_GUIDE.md)
