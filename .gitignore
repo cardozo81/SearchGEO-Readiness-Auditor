@@ -1,0 +1,15 @@
+# Local Python/runtime artifacts
+.venv/
+__pycache__/
+*.py[cod]
+
+# Local audit outputs
+audits/
+
+# Interactive console user configuration (non-secret but machine/user-specific)
+searchgeo-console.ini
+searchgeo-console.ini.tmp
+
+# Common local tooling
+.pytest_cache/
+.coverage
