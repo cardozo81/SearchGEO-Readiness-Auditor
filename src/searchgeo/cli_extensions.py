@@ -1,4 +1,4 @@
-"""CLI shim for additive providers and M23 Synthetic Navigation Apdex."""
+"""CLI shim for additive providers and Synthetic Navigation Apdex."""
 
 from __future__ import annotations
 
@@ -15,12 +15,13 @@ from searchgeo.operational_log import try_append_operational_event
 from searchgeo.provider_extensions import build_semantic_provider
 from searchgeo.provider_extensions_m20 import build_content_remediation_router
 from searchgeo.provider_registry import extension_cli_choices
+from searchgeo.report_consistency import reconcile_report_outputs
 
 _LEGACY_BUILD_PARSER = _legacy_cli.build_parser
 
 
 def build_parser():
-    """Return a fresh legacy parser with provider and M23 extensions."""
+    """Return a fresh legacy parser with provider and Synthetic Apdex extensions."""
     parser = _LEGACY_BUILD_PARSER()
     subparsers = next(
         action
@@ -54,7 +55,7 @@ def _resolve_m23_config(argv: list[str]) -> SyntheticApdexConfig | None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run legacy CLI with additive providers and fail-open M23 enrichment."""
+    """Run legacy CLI with additive providers and fail-open Synthetic Apdex enrichment."""
     effective_argv = list(argv) if argv is not None else list(sys.argv[1:])
     m23_config = _resolve_m23_config(effective_argv)
 
@@ -104,7 +105,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 workspace=workspace,
                 config=m23_config,
             )
-        except Exception as exc:  # M23 is strictly fail-open after core audit
+        except Exception as exc:  # Synthetic Apdex is strictly fail-open after core audit
             m23_error = f"{type(exc).__name__}: {str(exc)[:512]}"
             try_append_operational_event(
                 workspace,
@@ -132,31 +133,42 @@ def main(argv: Sequence[str] | None = None) -> int:
         nonlocal m23_report_path, m23_error
         audit_id = kwargs.get("audit_id")
         workspace = kwargs.get("workspace")
-        try:
-            return original_enrich_m21(*args, **kwargs)
-        finally:
-            if (
-                m23_config is not None
-                and m23_config.enabled
-                and m23_result is not None
-                and audit_id is not None
-                and workspace is not None
-            ):
-                try:
-                    m23_report_path = enrich_m23_report_site(
-                        audit_id=audit_id,
-                        workspace=workspace,
-                    )
-                except Exception as exc:
-                    m23_error = f"{type(exc).__name__}: {str(exc)[:512]}"
-                    try_append_operational_event(
-                        workspace,
-                        "M23_REPORT_FAILURE",
-                        level="ERROR",
-                        audit_id=audit_id,
-                        error_type=type(exc).__name__,
-                        error_message=str(exc)[:512],
-                    )
+        result = original_enrich_m21(*args, **kwargs)
+        if (
+            m23_config is not None
+            and m23_config.enabled
+            and m23_result is not None
+            and audit_id is not None
+            and workspace is not None
+        ):
+            try:
+                m23_report_path = enrich_m23_report_site(
+                    audit_id=audit_id,
+                    workspace=workspace,
+                )
+            except Exception as exc:
+                m23_error = f"{type(exc).__name__}: {str(exc)[:512]}"
+                try_append_operational_event(
+                    workspace,
+                    "M23_REPORT_FAILURE",
+                    level="ERROR",
+                    audit_id=audit_id,
+                    error_type=type(exc).__name__,
+                    error_message=str(exc)[:512],
+                )
+        if audit_id is not None and workspace is not None:
+            try:
+                reconcile_report_outputs(audit_id=audit_id, workspace=workspace)
+            except Exception as exc:  # presentation reconciliation remains fail-open
+                try_append_operational_event(
+                    workspace,
+                    "REPORT_CONSISTENCY_FAILURE",
+                    level="WARNING",
+                    audit_id=audit_id,
+                    error_type=type(exc).__name__,
+                    error_message=str(exc)[:512],
+                )
+        return result
 
     try:
         _legacy_cli.build_parser = build_parser
@@ -174,10 +186,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if m23_config is not None:
         if not m23_config.enabled:
-            print("Synthetic Apdex M23: DESABILITADO")
+            print("Synthetic Apdex: DESABILITADO")
         elif m23_result is not None:
             print(
-                "Synthetic Apdex M23: HABILITADO "
+                "Synthetic Apdex: HABILITADO "
                 f"({m23_result.status}; páginas {m23_result.pages_considered}; "
                 f"contextos {m23_result.contexts_considered}; "
                 f"amostras válidas {m23_result.valid_samples}/{m23_result.attempted_samples})"
@@ -191,7 +203,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"Relatório Apdex: {m23_report_path}")
         elif m23_error:
             print(
-                "Synthetic Apdex M23: INCOMPLETO por erro operacional; "
+                "Synthetic Apdex: INCOMPLETO por erro operacional; "
                 "a auditoria SearchGEO principal foi preservada"
             )
     return code
