@@ -59,7 +59,7 @@ A compatibilidade depende de **provider + produto/plano + credencial + endpoint 
 
 As chaves Google de M21 são independentes das chaves dos providers de IA. O SearchGEO não envia uma credencial de um provider/serviço para endpoint de outro. Testes também isolam credenciais do ambiente para evitar chamadas externas acidentais.
 
-Detalhes: [docs/AI_GUIDE.md](docs/AI_GUIDE.md), [docs/CONFIGURATION.md](docs/CONFIGURATION.md) e [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
+Detalhes: [docs/AI_GUIDE.md](docs/AI_GUIDE.md), [docs/CONFIGURATION.md](docs/CONFIGURATION.md), [docs/GOOGLE_API_KEYS.md](docs/GOOGLE_API_KEYS.md) e [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
 
 ## Instalação rápida — PowerShell
 
@@ -146,6 +146,8 @@ searchgeo audit https://example.com `
   --web-performance `
   --web-performance-field-source crux
 ```
+
+Para criar e restringir corretamente as chaves Google usadas pelo M21, consulte [docs/GOOGLE_API_KEYS.md](docs/GOOGLE_API_KEYS.md).
 
 ## Contexto de dispositivo
 
@@ -258,6 +260,7 @@ Test-Path Env:SEARCHGEO_CRUX_API_KEY
 - [Instalação](docs/INSTALLATION.md)
 - [Guia do usuário](docs/USER_GUIDE.md)
 - [Configuração](docs/CONFIGURATION.md)
+- [Chaves Google — PageSpeed e CrUX](docs/GOOGLE_API_KEYS.md)
 - [Report](docs/REPORT_GUIDE.md)
 - [Scoring](docs/SCORING_GUIDE.md)
 - [Validação de scoring](docs/SCORING_VALIDATION.md)
