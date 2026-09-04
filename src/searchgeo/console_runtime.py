@@ -81,13 +81,24 @@ def observe_workspace(workspace: Path, state: State) -> None:
                 if snapshot:
                     state.current_url = str(snapshot["normalized_url"])
                     state.current_device = str(snapshot["device"])
+                if state.status.upper() == "ANALYZING":
+                    try:
+                        ai_attempt = connection.execute(
+                            "SELECT provider,url,device FROM ai_provider_attempts ORDER BY started_at DESC LIMIT 1"
+                        ).fetchone()
+                    except sqlite3.Error:
+                        ai_attempt = None
+                    if ai_attempt:
+                        state.operation = f"API:{ai_attempt['provider']}"
+                        state.current_url = str(ai_attempt["url"] or state.current_url)
+                        state.current_device = str(ai_attempt["device"] or state.current_device)
             finally:
                 connection.close()
         except (sqlite3.Error, OSError):
             pass
 
     status = state.status.upper()
-    if status == "ANALYZING":
+    if status == "ANALYZING" and not state.operation.startswith("API:"):
         state.operation = (
             f"API:{state.ai_provider.upper()}"
             if state.ai_provider != "none"
