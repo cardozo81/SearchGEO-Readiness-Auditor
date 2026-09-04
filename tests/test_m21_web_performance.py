@@ -11,7 +11,7 @@ from unittest.mock import patch
 from searchgeo.cli import _configured_web_performance, build_parser
 from searchgeo.domain import Audit, AuditTarget, DeviceContext, DiscoverySource, Page, PageSnapshot, TargetType
 from searchgeo.m21_reporting import enrich_m21_report_site
-from searchgeo.m21_web_performance import HttpJsonResult, WebPerformanceConfig, execute_m21
+from searchgeo.m21_web_performance import ExternalServiceError, HttpJsonResult, WebPerformanceConfig, execute_m21
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
 
 _NOW = datetime(2026, 9, 3, 15, 0, tzinfo=timezone.utc)
@@ -25,6 +25,20 @@ class _PageSpeed:
     def run(self, *, url, strategy, categories, timeout_seconds):
         self.calls.append((url, strategy, categories, timeout_seconds))
         return HttpJsonResult(self.payload, 200, 12)
+
+
+class _FailingPageSpeed:
+    def __init__(self):
+        self.calls = []
+
+    def run(self, *, url, strategy, categories, timeout_seconds):
+        self.calls.append((url, strategy, categories, timeout_seconds))
+        raise ExternalServiceError(
+            "PAGESPEED_INSIGHTS",
+            "TimeoutError",
+            error_code="TIMEOUTERROR",
+            duration_ms=60000,
+        )
 
 
 class _Crux:
@@ -56,6 +70,7 @@ class M21WebPerformanceTests(unittest.TestCase):
                 self.assertEqual(row, (0, "DISABLED"))
             finally:
                 connection.close()
+            self.assertTrue((workspace.root / "logs" / "audit.log").is_file())
 
     def test_cli_disabled_ignores_inactive_m21_tuning_environment(self) -> None:
         parser = build_parser()
@@ -84,6 +99,9 @@ class M21WebPerformanceTests(unittest.TestCase):
                 pagespeed_client=psi,
             )
             self.assertEqual(result.status, "SUCCESS")
+            self.assertEqual(result.pagespeed_attempts, 1)
+            self.assertEqual(result.pagespeed_successes, 1)
+            self.assertEqual(result.partial_contexts, 0)
             self.assertEqual(len(psi.calls), 1)
             self.assertEqual(psi.calls[0][1], "mobile")
             self.assertEqual(psi.calls[0][2], ("performance", "accessibility", "best-practices", "seo"))
@@ -133,6 +151,10 @@ class M21WebPerformanceTests(unittest.TestCase):
                 crux_client=crux,
             )
             self.assertEqual(result.status, "SUCCESS")
+            self.assertEqual(result.pagespeed_attempts, 1)
+            self.assertEqual(result.pagespeed_successes, 1)
+            self.assertEqual(result.crux_attempts, 1)
+            self.assertEqual(result.crux_successes, 1)
             self.assertEqual(len(crux.calls), 1)
             self.assertEqual(crux.calls[0][1], "PHONE")
             connection = sqlite3.connect(workspace.database)
@@ -146,6 +168,82 @@ class M21WebPerformanceTests(unittest.TestCase):
                 self.assertEqual(set(services), {"PAGESPEED_INSIGHTS", "CRUX_API"})
             finally:
                 connection.close()
+
+    def test_pagespeed_timeout_with_crux_success_is_partial_and_logged(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = self._fixture(Path(directory))
+            psi_secret = "psi-secret-must-not-appear"
+            crux_secret = "crux-secret-must-not-appear"
+            psi = _FailingPageSpeed()
+            crux = _Crux({
+                "record": {
+                    "key": {"url": "https://example.test/"},
+                    "metrics": {
+                        "largest_contentful_paint": {"percentiles": {"p75": 2997}},
+                        "interaction_to_next_paint": {"percentiles": {"p75": 382}},
+                        "cumulative_layout_shift": {"percentiles": {"p75": 0.9}},
+                    },
+                }
+            })
+            result = execute_m21(
+                audit_id="AUD-M21",
+                workspace=workspace,
+                config=WebPerformanceConfig(
+                    enabled=True,
+                    field_source="crux",
+                    timeout_seconds=60,
+                    pagespeed_api_key=psi_secret,
+                    crux_api_key=crux_secret,
+                ),
+                pagespeed_client=psi,
+                crux_client=crux,
+            )
+
+            self.assertEqual(result.status, "PARTIAL")
+            self.assertEqual(result.context_attempts, 1)
+            self.assertEqual(result.successful_contexts, 1)
+            self.assertEqual(result.partial_contexts, 1)
+            self.assertEqual(result.pagespeed_attempts, 1)
+            self.assertEqual(result.pagespeed_successes, 0)
+            self.assertEqual(result.crux_attempts, 1)
+            self.assertEqual(result.crux_successes, 1)
+
+            connection = sqlite3.connect(workspace.database)
+            try:
+                run = connection.execute(
+                    "SELECT status,reason,pagespeed_successes,crux_successes FROM web_performance_runs"
+                ).fetchone()
+                self.assertEqual(
+                    run,
+                    ("PARTIAL", "ONE_OR_MORE_EXTERNAL_COMPONENTS_UNAVAILABLE", 0, 1),
+                )
+                observation = connection.execute(
+                    "SELECT status,cwv_assessment,error_summary FROM web_performance_observations"
+                ).fetchone()
+                self.assertEqual(observation, ("PARTIAL", "FAIL", "PAGESPEED:TIMEOUTERROR"))
+                attempts = connection.execute(
+                    "SELECT service,status,error_code FROM web_performance_attempts ORDER BY created_at,service"
+                ).fetchall()
+                self.assertEqual(
+                    set(attempts),
+                    {
+                        ("PAGESPEED_INSIGHTS", "ERROR", "TIMEOUTERROR"),
+                        ("CRUX_API", "SUCCESS", None),
+                    },
+                )
+            finally:
+                connection.close()
+
+            log_path = workspace.root / "logs" / "audit.log"
+            self.assertTrue(log_path.is_file())
+            log_text = log_path.read_text(encoding="utf-8")
+            self.assertIn('"event":"M21_STARTED"', log_text)
+            self.assertIn('"event":"M21_EXTERNAL_ATTEMPT"', log_text)
+            self.assertIn('"event":"M21_COMPLETED"', log_text)
+            self.assertIn('"status":"PARTIAL"', log_text)
+            self.assertIn("TIMEOUTERROR", log_text)
+            self.assertNotIn(psi_secret, log_text)
+            self.assertNotIn(crux_secret, log_text)
 
     def test_missing_cwv_metric_is_incomplete_not_fail(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

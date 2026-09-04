@@ -177,6 +177,16 @@ ou:
 
 Default `60` segundos por request externo. Deve ser número finito > 0. Não existe retry automático de timeout.
 
+O default é um limite operacional, não uma garantia de tempo de resposta do PageSpeed. Se a telemetria indicar `TIMEOUTERROR` próximo do limite configurado, aumente-o explicitamente, por exemplo:
+
+```powershell
+searchgeo audit https://example.com `
+  --web-performance `
+  --web-performance-timeout-seconds 180
+```
+
+Não é feito retry automático: elevar o timeout afeta a próxima execução, não repete silenciosamente uma requisição anterior.
+
 ### Lighthouse categories
 
 ```text
@@ -243,6 +253,34 @@ Comportamento:
 
 O default `auto` prepara a migração para CrUX direto porque o Google já documentou a retirada futura de field data CrUX da PageSpeed Insights API.
 
+### Status operacional M21
+
+A execução M21 usa:
+
+```text
+DISABLED
+NO_CONTEXTS
+SUCCESS
+PARTIAL
+UNAVAILABLE
+```
+
+`SUCCESS` exige que todos os contextos selecionados tenham evidência útil e que nenhum componente externo solicitado tenha falhado.
+
+`PARTIAL` significa que existe evidência útil, mas houve ao menos uma falha/indisponibilidade de componente ou contexto. Exemplo:
+
+```text
+PageSpeed → TIMEOUTERROR
+CrUX      → HTTP 200
+M21       → PARTIAL
+```
+
+Portanto, `successful_contexts == context_attempts` não mascara timeout PageSpeed se o contexto ficou `PARTIAL`.
+
+`UNAVAILABLE` significa que nenhum contexto produziu evidência externa útil.
+
+Esses estados qualificam a coleta; não são Finding e não alteram `SCORE-GEO-002`.
+
 ### Consumo e IA
 
 M21 adiciona **zero chamadas de OpenAI/DeepSeek/MiMo**.
@@ -295,6 +333,22 @@ Os scores e métricas Lighthouse são apresentados como medição externa de lab
 - versão do Lighthouse.
 
 Nenhum desses números é somado, multiplicado ou promediado com o `SCORE-GEO-002`.
+
+## Log operacional persistente
+
+Cada workspace pode materializar:
+
+```text
+audits/<AUD-ID>/logs/audit.log
+```
+
+O arquivo usa JSONL e registra o ciclo principal da auditoria e, quando M21 está habilitado, as tentativas PageSpeed/CrUX com status, HTTP, duração e erro sanitizado.
+
+A CLI imprime o caminho do log ao final quando o arquivo existe.
+
+O log é fail-open: erro ao escrevê-lo não invalida a auditoria. Chaves, Authorization headers, tokens, passwords e request URLs com credenciais não podem ser registrados.
+
+Detalhes e exemplos PowerShell: [OPERATIONAL_LOGGING.md](OPERATIONAL_LOGGING.md).
 
 ## Modelos
 

@@ -9,14 +9,15 @@
 
 O M21 adiciona à auditoria SearchGEO evidências de Web Performance fundamentadas em documentação externa oficial, sem remover, substituir ou recalibrar silenciosamente o `SCORE-GEO-002`.
 
-Quando explicitamente habilitado, o recurso coleta:
+Quando explicitamente habilitado, o recurso pode coletar:
 
 - scores de laboratório do Lighthouse por meio da PageSpeed Insights API v5;
-- métricas de laboratório do Lighthouse, como FCP, Speed Index, LCP, Total Blocking Time e CLS;
-- dados de campo de Core Web Vitals provenientes do CrUX, quando disponíveis;
-- LCP, INP e CLS no percentil 75 (`p75`) e sua avaliação segundo os thresholds oficiais de boa experiência;
-- telemetria operacional de cada requisição de medição externa;
-- artefatos JSON brutos, limitados e reabríveis, armazenados no workspace da auditoria.
+- métricas de laboratório FCP, Speed Index, LCP, Total Blocking Time e CLS;
+- Core Web Vitals de campo provenientes do CrUX quando disponíveis;
+- LCP, INP e CLS no percentil 75 (`p75`);
+- telemetria de cada chamada externa;
+- payloads JSON brutos de respostas bem-sucedidas;
+- log operacional persistente e sanitizado da auditoria.
 
 O M21 responde a uma pergunta diferente daquela respondida pelo `SCORE-GEO-002`:
 
@@ -31,7 +32,7 @@ M21 CrUX / Core Web Vitals
 → experiência agregada de usuários reais em campo quando existe amostra CrUX suficiente
 ```
 
-Essas saídas devem permanecer claramente distinguíveis na persistência, no HTML e na documentação.
+Essas saídas devem permanecer distinguíveis na persistência, no HTML, na CLI e na documentação.
 
 ## 2. Contrato não destrutivo de scoring
 
@@ -39,8 +40,8 @@ O M21 **não altera**:
 
 - Business Rules;
 - resultados de RuleExecution;
-- findings;
-- recomendações;
+- Findings;
+- Recommendations;
 - prioridade;
 - pesos das regras;
 - `PASS = 1.00`, `WARNING = 0.50`, `FAIL = 0.00`;
@@ -51,9 +52,7 @@ O M21 **não altera**:
 - Overall Readiness;
 - `scoring_version = SCORE-GEO-002`.
 
-Nenhum valor de Lighthouse, PageSpeed ou Core Web Vitals é convertido automaticamente em contribuição para o `SCORE-GEO-002`.
-
-Portanto, o `SCORE-GEO-002` permanece disponível como índice heurístico estável de prontidão mesmo quando o M21 está habilitado. Quando o M21 está desabilitado ou indisponível, o comportamento existente da auditoria continua funcional.
+Nenhum valor de Lighthouse, PageSpeed ou Core Web Vitals é convertido automaticamente em contribuição para `SCORE-GEO-002`.
 
 ## 3. Fundamentação externa oficial
 
@@ -64,7 +63,7 @@ Referências oficiais:
 - <https://developers.google.com/speed/docs/insights/v5/reference/pagespeedapi/runpagespeed>
 - <https://developers.google.com/speed/docs/insights/v5/get-started>
 
-A API oficial executa Lighthouse sobre uma URL fornecida e suporta as categorias:
+O SearchGEO usa PageSpeed Insights para executar Lighthouse sobre a URL auditada. Categorias suportadas pelo M21:
 
 ```text
 performance
@@ -73,9 +72,7 @@ best-practices
 seo
 ```
 
-O padrão atual do SearchGEO solicita as quatro categorias na mesma requisição PageSpeed para cada contexto.
-
-A documentação do Google informa que o PageSpeed Insights pode ser usado com ou sem API key, embora recomende chave para consultas automatizadas frequentes.
+Por padrão, as quatro categorias são solicitadas na mesma chamada PageSpeed de cada contexto.
 
 ### 3.2 Chrome UX Report API
 
@@ -84,15 +81,13 @@ Referências oficiais:
 - <https://developer.chrome.com/docs/crux/api/>
 - <https://developer.chrome.com/docs/crux/guides/crux-api>
 
-A CrUX API direta utiliza:
+Endpoint direto utilizado:
 
 ```text
 POST https://chromeuxreport.googleapis.com/v1/records:queryRecord
 ```
 
-A chamada exige API key e suporta dados de campo por URL/origin e form factor.
-
-O M21 solicita o conjunto atual de métricas Core Web Vitals:
+Métricas solicitadas:
 
 ```text
 largest_contentful_paint
@@ -107,13 +102,13 @@ SearchGEO MOBILE  → CrUX PHONE
 SearchGEO DESKTOP → CrUX DESKTOP
 ```
 
-O M21 não introduz Tablet como novo contexto de dispositivo do SearchGEO.
+### 3.3 Core Web Vitals
 
-### 3.3 Avaliação de Core Web Vitals
+Referência oficial:
 
-A metodologia oficial utiliza o percentil 75 das distribuições observadas de usuários reais.
+- <https://web.dev/articles/vitals>
 
-Thresholds atuais de boa experiência utilizados pelo M21:
+Thresholds de boa experiência utilizados pela implementação:
 
 ```text
 LCP <= 2500 ms
@@ -121,45 +116,34 @@ INP <= 200 ms
 CLS <= 0.10
 ```
 
-O estado combinado do M21 é:
+A avaliação usa valores p75 devolvidos pela fonte externa.
+
+Estados da avaliação CWV por contexto:
 
 ```text
 PASS
-```
-
-somente quando LCP, INP e CLS estão todos disponíveis e cada um atende ao respectivo threshold de boa experiência.
-
-Se uma ou mais métricas estiverem indisponíveis:
-
-```text
+FAIL
 INCOMPLETE
-```
-
-ou, quando não houver nenhuma métrica de campo utilizável:
-
-```text
 UNAVAILABLE
 ```
 
-Ausência de dados CrUX nunca é convertida em falha do website. O CrUX pode legitimamente não possuir amostra suficiente para determinada URL/form factor.
+`INCOMPLETE` significa que existe field data utilizável, mas uma ou mais métricas requeridas não estão presentes. `UNAVAILABLE` significa ausência de field data utilizável. Nenhum dos dois estados representa automaticamente falha do website.
 
-### 3.4 Lighthouse Performance Score
+### 3.4 Lighthouse Performance
 
 Referência oficial:
 
 - <https://developer.chrome.com/docs/lighthouse/performance/performance-scoring>
 
-Lighthouse Performance é um score externo de 0 a 100 calculado pelo Lighthouse. As curvas de scoring das métricas e seus pesos são mantidos pelo projeto Chrome/Lighthouse e podem evoluir conforme a versão do Lighthouse.
+Lighthouse Performance é score externo de 0 a 100. Pesos e curvas são mantidos pelo projeto Lighthouse e podem evoluir entre versões.
 
-O SearchGEO persiste a versão Lighthouse retornada e não duplica uma cópia privada e fixa dos pesos do Lighthouse dentro do `SCORE-GEO-002`.
+O SearchGEO persiste a versão Lighthouse retornada e nunca apresenta Lighthouse como `GEO Score`.
 
-Lighthouse Performance deve ser identificado como `Lighthouse Performance`, nunca como `GEO Score`.
+## 4. Ativação e política de rede
 
-## 4. Ativação e política de rede sem consumo inesperado
+A coleta externa é **OFF por padrão**.
 
-A coleta externa do M21 fica desabilitada por padrão.
-
-Controles públicos:
+Controles:
 
 ```text
 --web-performance
@@ -169,57 +153,39 @@ SEARCHGEO_WEB_PERFORMANCE
 
 Precedência:
 
-1. flag explícita de CLI;
+1. flag CLI explícita;
 2. variável de ambiente;
 3. `false`.
 
-Valores booleanos aceitos em variável de ambiente:
-
-```text
-true / false
-1 / 0
-yes / no
-on / off
-```
-
 Quando desabilitado:
 
-- nenhuma requisição PageSpeed é realizada;
-- nenhuma requisição CrUX é realizada;
-- nenhuma nova requisição a LLM é realizada;
-- o M21 persiste `DISABLED` para rastreabilidade;
-- o relatório informa que o recurso estava desabilitado;
-- o `SCORE-GEO-002` permanece integralmente disponível.
+- nenhuma chamada PageSpeed;
+- nenhuma chamada CrUX;
+- nenhuma chamada LLM adicional;
+- estado `DISABLED` persistido para rastreabilidade;
+- `SCORE-GEO-002` continua normal.
 
 ## 5. Controles de consumo
 
-### 5.1 Máximo de páginas
+### 5.1 Limite de páginas
 
 ```text
 --web-performance-max-pages N
 SEARCHGEO_WEB_PERFORMANCE_MAX_PAGES
 ```
 
-Padrão:
+Default:
 
 ```text
 10
 ```
 
-Significado:
+Regras:
 
-- `N > 0`: somente as primeiras N páginas auditadas, em ordem determinística de URL, são enviadas aos serviços externos de performance;
-- `0`: todas as páginas auditadas são elegíveis.
-
-O limite é aplicado a páginas lógicas. Com `--device-context both`, cada página selecionada pode gerar uma requisição PageSpeed para Mobile e uma para Desktop.
-
-Portanto, um limite superior prático de requisições PageSpeed é:
-
-```text
-selected_pages × selected_device_contexts
-```
-
-O fallback CrUX direto pode adicionar uma requisição CrUX por contexto somente quando a política configurada exigir essa chamada.
+- `N > 0`: primeiras N páginas auditadas, em ordem determinística;
+- `0`: todas as páginas auditadas são elegíveis;
+- o limite é aplicado a páginas lógicas;
+- com `--device-context both`, cada página pode gerar uma chamada PageSpeed Mobile e uma Desktop.
 
 ### 5.2 Timeout
 
@@ -228,15 +194,21 @@ O fallback CrUX direto pode adicionar uma requisição CrUX por contexto somente
 SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS
 ```
 
-Padrão:
+Default:
 
 ```text
 60
 ```
 
-O valor deve ser finito e maior que zero.
+O timeout vale por requisição externa. Não há retry automático após timeout, evitando consumo implícito duplicado quando o estado real da primeira chamada é desconhecido.
 
-O M21 não realiza retry automático de uma medição que expirou por timeout. Isso evita uma segunda requisição externa implícita quando o estado real da primeira execução pode ser desconhecido.
+O valor de 60 segundos é default operacional, não garantia de que PageSpeed responderá nesse intervalo. Em sites ou condições de rede mais lentas, o operador pode elevar explicitamente o limite, por exemplo:
+
+```powershell
+--web-performance-timeout-seconds 180
+```
+
+Um timeout PageSpeed com CrUX bem-sucedido deve produzir estado M21 `PARTIAL`, preservando os dados CrUX obtidos.
 
 ### 5.3 Categorias Lighthouse
 
@@ -245,63 +217,48 @@ O M21 não realiza retry automático de uma medição que expirou por timeout. I
 SEARCHGEO_LIGHTHOUSE_CATEGORIES
 ```
 
-Valores suportados:
+O default solicita as quatro categorias.
 
-```text
-performance
-accessibility
-best-practices
-seo
-```
-
-O padrão solicita as quatro categorias.
-
-As categorias afetam o trabalho de Lighthouse executado pelo serviço PageSpeed, mas não criam nenhuma chamada a LLM.
-
-## 6. Controles de credenciais de API
+## 6. Credenciais
 
 ### 6.1 PageSpeed
-
-Variável de ambiente opcional:
 
 ```text
 SEARCHGEO_PAGESPEED_API_KEY
 ```
 
-A chave é enviada somente ao PageSpeed Insights.
-
-Ela nunca é:
-
-- persistida no SQLite;
-- escrita nos artefatos de resposta bruta;
-- exibida no HTML;
-- registrada em log como parte da URL de requisição;
-- reutilizada como credencial de provider de IA.
-
-O PageSpeed pode operar sem chave em uso reduzido/ad hoc, sujeito às políticas e quotas do serviço externo.
+Opcional para PageSpeed conforme política/quota do serviço.
 
 ### 6.2 CrUX
-
-Variável de ambiente:
 
 ```text
 SEARCHGEO_CRUX_API_KEY
 ```
 
-O uso da CrUX API direta exige essa chave.
+Obrigatória quando `--web-performance-field-source crux` é utilizado.
 
-A credencial é isolada de:
+### 6.3 Isolamento
+
+As credenciais M21 são independentes de:
 
 ```text
 OPENAI_API_KEY
 DEEPSEEK_API_KEY
 MIMO_API_KEY
-SEARCHGEO_PAGESPEED_API_KEY
 ```
 
-Não é permitido fallback entre famílias de credenciais.
+Chaves não podem ser:
 
-## 7. Política de fonte dos dados de campo
+- persistidas em SQLite;
+- escritas nos artifacts de resposta;
+- mostradas no HTML;
+- registradas no log operacional;
+- registradas como parte de URL com query string de credencial;
+- reutilizadas como credencial de IA.
+
+O log pode registrar apenas booleanos como `pagespeed_api_key_configured=true` e `crux_api_key_configured=true`.
+
+## 7. Política de field data
 
 Controle:
 
@@ -310,69 +267,51 @@ Controle:
 SEARCHGEO_WEB_PERFORMANCE_FIELD_SOURCE
 ```
 
-Padrão:
-
-```text
-auto
-```
+Default: `auto`.
 
 ### `auto`
 
-1. PageSpeed é chamado para obter Lighthouse;
-2. se o PageSpeed ainda retornar dados de campo CrUX utilizáveis, o M21 usa esses dados;
-3. se os dados de campo estiverem ausentes no PageSpeed e existir `SEARCHGEO_CRUX_API_KEY`, o M21 chama a CrUX API direta;
-4. se nenhuma das fontes produzir dados de campo, Core Web Vitals permanece `UNAVAILABLE`/`INCOMPLETE`, sem penalidade ao website.
-
-Essa política foi projetada para facilitar migração porque o Google anunciou a intenção de deixar de retornar dados CrUX de campo via PageSpeed Insights e recomenda as APIs diretas do CrUX para dados de campo.
+1. PageSpeed é chamado para Lighthouse;
+2. se a resposta contiver field data CrUX utilizável, ele é usado;
+3. se field data estiver ausente e houver chave CrUX, a API CrUX direta é chamada;
+4. se nenhuma fonte produzir field data, o resultado permanece `UNAVAILABLE`/`INCOMPLETE` sem penalidade ao website.
 
 ### `pagespeed`
 
-Usa somente os dados de campo presentes na resposta PageSpeed. Nunca adiciona uma chamada direta ao CrUX.
+Usa somente field data presente na resposta PageSpeed. Não faz chamada CrUX direta.
 
 ### `crux`
 
-Usa dados de campo pela CrUX API direta. Exige `SEARCHGEO_CRUX_API_KEY`. O PageSpeed continua sendo utilizado para os dados de laboratório do Lighthouse.
+Field data é obtido pela CrUX API direta. Exige `SEARCHGEO_CRUX_API_KEY`. PageSpeed continua sendo chamado para Lighthouse de laboratório.
 
 ### `none`
 
-Desabilita o processamento de dados de campo, mantendo a coleta de laboratório do Lighthouse.
+Desabilita field data. PageSpeed continua sendo usado para Lighthouse.
 
 ## 8. Política de IA
 
-O M21 adiciona **zero** chamadas a LLM.
+M21 adiciona **zero** chamadas a LLM.
 
-Ele não chama:
+Não chama OpenAI, DeepSeek, MiMo, SemanticProvider M18 nem provider de remediação M20.
 
-- OpenAI;
-- DeepSeek;
-- MiMo;
-- qualquer SemanticProvider do M18;
-- o provider de remediação de conteúdo do M20.
+Qualquer evolução futura que adicione interpretação por IA deverá ser opt-in, contabilizada separadamente e incapaz de alterar medições-fonte ou `SCORE-GEO-002` sem novo contrato explicitamente aprovado.
 
-Os controles existentes de IA permanecem inalterados.
+## 9. Posicionamento e fail-open
 
-Portanto, habilitar Web Performance não pode, por si só, gerar cobrança inesperada de LLM.
+M21 executa após o pipeline principal da auditoria e depois da materialização baseline do report site.
 
-Se uma versão futura adicionar interpretação por IA das métricas externas, essa capacidade deverá ser:
+Objetivos:
 
-- habilitada por opt-in independente;
-- contabilizada separadamente;
-- refletida em `ai-usage.html` por finalidade;
-- incapaz de alterar as medições-fonte;
-- incapaz de alterar `SCORE-GEO-002`, salvo se um contrato de scoring posterior e explicitamente aprovado determinar o contrário.
+- não bloquear RuleExecution/scoring por indisponibilidade Google;
+- preservar a auditoria principal se PageSpeed/CrUX falhar;
+- manter a causa atribuída ao serviço externo, não ao website;
+- permitir relatório parcial com evidência disponível.
 
-## 9. Posicionamento da execução e isolamento de falhas
+Uma exceção operacional na camada M21 é capturada pela CLI, registrada quando possível e não invalida o resultado principal já concluído.
 
-A integração atual de CLI executa o M21 depois que o pipeline existente da auditoria foi concluído e depois que o report site baseline já foi materializado.
+## 10. Semântica dos estados operacionais M21
 
-Motivos:
-
-- preservar o comportamento existente da auditoria;
-- impedir que disponibilidade de PageSpeed/CrUX bloqueie RuleExecution/scoring;
-- tratar a evidência externa de performance como camada de enriquecimento;
-- manter falhas atribuíveis ao serviço de medição, em vez de atribuí-las incorretamente ao website auditado.
-
-Estados operacionais incluem:
+Estados:
 
 ```text
 DISABLED
@@ -382,11 +321,47 @@ PARTIAL
 UNAVAILABLE
 ```
 
-Um erro de PageSpeed/CrUX é persistido na telemetria M21 e não cria SearchGEO Finding ou Recommendation.
+### `DISABLED`
 
-## 10. Persistência
+M21 não foi habilitado; nenhuma chamada externa foi feita.
 
-O M21 adiciona tabelas SQLite de forma aditiva:
+### `NO_CONTEXTS`
+
+M21 foi habilitado, mas não existia snapshot/dispositivo elegível para medição externa.
+
+### `SUCCESS`
+
+Todos os contextos selecionados possuem evidência externa útil **e nenhum componente externo solicitado falhou naquele contexto**.
+
+### `PARTIAL`
+
+Existe pelo menos um contexto com evidência útil, porém:
+
+- um componente externo solicitado falhou; ou
+- um contexto ficou sem evidência útil; ou
+- houve timeout, erro HTTP ou indisponibilidade de uma das fontes enquanto outra fonte retornou resultado.
+
+Exemplo normativo:
+
+```text
+PageSpeed Desktop → TIMEOUT
+CrUX Desktop      → HTTP 200 + field data
+
+contexto          → PARTIAL
+execução M21       → PARTIAL
+```
+
+O fato de `successful_contexts == context_attempts` **não autoriza `SUCCESS`** se um ou mais contextos estiverem `PARTIAL`.
+
+### `UNAVAILABLE`
+
+Nenhum contexto selecionado produziu evidência externa útil.
+
+`PARTIAL` e `UNAVAILABLE` qualificam a coleta; não reduzem `SCORE-GEO-002` e não criam Finding do website.
+
+## 11. Persistência SQLite
+
+Tabelas aditivas:
 
 ```text
 web_performance_runs
@@ -396,56 +371,79 @@ web_performance_attempts
 
 ### `web_performance_runs`
 
-Armazena a configuração e o resumo do resultado M21 no nível da auditoria:
-
-- enabled;
-- status;
-- política de field source;
-- limite de páginas;
-- páginas consideradas;
-- tentativas por contexto;
-- contextos concluídos com sucesso;
-- sucessos PageSpeed;
-- sucessos CrUX;
-- categorias Lighthouse;
-- detalhe de reason/status;
-- timestamp.
+Resumo da execução M21, incluindo enabled, status, field source, page limit, páginas consideradas, contextos tentados, contextos com evidência útil, sucessos PageSpeed, sucessos CrUX, categorias e reason.
 
 ### `web_performance_observations`
 
-Armazena uma observação para cada snapshot/dispositivo de página auditada selecionado pelo M21, incluindo:
+Uma observação por snapshot/dispositivo selecionado, com:
 
-- URL;
-- device/strategy;
-- versão Lighthouse/fetch time;
-- score de Performance/Accessibility/Best Practices/SEO quando retornado;
-- métricas lab FCP, Speed Index, LCP, TBT e CLS quando retornadas;
+- URL/device/strategy;
+- status do contexto;
+- versão/fetch time Lighthouse;
+- scores Lighthouse;
+- métricas lab;
 - field source/scope;
-- LCP p75;
-- INP p75;
-- CLS p75;
-- avaliações de cada componente;
-- avaliação combinada de CWV;
-- status HTTP do serviço;
-- referências a artefatos;
+- LCP/INP/CLS p75;
+- assessments CWV;
+- HTTP status;
+- referências a artifacts;
 - resumo sanitizado de erro.
 
 ### `web_performance_attempts`
 
-Armazena telemetria operacional por requisição a serviço:
+Uma linha por chamada externa efetivamente tentada, com:
 
-- serviço (`PAGESPEED_INSIGHTS` ou `CRUX_API`);
-- URL/device/snapshot;
-- estado success/error;
-- status HTTP;
+- serviço;
+- URL auditada;
+- device/snapshot;
+- `SUCCESS`/`ERROR`;
+- HTTP status quando existente;
 - duração;
-- código/mensagem de erro sanitizados;
-- referência ao artefato de resposta;
-- timestamp.
+- error code/message sanitizados;
+- referência de artifact quando existente.
 
-Credenciais nunca são persistidas.
+## 12. Log operacional persistente
 
-## 11. Artefatos brutos
+Cada auditoria mantém um log operacional independente de scoring e de evidência:
+
+```text
+audits/<AUD-ID>/logs/audit.log
+```
+
+Formato: **JSON Lines (JSONL)**, uma ocorrência por linha.
+
+Eventos mínimos atualmente produzidos incluem:
+
+```text
+AUDIT_STARTED
+RENDERING_COMPLETED
+AI_RUNTIME_RECORDED
+REPORT_SITE_GENERATED
+AUDIT_COMPLETED
+AUDIT_FAILED
+M21_STARTED
+M21_EXTERNAL_ATTEMPT
+M21_COMPLETED
+M21_REPORT_GENERATED
+M21_RUNTIME_FAILURE
+```
+
+Para M21, o log deve permitir diagnosticar:
+
+- PageSpeed versus CrUX;
+- Mobile versus Desktop;
+- sucesso versus erro;
+- HTTP status quando disponível;
+- duração;
+- timeout/error code sanitizado;
+- artifact produzido;
+- status agregado final.
+
+O log é **fail-open**: falha de escrita do próprio log não pode mudar o resultado da auditoria.
+
+O log nunca pode conter API keys, Authorization headers, tokens, passwords, credentials ou request URLs com chave.
+
+## 13. Artefatos brutos
 
 Respostas externas bem-sucedidas são gravadas em:
 
@@ -460,145 +458,97 @@ WPE-....pagespeed.json
 WPE-....crux.json
 ```
 
-Esses artefatos preservam o payload da fonte externa utilizado para construir a projeção e tornam o resultado auditável depois que a requisição de rede terminou.
+Nenhuma nova chamada externa é necessária para reabrir os resultados persistidos.
 
-O relatório não exige nova chamada à API para reabrir uma auditoria já existente.
+## 14. Contrato HTML
 
-## 12. Contrato do relatório
-
-O M21 amplia o report site estático com:
+M21 materializa:
 
 ```text
 report/web-performance.html
 ```
 
-A navegação compartilhada é atualizada para que a página possa ser acessada a partir das demais páginas do relatório.
+A página deve distinguir visivelmente:
 
-### `index.html`
-
-Recebe um resumo compacto de Web Performance contendo:
-
-- estado habilitado/desabilitado;
-- status da execução M21;
-- quantidade de contextos válidos Core Web Vitals PASS/FAIL;
-- média de Lighthouse Performance somente entre contextos que realmente retornaram o score externo;
-- link para os detalhes.
-
-O número médio de Lighthouse deve ser identificado como evidência Lighthouse. Ele não é o Overall do SearchGEO.
-
-### `web-performance.html`
-
-Deve distinguir visualmente:
-
-1. resultados de laboratório do Lighthouse;
-2. resultados de campo CrUX/Core Web Vitals;
-3. field source e escopo URL/origin;
-4. dados indisponíveis/incompletos;
-5. telemetria operacional dos serviços externos;
+1. Lighthouse de laboratório;
+2. CrUX/Core Web Vitals de campo;
+3. source e URL/origin scope;
+4. indisponibilidade/incompletude;
+5. telemetria das tentativas externas;
 6. política de consumo/credenciais;
-7. linguagem explícita informando que as métricas não alteram o scoring.
+7. separação explícita de `SCORE-GEO-002`.
 
-### `references.html`
+`report/index.html` pode mostrar resumo M21, mas nunca recalcular Overall Readiness.
 
-Recebe referências oficiais para:
+`report/references.html` deve manter referências oficiais às fontes externas.
 
-- PageSpeed Insights API;
-- PageSpeed Get Started;
-- CrUX API;
-- guia do CrUX;
-- Lighthouse Performance scoring;
-- Core Web Vitals.
+A navegação do report site segue o core canônico compartilhado do projeto e não deve ser montada independentemente pelo M21.
 
-A seção deve informar explicitamente que essas fontes validam os fenômenos específicos que documentam e **não homologam o `SCORE-GEO-002` como score GEO universal**.
+## 15. Saída CLI
 
-## 13. Regras de interpretação
+Quando M21 estiver habilitado, o encerramento da CLI deve expor no mínimo:
 
-Permitido:
+- status agregado M21;
+- páginas consideradas;
+- contextos com evidência útil / contextos tentados;
+- sucessos/tentativas PageSpeed;
+- sucessos/tentativas CrUX.
 
-```text
-Lighthouse Performance: 91/100
-Core Web Vitals: PASS
-LCP p75: 2.4 s
-Fonte: CrUX
-SearchGEO Readiness: 78/100 (SCORE-GEO-002; heurística interna)
-```
+Quando o status for `PARTIAL`, a CLI deve avisar que houve falha ou indisponibilidade de componente externo e indicar o relatório/log operacional como fonte de diagnóstico.
 
-Não permitido:
+Ao existir, o caminho de `logs/audit.log` deve ser apresentado ao operador.
 
-```text
-GEO score = Lighthouse 91
-Core Web Vitals PASS = citação por IA garantida
-SearchGEO 78 + Lighthouse 91 = GEO oficial 84.5
-CrUX ausente = website FAIL
-```
+## 16. Segurança e privacidade
 
-O M21 não cria nenhuma combinação aritmética entre essas métricas.
-
-## 14. Ressalva PageSpeed versus CrUX
-
-Atualmente, o PageSpeed Insights pode retornar simultaneamente:
-
-- dados de laboratório do Lighthouse;
-- dados de campo do CrUX.
-
-O Google documentou publicamente o plano de descontinuar a parcela de dados de campo no PageSpeed Insights e recomenda CrUX API/CrUX History API para dados de experiência real.
-
-Por esse motivo, o M21 registra a fonte dos dados de campo e suporta fallback direto para CrUX, em vez de tratar os dados CrUX retornados pelo PageSpeed como comportamento permanente da API.
-
-## 15. Segurança e privacidade
-
-O M21 não deve persistir:
+M21 não persiste:
 
 - API keys;
-- headers Authorization;
-- URLs de requisição contendo API keys;
-- cookies do site auditado;
+- Authorization headers;
+- cookies do website auditado para serviços Google;
+- request URLs contendo chaves;
 - secrets do ambiente local.
 
-Somente URL-alvo, resposta externa de medição, telemetria sanitizada e métricas derivadas são persistidas.
+Somente URL alvo, resposta externa permitida, telemetria sanitizada, métricas derivadas e indicadores booleanos de configuração são persistidos/logados.
 
-## 16. Compatibilidade retroativa
+## 17. Compatibilidade retroativa
 
-Com a configuração padrão:
+Com configuração padrão:
 
 ```text
 SEARCHGEO_WEB_PERFORMANCE=false
 ```
 
-não existem novas chamadas de rede PageSpeed/CrUX.
+não existem chamadas PageSpeed/CrUX novas.
 
-Os comandos existentes permanecem válidos.
+O log operacional pode ser criado independentemente do M21 para rastrear o ciclo de vida da auditoria, sem introduzir serviço externo e sem alterar scoring.
 
-O comportamento existente dos providers de IA permanece válido.
+Com M21 desabilitado, todos os comandos históricos continuam válidos e `SCORE-GEO-002` permanece baseline.
 
-`SCORE-GEO-002` permanece como baseline de scoring.
+## 18. Critérios mínimos de aceitação
 
-O novo HTML do M21 é aditivo ao report site e não remove páginas existentes.
+A implementação M21 deve provar por regressão que:
 
-## 17. Testes mínimos de aceitação
+1. default OFF faz zero chamadas PageSpeed/CrUX;
+2. run desabilitada é persistida;
+3. PageSpeed bem-sucedido persiste Lighthouse;
+4. field data persistido mantém source/scope;
+5. CrUX direto funciona no modo `crux`/fallback aplicável;
+6. Mobile→PHONE e Desktop→DESKTOP são determinísticos;
+7. métrica CWV ausente produz `INCOMPLETE`, não website FAIL;
+8. ausência de field data não altera scoring;
+9. resposta externa bem-sucedida gera artifact bruto;
+10. credenciais não aparecem no SQLite, HTML ou log;
+11. `web-performance.html` explica separação metodológica;
+12. menu final continua canônico em todas as páginas;
+13. **PageSpeed timeout + CrUX success produz observação `PARTIAL` e run M21 `PARTIAL`;**
+14. `successful_contexts == context_attempts` não mascara componente externo falho;
+15. log operacional registra eventos M21 sem secrets;
+16. falha de escrita do log não invalida a auditoria principal;
+17. CLI mostra contadores por serviço e caminho do log;
+18. código/conteúdo `SCORE-GEO-002` não é removido nem recalculado.
 
-O M21 somente é considerado aceitável quando a cobertura de regressão comprova:
+## 19. Evolução futura de scoring
 
-1. default OFF produz zero requisições PageSpeed/CrUX;
-2. execução desabilitada é persistida;
-3. resposta PageSpeed produz scores/métricas Lighthouse;
-4. dados de campo CrUX recebidos via PageSpeed produzem LCP/INP/CLS p75;
-5. normalização do percentil CLS da PSI é tratada;
-6. CrUX direto é usado por `auto` somente quando dados de campo PageSpeed estão ausentes e existe chave/client CrUX disponível;
-7. mapeamento Mobile→PHONE e Desktop→DESKTOP é determinístico;
-8. ausência de uma métrica CWV produz `INCOMPLETE`, não `FAIL`;
-9. indisponibilidade de dados de campo não altera RuleExecution/Finding/Score;
-10. artefatos de resposta bruta são persistidos depois de chamadas bem-sucedidas;
-11. credenciais não aparecem na persistência nem no relatório;
-12. `web-performance.html` explica explicitamente a semântica sem impacto no scoring;
-13. `index.html` contém link para a nova página de evidências;
-14. `references.html` lista as fontes oficiais primárias;
-15. código/conteúdo existente de `SCORE-GEO-002` não é removido nem recalculado.
+M21 continua sendo camada de evidência e possível insumo de estudos empíricos. Não é `SCORE-GEO-003`.
 
-## 18. Scoring calibrado futuro
-
-O M21 é deliberadamente um pré-requisito para calibração empírica; ele próprio não é o `SCORE-GEO-003`.
-
-Uma versão futura de scoring poderá estudar correlações entre features de readiness do SearchGEO, evidências externas de performance e outcomes generativos observados. Qualquer versão desse tipo exige protocolo empírico aprovado separadamente e, quando viável, deve preservar o resultado histórico do `SCORE-GEO-002` para comparação.
-
-O M21 isoladamente não justifica alteração de pesos nem alegação de probabilidade de citação.
+Qualquer futura incorporação quantitativa de Web Performance ao scoring exige decisão humana explícita, novo contrato/versionamento de scoring, protocolo de validação e preservação do resultado histórico `SCORE-GEO-002` quando tecnicamente viável.

@@ -7,6 +7,8 @@
 ├─ audit.db
 ├─ artifacts/
 │  └─ web-performance/       # quando M21 obtém respostas externas válidas
+├─ logs/
+│  └─ audit.log              # log operacional JSONL, sanitizado e fail-open
 └─ report/
    ├─ index.html
    ├─ mobile.html              # condicional
@@ -19,7 +21,7 @@
    └─ css/site.css
 ```
 
-`audit.db` + `artifacts/` são fonte persistente; `report/` é projeção humana.
+`audit.db` + `artifacts/` são fonte persistente de evidência/estado; `logs/` é telemetria operacional auxiliar; `report/` é projeção humana.
 
 ## audit.db
 
@@ -59,6 +61,35 @@ artifacts/web-performance/
 Esses artefatos permitem reabrir a origem dos números de Lighthouse/Core Web Vitals sem repetir a chamada externa.
 
 Chaves de API não são gravadas nesses arquivos.
+
+## logs/audit.log
+
+Log operacional persistente em formato **JSON Lines (JSONL)**. Não é fonte de scoring e não substitui `audit.db`.
+
+Registra, quando aplicável:
+
+- início/fim/falha da auditoria;
+- resumo de rendering;
+- runtime do provider de IA sem credenciais;
+- materialização do report site;
+- início/fim do M21;
+- cada tentativa PageSpeed/CrUX com URL alvo, device, status, HTTP, duração e erro sanitizado;
+- geração do `web-performance.html`;
+- falha operacional fail-open do enriquecimento M21.
+
+O log permite distinguir, por exemplo:
+
+```text
+PageSpeed → TIMEOUTERROR
+CrUX      → HTTP 200
+M21       → PARTIAL
+```
+
+Campos sensíveis são redigidos. API keys, Authorization headers, tokens, passwords e URLs contendo credenciais não podem ser registrados.
+
+Falha ao escrever o log é fail-open e não muda score, findings ou conclusão da auditoria.
+
+Consulte também `docs/OPERATIONAL_LOGGING.md`.
 
 ## report/index.html
 
@@ -103,13 +134,15 @@ Projeção M21 de evidência externa:
 - política de quota/credenciais;
 - aviso explícito de que M21 não recalcula `SCORE-GEO-002` e não representa probabilidade de citação.
 
+O status agregado M21 segue regra distinta do assessment CWV. `PARTIAL` significa que existe evidência externa útil, mas ao menos um componente/contexto solicitado falhou ou ficou indisponível. Portanto, PageSpeed timeout + CrUX success é `PARTIAL`, ainda que todos os contextos tenham algum dado útil.
+
 M21 não utiliza LLM. A telemetria de PageSpeed/CrUX não pertence a `ai-usage.html` porque não é consumo de IA generativa do SearchGEO.
 
 ## ai-usage.html
 
 Telemetria operacional separada do readiness, incluindo M18 e M20: estratégia/provider/model, URL/device, status, tokens, duração, custo estimado e erros sanitizados.
 
-M21 não adiciona linhas de PageSpeed/CrUX nesta página; sua telemetria operacional fica em `web-performance.html` para não confundir medição web com uso de SemanticProvider.
+M21 não adiciona linhas de PageSpeed/CrUX nesta página; sua telemetria operacional fica em `web-performance.html` e `logs/audit.log` para não confundir medição web com uso de SemanticProvider.
 
 ## references.html
 
@@ -117,9 +150,9 @@ Fontes oficiais/primárias, natureza das regras, fórmulas e limites do modelo i
 
 M21 adiciona referências oficiais de PageSpeed Insights, CrUX, Lighthouse Performance e Core Web Vitals e registra o limite de inferência: essas fontes validam suas métricas específicas, não homologam um score GEO universal nem o `SCORE-GEO-002`.
 
-## CSS
+## CSS e navegação
 
-Todos os HTMLs finais usam `report/css/site.css`; não há CSS final embutido no head.
+Todos os HTMLs finais usam `report/css/site.css`; não há CSS final embutido no head. A navegação final usa o core canônico compartilhado do report site, inclusive `web-performance.html`.
 
 ## Device selection
 
@@ -151,6 +184,8 @@ SEARCHGEO_CRUX_API_KEY
 
 PageSpeed/CrUX não geram tokens OpenAI/DeepSeek/MiMo. Nenhuma chamada LLM adicional é introduzida pelo M21.
 
+O timeout default permanece 60 segundos por request e não há retry automático. Em execução real em que PageSpeed exceda esse intervalo, o operador pode elevar explicitamente `--web-performance-timeout-seconds`, por exemplo para `180`.
+
 ## Segurança
 
 Não persistir API key, Authorization, senha/secret ou body integral sensível. Credenciais permanecem isoladas por provider/serviço.
@@ -159,4 +194,4 @@ M21 não persiste request URL contendo `key=...`; persiste somente URL alvo, sta
 
 ## Portabilidade
 
-Para preservar screenshots e respostas externas M21, mova o workspace inteiro; `report/` usa caminhos relativos a `../artifacts/`.
+Para preservar screenshots, respostas externas M21 e diagnóstico operacional, mova o workspace inteiro, incluindo `audit.db`, `artifacts/`, `logs/` e `report/`.
