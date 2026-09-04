@@ -16,6 +16,7 @@ from typing import Any
 
 from searchgeo.actionability import Actionability, classify_actionability, label_for
 from searchgeo.persistence import AuditWorkspace
+from searchgeo.report_navigation import normalize_report_navigation, render_report_navigation
 from searchgeo.reporting import _redact, _score_classification
 from searchgeo.rule_references import VERIFIED_ON, references_for
 
@@ -93,18 +94,18 @@ def materialize_report_site(*, audit_id: str, workspace: AuditWorkspace, report_
     css_dir.mkdir(parents=True, exist_ok=True)
     data = _load(audit_id, workspace)
     devices = _available_devices(data)
-    nav = _navigation(devices)
     (css_dir / "site.css").write_text(_SITE_CSS.strip() + "\n", encoding="utf-8")
-    _write_page(report_dir / INDEX_FILE, _shell("Visão geral", INDEX_FILE, nav, _overview(data, devices)))
+    _write_page(report_dir / INDEX_FILE, _shell("Visão geral", INDEX_FILE, report_dir, _overview(data, devices)))
     for device, filename in (("MOBILE", MOBILE_FILE), ("DESKTOP", DESKTOP_FILE)):
         path = report_dir / filename
         if device in devices:
-            _write_page(path, _shell(_device_label(device), filename, nav, _device_page(data, device)))
+            _write_page(path, _shell(_device_label(device), filename, report_dir, _device_page(data, device)))
         elif path.exists():
             path.unlink()
-    _write_page(report_dir / REMEDIATION_FILE, _shell("Remediações", REMEDIATION_FILE, nav, _remediation_page(data)))
-    _write_page(report_dir / AI_FILE, _shell("Uso de IA", AI_FILE, nav, _ai_page(data)))
-    _write_page(report_dir / REFERENCES_FILE, _shell("Referências e metodologia", REFERENCES_FILE, nav, _references_page()))
+    _write_page(report_dir / REMEDIATION_FILE, _shell("Remediações", REMEDIATION_FILE, report_dir, _remediation_page(data)))
+    _write_page(report_dir / AI_FILE, _shell("Uso de IA", AI_FILE, report_dir, _ai_page(data)))
+    _write_page(report_dir / REFERENCES_FILE, _shell("Referências e metodologia", REFERENCES_FILE, report_dir, _references_page()))
+    normalize_report_navigation(report_dir)
     primary = report_dir / INDEX_FILE
     if report_id:
         connection = sqlite3.connect(workspace.database)
@@ -172,20 +173,11 @@ def _available_devices(data: dict[str, Any]) -> tuple[str, ...]:
     return tuple(item for item in ("MOBILE", "DESKTOP") if item in score_devices)
 
 
-def _navigation(devices: tuple[str, ...]) -> tuple[tuple[str, str], ...]:
-    items: list[tuple[str, str]] = [("Visão geral", INDEX_FILE)]
-    if "MOBILE" in devices:
-        items.append(("Relatório Mobile", MOBILE_FILE))
-    if "DESKTOP" in devices:
-        items.append(("Relatório Desktop", DESKTOP_FILE))
-    items.extend((("Remediações", REMEDIATION_FILE), ("Uso de IA", AI_FILE), ("Referências e metodologia", REFERENCES_FILE)))
-    return tuple(items)
 
-
-def _shell(title: str, current: str, nav: tuple[tuple[str, str], ...], content: str) -> str:
-    links = "".join(f"<a class='{'active' if filename == current else ''}' href='{escape(filename)}'>{escape(label)}</a>" for label, filename in nav)
+def _shell(title: str, current: str, report_dir: Path, content: str) -> str:
+    navigation = render_report_navigation(report_dir, current)
     return f"""<!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{escape(title)} — SearchGEO Readiness Auditor</title><link rel="stylesheet" href="{CSS_FILE}"></head><body><aside class="app-nav" aria-label="Navegação do relatório"><div class="brand"><small>SearchGEO Auditor</small><strong>Relatório da auditoria</strong></div><nav>{links}</nav></aside><main class="app-main">{content}<footer class="footer">Projeção estática derivada do audit.db. Scores, findings e recomendações não são recalculados no HTML.</footer></main></body></html>\n"""
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{escape(title)} — SearchGEO Readiness Auditor</title><link rel="stylesheet" href="{CSS_FILE}"></head><body>{navigation}<main class="app-main">{content}<footer class="footer">Projeção estática derivada do audit.db. Scores, findings e recomendações não são recalculados no HTML.</footer></main></body></html>\n"""
 
 
 def _overview(data: dict[str, Any], devices: tuple[str, ...]) -> str:
