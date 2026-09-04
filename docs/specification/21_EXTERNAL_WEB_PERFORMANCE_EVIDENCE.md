@@ -197,12 +197,12 @@ SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS
 Default:
 
 ```text
-60
+120
 ```
 
 O timeout vale por requisição externa. Não há retry automático após timeout, evitando consumo implícito duplicado quando o estado real da primeira chamada é desconhecido.
 
-O valor de 60 segundos é default operacional, não garantia de que PageSpeed responderá nesse intervalo. Em sites ou condições de rede mais lentas, o operador pode elevar explicitamente o limite, por exemplo:
+O valor de 120 segundos é default operacional, não garantia de que PageSpeed responderá nesse intervalo. Em sites ou condições de rede mais lentas, o operador pode elevar explicitamente o limite, por exemplo:
 
 ```powershell
 --web-performance-timeout-seconds 180

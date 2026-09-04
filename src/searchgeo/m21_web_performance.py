@@ -44,7 +44,7 @@ _CWV_THRESHOLDS = {
 class WebPerformanceConfig:
     enabled: bool = False
     max_pages: int = 10
-    timeout_seconds: float = 60.0
+    timeout_seconds: float = 120.0
     categories: tuple[str, ...] = DEFAULT_CATEGORIES
     field_source: str = "auto"
     pagespeed_api_key: str | None = None
