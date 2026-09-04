@@ -90,6 +90,8 @@ SEARCHGEO_CRUX_API_KEY
 
 Elas não são credenciais de IA, não são reutilizadas pelos SemanticProviders e nunca devem substituir `OPENAI_API_KEY`, `DEEPSEEK_API_KEY` ou `MIMO_API_KEY`.
 
+Para criar corretamente essas chaves no Google Cloud — incluindo projeto, ativação das APIs, caminhos de menu, restrições e configuração no PowerShell — consulte [GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md).
+
 ## M20 textual
 
 `SEARCHGEO_AI_CONTENT_REMEDIATION`, default `false`; aceita `true/false`, `1/0`, `yes/no`, `on/off`.
@@ -220,6 +222,8 @@ $env:SEARCHGEO_PAGESPEED_API_KEY = "<google-api-key>"
 
 PageSpeed Insights pode ser usado sem chave em uso ad hoc/baixo volume; para automação frequente a documentação oficial recomenda chave. O SearchGEO nunca persiste nem exibe essa chave.
 
+Criação, habilitação da **PageSpeed Insights API**, restrições e validação: [GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md).
+
 ### CrUX API key
 
 Para CrUX direto:
@@ -228,7 +232,9 @@ Para CrUX direto:
 $env:SEARCHGEO_CRUX_API_KEY = "<google-api-key>"
 ```
 
-A CrUX API direta exige chave.
+A CrUX API direta exige chave Google Cloud provisionada para **Chrome UX Report API**.
+
+Criação, habilitação da API, restrições e validação: [GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md).
 
 ### Fonte de field data
 
