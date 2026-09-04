@@ -12,14 +12,15 @@ O console é uma camada de configuração, preflight, observabilidade e execuç�
 
 - uma tela lógica por vez;
 - configuração explícita antes da execução;
+- defaults seguros visíveis sem obrigar o usuário a materializar variáveis redundantes;
+- variáveis avançadas agrupadas por fronteira funcional;
 - progresso/etapa durante a execução sem polling externo adicional;
-- secrets nunca são exibidos em claro;
-- credenciais não são gravadas no arquivo INI;
-- persistência opcional de credenciais no Windows exige confirmação explícita e usa apenas o escopo `User`;
+- secrets nunca exibidos em claro nem gravados no INI;
+- persistência opcional de credenciais no Windows exige confirmação explícita e usa apenas `User`;
 - integração externa indisponível é explicada e não vira finding do website;
 - custo prévio é estimativa de exposição, não invoice;
-- consumo real exibido após a execução vem da telemetria persistida;
-- Synthetic Apdex é tratado como carga sintética, não como custo financeiro de API.
+- consumo real após a execução vem da telemetria persistida;
+- Synthetic Apdex é carga sintética, não custo financeiro de API.
 
 ## Arquivo de configuração do usuário
 
@@ -34,29 +35,15 @@ Ao iniciar:
 1. se o arquivo não existir, ele é criado com defaults não sensíveis;
 2. os parâmetros persistíveis são carregados;
 3. configurações de ambiente válidas continuam disponíveis para a sessão;
-4. API keys, tokens, senhas e outros secrets não são lidos nem gravados pelo INI.
+4. API keys, tokens, senhas e outros secrets não são gravados pelo INI.
 
-O menu mostra o estado do arquivo:
-
-```text
-Arquivo INI: ...\searchgeo-console.ini | SALVO
-```
-
-ou:
-
-```text
-Arquivo INI: ...\searchgeo-console.ini | ALTERAÇÕES NÃO SALVAS
-```
-
-Para persistir os parâmetros não sensíveis:
+O menu mostra `SALVO` ou `ALTERAÇÕES NÃO SALVAS`. Para persistir parâmetros não sensíveis:
 
 ```text
 S. Salvar configuração INI [SEM CHAVES]
 ```
 
-A gravação é atômica: o conteúdo é produzido em arquivo temporário e substitui o INI somente após a escrita concluir.
-
-Ao sair com alterações pendentes, o console pede uma decisão explícita. Credenciais que diferem da persistência do Windows continuam sendo tratadas como alterações voláteis da sessão.
+A gravação é atômica. Ao sair com alterações pendentes, o console pede decisão explícita. Credenciais que diferem da persistência do Windows continuam sendo tratadas como alterações voláteis da sessão.
 
 ## Credenciais
 
@@ -74,19 +61,13 @@ Principais variáveis:
 | PageSpeed | `SEARCHGEO_PAGESPEED_API_KEY` |
 | CrUX | `SEARCHGEO_CRUX_API_KEY` |
 
-As credenciais podem ser inseridas/alteradas no menu:
-
-```text
-E. Variáveis de ambiente / credenciais
-```
-
-Secrets são lidos com entrada sem eco e aparecem somente como `[SET]`.
+A referência completa, incluindo **como obter cada chave**, está em [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md). Para as chaves Google de PageSpeed/CrUX, veja também [GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md).
 
 ### Sessão × persistência no Windows
 
-O valor efetivamente usado pela auditoria é sempre o valor presente no processo atual. Portanto, quando uma key já existe no Windows e o usuário a altera dentro do console, **o valor da sessão aberta prevalece imediatamente**.
+O valor efetivamente usado pela auditoria é o valor presente no processo atual. Se uma key herdada do Windows é alterada dentro do console, **o valor da sessão aberta prevalece imediatamente**.
 
-O menu representa a origem sem exibir o segredo:
+A origem é representada sem exibir o segredo:
 
 ```text
 [SET] [SO:USER]
@@ -95,27 +76,104 @@ O menu representa a origem sem exibir o segredo:
 [SET] [SESSÃO | SO:USER existente]
 ```
 
-Se uma credencial persistida foi removida apenas da sessão atual, o console também pode indicar que ela continua persistida no SO, mas não está ativa naquele processo.
-
-Dentro do menu de ambiente:
+Para uma variável de secret:
 
 ```text
 S = setar/alterar somente a sessão atual
 R = remover somente da sessão atual
-P = persistir/remover credencial no Windows
+P = persistir/remover credencial no Windows/User
+D = abrir documentação detalhada
+V = voltar
 ```
 
-A opção `P` é restrita a secrets. Para persistir, o usuário precisa primeiro ter um valor válido na sessão e confirmar explicitamente digitando `SIM`. A gravação é feita no ambiente **User** do Windows, equivalente à persistência de variável de ambiente do usuário; não usa o escopo `Machine` e não exige execução como Administrador.
+A opção `P` exige valor válido na sessão e confirmação explícita `SIM`. A persistência usa o ambiente **User** do Windows, não `Machine`, não exige Administrador e nunca grava o segredo em arquivos SearchGEO. Remover a persistência `User` não apaga o valor já carregado na sessão atual.
 
-A remoção de persistência também exige confirmação e remove somente o valor do escopo Windows/User. O valor da sessão atual é preservado até que o processo seja encerrado ou o usuário o remova pela opção `R`.
+Variáveis de ambiente não são um secret manager: processos e ferramentas com acesso ao mesmo perfil podem lê-las.
 
-A persistência no Windows não transforma a variável em secret manager: processos e ferramentas com acesso ao mesmo perfil do usuário podem ler variáveis de ambiente persistidas. O SearchGEO nunca grava essas chaves em `searchgeo-console.ini`, reports ou logs.
+MiMo exige credencial PAYG `sk-...` no adapter atual. Token Plan `tp-...` usa produto/endpoint diferente.
 
-MiMo exige credencial PAYG compatível com `sk-...` no adapter atual. Token Plan `tp-...` usa produto/endpoint diferente e não é tratado como credencial PAYG válida.
+## Menu de variáveis de ambiente — organizado por domínio
+
+A antiga lista plana foi substituída por um nível de navegação por fronteira funcional:
+
+```text
+CONFIGURAÇÃO AVANÇADA — VARIÁVEIS DE AMBIENTE
+
+1. Aplicação e execução
+2. IA — credenciais
+3. IA — modelos e reasoning
+4. IA — endpoints avançados
+5. Web Performance / Google APIs
+6. Synthetic Apdex
+7. Browser / Playwright
+
+A. Todas as variáveis
+D. Abrir documentação detalhada
+V. Voltar
+```
+
+Dentro de cada grupo, somente as variáveis daquele domínio são exibidas. Ao selecionar uma variável, a tela informa:
+
+```text
+Grupo
+Para que serve
+Tipo
+Valores aceitos
+Default efetivo
+Quando é obrigatória
+Se é sensível
+Custo/impacto
+Valor/origem atual
+Exemplo
+Como obter/referência
+Observações
+```
+
+### Defaults na tela
+
+Quando a variável está ausente, mas existe um default seguro do produto, o console exibe por exemplo:
+
+```text
+SEARCHGEO_DEVICE_CONTEXT              <default efetivo: mobile>
+SEARCHGEO_AI_TIMEOUT_SECONDS           <default efetivo: 180>
+SEARCHGEO_WEB_PERFORMANCE              <default efetivo: false>
+SEARCHGEO_OPENAI_MODEL                 <default efetivo: gpt-5.6-luna>
+```
+
+Isso **não cria a variável no sistema operacional**. O objetivo é mostrar o valor efetivamente usado e evitar configuração redundante. Secrets não possuem default. O threshold T do Synthetic Apdex também não recebe valor inventado porque precisa refletir o objetivo de desempenho definido pelo usuário.
+
+### Variáveis com domínio fechado
+
+Enums e booleanos são configurados por lista guiada. Exemplos:
+
+```text
+SEARCHGEO_DEVICE_CONTEXT
+  mobile | desktop | both
+
+SEARCHGEO_WEB_PERFORMANCE_FIELD_SOURCE
+  auto | pagespeed | crux | none
+
+SEARCHGEO_APDEX_CONCURRENCY
+  1 | 2
+```
+
+Modelos e níveis de reasoning são derivados do provider registry, reduzindo risco de a UI divergir da validação do código.
+
+### Validações adicionais
+
+O editor recusa antes da execução, entre outros casos:
+
+- `SEARCHGEO_CONFIG` apontando para arquivo inexistente;
+- `SEARCHGEO_LOG_LEVEL` fora do domínio aceito;
+- categoria Lighthouse desconhecida ou duplicada;
+- endpoint avançado que não seja URL HTTP(S) absoluta;
+- modelo/reasoning fora do domínio do provider;
+- `field_source=crux` sem credencial CrUX ativa;
+- limites inválidos de Synthetic Apdex.
 
 ## Provider registry e AUTO
 
-O console deriva providers, modelos e variáveis do registry canônico. Providers concretos:
+Providers concretos:
 
 ```text
 openai
@@ -140,11 +198,9 @@ A cadeia `AUTO` permanece:
 OpenAI -> DeepSeek -> MiMo
 ```
 
-xAI, Qwen, Gemini e Anthropic permanecem explicit-only enquanto sua qualificação externa não for promovida.
+xAI, Qwen, Gemini e Anthropic permanecem explicit-only enquanto sua qualificação não for promovida.
 
 ## Defaults públicos de IA
-
-Quando o usuário não define override, o produto privilegia o modelo mais simples disponível no adapter e o menor esforço de raciocínio efetivamente suportado:
 
 | Provider | Modelo default | Esforço default |
 |---|---|---|
@@ -156,11 +212,9 @@ Quando o usuário não define override, o produto privilegia o modelo mais simpl
 | Gemini | `gemini-3.8-flash` | `LOW` |
 | Anthropic | `claude-sonnet-5` | `LOW` |
 
-Overrides explícitos de modelo/esforço continuam prevalecendo quando o adapter aceita o valor.
+Overrides explícitos continuam prevalecendo quando o adapter aceita o valor.
 
 ## Menu principal
-
-A superfície funcional é:
 
 ```text
 1. Entrada
@@ -193,28 +247,17 @@ Q. Sair
 
 ## Opção 4 — IA
 
-A configuração de IA reúne:
-
-```text
-provider
-modelo
-esforço/profundidade, quando suportado
-timeout por tentativa
-```
-
-O menu principal resume a configuração efetiva, por exemplo:
+A configuração reúne provider, modelo, esforço/profundidade quando suportado e timeout por tentativa. Exemplo:
 
 ```text
 4. IA : openai [APTO] | modelo=gpt-5.6-luna | esforço=NONE | timeout=180s
 ```
 
-`SEARCHGEO_AI_TIMEOUT_SECONDS` continua disponível como configuração avançada. O timeout limita cada tentativa contra o provider; não é um timeout global da auditoria.
-
-Em `AUTO`, OpenAI, DeepSeek e MiMo mantêm sua própria configuração de modelo/esforço. Um fallback não herda parâmetros incompatíveis do provider anterior.
+`SEARCHGEO_AI_TIMEOUT_SECONDS` continua disponível como override avançado. Em `AUTO`, OpenAI, DeepSeek e MiMo mantêm suas próprias configurações; fallback não herda parâmetro incompatível do provider anterior.
 
 ## Opção 5 — Remediação textual por IA
 
-A remediação só pode ser habilitada quando a opção 4 possui um provider apto. Com IA=`none` ou provider indisponível, o menu informa explicitamente:
+Só pode ser habilitada quando a opção 4 possui provider apto. Com IA=`none` ou provider indisponível:
 
 ```text
 INDISPONÍVEL [REQUER IA CONFIGURADA E ATIVA NO ITEM 4]
@@ -224,43 +267,25 @@ A remediação é advisory/evidence-bound, pode gerar chamadas adicionais e não
 
 ## Opção 6 — Web Performance
 
-Configura coleta externa PageSpeed/Lighthouse e dados de campo CrUX.
+Configura PageSpeed/Lighthouse e dados de campo CrUX. O console permite definir habilitação, field source e timeout por URL.
 
-O console permite definir:
-
-```text
-habilitado/desabilitado
-field source
-timeout PageSpeed/Lighthouse por URL
-```
-
-Default operacional de timeout:
+Default operacional:
 
 ```text
 120 segundos
 ```
 
-Esse valor controla quanto o cliente SearchGEO aguarda a resposta completa da chamada PageSpeed/CrUX. A API PageSpeed executa o Lighthouse remotamente e não expõe ao SearchGEO um parâmetro separado para definir o timeout interno de carregamento da página usado pelo Lighthouse.
+Esse timeout controla quanto o cliente espera a resposta PageSpeed/CrUX. A API PageSpeed executa Lighthouse remotamente e não expõe ao SearchGEO parâmetro separado para o timeout interno de carregamento do Lighthouse.
 
 `field_source=crux` exige `SEARCHGEO_CRUX_API_KEY`.
 
-Quando PageSpeed falha, mas CrUX direto funciona, o resultado de Web Performance fica parcial. Métricas Lighthouse e Acessibilidade que dependem do artifact PageSpeed permanecem indisponíveis e o relatório mostra a causa persistida, como timeout, HTTP, quota ou outro erro operacional.
+Falha PageSpeed pode deixar Lighthouse/Acessibilidade indisponíveis enquanto CrUX direto ainda pode funcionar. O relatório preserva a causa real; não converte ausência de dado em problema do website.
 
 ## Opção 11 — Synthetic Apdex
 
-Synthetic Apdex mede repetidamente uma Task de navegação real em Chromium e gera tráfego HTTP contra o alvo.
+Ao habilitar, o console explica e solicita T, amostras válidas, máximo de tentativas, máximo de páginas, timeout, delay e concorrência.
 
-Ao habilitar, o console explica e solicita:
-
-- **T**: tempo-alvo; `<=T` Satisfied, `>T e <=4T` Tolerating, `>4T` Frustrated;
-- **amostras válidas por contexto**: tamanho desejado do grupo por URL/device;
-- **máximo de tentativas**: teto para substituir amostras inválidas;
-- **máximo de páginas**: limite de páginas que recebem a medição;
-- **timeout por navegação**: deve ser `>4T`;
-- **delay**: intervalo mínimo entre inícios;
-- **concorrência**: 1 é conservador; 2 aumenta carga simultânea.
-
-Defaults quando habilitado:
+Defaults:
 
 ```text
 T                    = obrigatório
@@ -272,13 +297,11 @@ delay                  = 1 s
 concorrência           = 1; máximo 2
 ```
 
-Grupos com 1–99 amostras válidas são diagnóstico small-group e recebem `*`.
-
-Synthetic Apdex não usa LLM e não adiciona chamadas PageSpeed/CrUX, mas pode gerar muitos requests de subrecursos contra o site. Use volume relevante em produção somente com autorização.
+Grupos com 1–99 amostras válidas são small-group e recebem `*`. Synthetic Apdex não usa LLM nem PageSpeed/CrUX, mas gera tráfego HTTP real; volume relevante em produção exige autorização.
 
 ## Progresso durante a execução
 
-O console atualiza a mesma tela aproximadamente uma vez por segundo e apresenta:
+A mesma tela é atualizada aproximadamente uma vez por segundo com:
 
 ```text
 Status
@@ -293,45 +316,30 @@ Progresso
 Detalhe
 ```
 
-A atualização não realiza polling HTTP adicional. Ela usa estado do subprocesso, leitura SQLite em modo somente leitura e tail limitado do log operacional.
-
-Quando não existe contador exato, o percentual é identificado como estimativa por etapa. Synthetic Apdex usa os contadores persistidos de contexto/amostras/tentativas e pode exibir progresso medido.
+Não há polling HTTP adicional: a atualização usa estado do subprocesso, SQLite local em leitura e tail limitado do log.
 
 ## Configuração × resultado obtido
 
-Depois da execução, o console e o relatório diferenciam **configurado** de **materializado**.
+Após a execução, console e relatório diferenciam o que foi configurado do que foi materializado. São mostrados separadamente tentativas/sucessos de IA, tokens/custo estimado, chamadas PageSpeed/CrUX, cobertura de Acessibilidade e tentativas/amostras Synthetic Apdex.
 
-São mostrados separadamente:
-
-- tentativas/sucessos de IA;
-- tokens e custo IA estimado;
-- chamadas PageSpeed;
-- chamadas CrUX;
-- cobertura de Acessibilidade;
-- causa quando Acessibilidade não foi obtida;
-- tentativas/amostras Synthetic Apdex.
-
-Uma fonte configurada que falhou por timeout, quota, HTTP, ausência de artifact ou falta de dado não é silenciosamente apresentada como sucesso nem como problema do website.
+Fonte configurada que falhou por timeout, quota, HTTP, ausência de artifact ou falta de dado não é apresentada como sucesso nem como problema do website.
 
 ## Segurança e persistência
 
-- o INI não armazena secrets;
+- INI não armazena secrets;
 - reports/logs não devem conter chaves em claro;
-- o console não pressupõe que uma key configurada possua saldo/quota;
-- a sessão atual prevalece sobre valores herdados do SO durante a execução aberta;
-- persistência opcional de credencial no Windows usa somente `User`, mediante confirmação explícita;
-- remoção da persistência `User` não apaga automaticamente o valor já carregado na sessão atual;
-- o console informa `SO:USER`, `SO:MACHINE` ou `SESSÃO` sem revelar o secret;
-- variáveis de ambiente não são equivalentes a um secret manager;
-- valores não sensíveis podem ser salvos no INI;
+- key configurada não é prova de saldo/quota;
+- sessão atual prevalece sobre valores herdados durante o processo aberto;
+- persistência Windows usa somente `User` e confirmação explícita;
+- remoção da persistência `User` não apaga automaticamente a sessão atual;
+- origem `SO:USER`, `SO:MACHINE` ou `SESSÃO` é mostrada sem revelar o secret;
+- variáveis de ambiente não equivalem a secret manager;
+- parâmetros não sensíveis podem ser salvos no INI;
 - alterações não salvas são avisadas antes da saída.
-
-## Identificadores internos históricos
-
-Nomes de módulos, tabelas, eventos e documentos normativos podem manter identificadores históricos de implementação para compatibilidade de schema/rastreabilidade. Esses identificadores não constituem nomenclatura funcional da interface pública e não devem ser usados como rótulos do menu ou dos relatórios.
 
 ## Leituras relacionadas
 
+- [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md)
 - [CONFIGURATION.md](CONFIGURATION.md)
 - [CLI_REFERENCE.md](CLI_REFERENCE.md)
 - [CONSOLE_COST_AND_USAGE.md](CONSOLE_COST_AND_USAGE.md)
