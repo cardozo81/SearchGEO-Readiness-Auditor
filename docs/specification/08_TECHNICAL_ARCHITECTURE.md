@@ -1,6 +1,6 @@
 # TECHNICAL_ARCHITECTURE.md
 
-**Status:** APPROVED — M21 + M20 + REPORT-SITE-GEO-001
+**Status:** APPROVED — SAFE PROVIDER EXTENSIONS + M21 + M20 + REPORT-SITE-GEO-001
 
 ## 1. Estilo arquitetural
 
@@ -34,7 +34,7 @@ CLI
 → rendering
 → extraction/evidence
 → deterministic rules
-→ semantic provider opcional (M7/M18)
+→ semantic provider opcional (M7/M18 + extensions explicit-only)
 → device comparison quando ambos existem
 → scoring (M9)
 → prioritization/remediation base (M10/M16/M17)
@@ -150,7 +150,9 @@ Esses JSONs preservam o payload utilizado na projeção sem persistir API key.
 
 `SemanticAnalysisProvider` é abstração independente de fornecedor.
 
-Providers suportados na baseline operacional:
+### 7.1 Baseline M18 homologada
+
+O núcleo `searchgeo.m18_ai` permanece responsável por:
 
 ```text
 NONE
@@ -160,11 +162,53 @@ MIMO
 AUTO router
 ```
 
+`AUTO` mantém cadeia restrita a:
+
+```text
+OPENAI → DEEPSEEK → MIMO
+```
+
+Nenhum provider de extensão pode ingressar silenciosamente nessa cadeia.
+
 M18 persiste sessão/tentativas da finalidade de análise semântica. IA não executa scoring.
 
-M20, quando habilitado, cria uma sessão de remediação derivada dos providers M18 ainda saudáveis. Não existe segunda credencial/model surface. M20 preserva quarantine anterior e executa failover/URL pinning próprio para a finalidade de remediação, mantendo telemetria separada.
+### 7.2 Extensão aditiva de providers
 
-M21 não usa `SemanticAnalysisProvider`, não chama OpenAI/DeepSeek/MiMo e não acrescenta consumo LLM.
+A extensão segura é materializada fora do núcleo homologado:
+
+```text
+searchgeo.provider_extensions
+searchgeo.provider_extensions_m20
+searchgeo.cli_extensions
+```
+
+Providers extension atuais:
+
+```text
+XAI / GROK      → grok-4.6
+QWEN            → qwen3.8-max | qwen3.8-flash
+GEMINI          → gemini-3.8-flash
+ANTHROPIC       → claude-sonnet-5
+```
+
+Todos são `PROVISIONAL` e `explicit-only` até smoke humano. Suas API keys não os tornam candidatos de `AUTO`.
+
+O entrypoint público usa `cli_extensions`, que amplia as escolhas e delega toda seleção legacy (`none`, `openai`, `deepseek`, `mimo`, `auto`) ao builder M18 original. `src/searchgeo/cli.py`, `src/searchgeo/m18_ai.py` e `src/searchgeo/m20_ai.py` permanecem baseline não modificada pela extensão.
+
+Os adapters de extensão reutilizam o mesmo contrato semântico normalizado, schema/evidence validation, `ProviderAttempt`, quarantine e telemetria compatível. Diferenças de API ficam encapsuladas no adapter nativo do fornecedor.
+
+### 7.3 M20
+
+M20, quando habilitado, cria sessão de remediação a partir do provider selecionado ainda saudável.
+
+- OpenAI/DeepSeek/MiMo continuam pelo router M20 homologado;
+- xAI/Qwen/Gemini/Anthropic usam `provider_extensions_m20`;
+- provider quarantined na finalidade M7 não é reativado para M20;
+- a finalidade M20 mantém telemetria separada e não altera scoring.
+
+### 7.4 M21
+
+M21 não usa `SemanticAnalysisProvider`, não chama qualquer provider LLM e não acrescenta consumo LLM.
 
 ## 8. M20
 
@@ -239,19 +283,23 @@ Política default `auto`:
 
 ### 9.4 Credenciais e consumo
 
-Credenciais isoladas:
+Credenciais M21 isoladas:
 
 ```text
 SEARCHGEO_PAGESPEED_API_KEY
 SEARCHGEO_CRUX_API_KEY
 ```
 
-Elas nunca substituem nem reutilizam:
+Elas nunca substituem nem reutilizam credenciais LLM:
 
 ```text
 OPENAI_API_KEY
 DEEPSEEK_API_KEY
 MIMO_API_KEY
+XAI_API_KEY
+DASHSCOPE_API_KEY
+GEMINI_API_KEY
+ANTHROPIC_API_KEY
 ```
 
 `--web-performance-max-pages` limita logical pages externas; `0` significa todas. Em `both`, cada página pode produzir dois contextos PageSpeed. Timeout não gera retry automático.
@@ -360,8 +408,11 @@ Versionar:
 - ruleset;
 - rendering policy;
 - prompt/contract semântico quando aplicável;
+- provider adapter/qualification contract;
 - contrato M20;
 - contrato M21 e interpretação de field/lab data;
 - scoring;
 - prioritization;
 - reporting contract.
+
+A promoção de um provider de extensão de `PROVISIONAL` para `QUALIFIED` ou sua entrada em `AUTO` exige qualificação/smoke explícitos e mudança versionada; não pode ocorrer por simples presença de credencial.
