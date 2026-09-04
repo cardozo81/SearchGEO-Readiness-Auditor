@@ -7,17 +7,13 @@ import unittest
 from searchgeo import cli as legacy_cli
 from searchgeo.cli import build_parser as legacy_build_parser
 from searchgeo.cli_extensions import build_parser, main
+from searchgeo.provider_registry import extension_cli_choices
 
 
 class CLIProviderExtensionTests(unittest.TestCase):
-    def test_extension_cli_adds_only_explicit_provider_choices(self) -> None:
+    def test_extension_cli_adds_registry_explicit_provider_choices(self) -> None:
         parser = build_parser()
-        args = parser.parse_args([
-            "audit", "https://example.com", "--ai-provider", "xai",
-        ])
-        self.assertEqual(args.ai_provider, "xai")
-
-        for provider in ("grok", "qwen", "gemini", "anthropic", "claude"):
+        for provider in extension_cli_choices():
             with self.subTest(provider=provider):
                 parsed = parser.parse_args([
                     "audit", "https://example.com", "--ai-provider", provider,

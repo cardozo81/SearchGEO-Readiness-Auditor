@@ -8,13 +8,13 @@ from searchgeo import cli as _legacy_cli
 from searchgeo import m20 as _m20
 from searchgeo.provider_extensions import build_semantic_provider
 from searchgeo.provider_extensions_m20 import build_content_remediation_router
+from searchgeo.provider_registry import extension_cli_choices
 
-_EXTENSION_CHOICES = ("xai", "grok", "qwen", "gemini", "anthropic", "claude")
 _LEGACY_BUILD_PARSER = _legacy_cli.build_parser
 
 
 def build_parser():
-    """Return a fresh legacy parser with additive explicit provider choices."""
+    """Return a fresh legacy parser with registry-derived explicit provider choices."""
     parser = _LEGACY_BUILD_PARSER()
     subparsers = next(
         action
@@ -25,7 +25,7 @@ def build_parser():
     ai_action = next(action for action in audit_parser._actions if action.dest == "ai_provider")
     legacy_choices = tuple(ai_action.choices or ())
     ai_action.choices = legacy_choices + tuple(
-        item for item in _EXTENSION_CHOICES if item not in legacy_choices
+        item for item in extension_cli_choices() if item not in legacy_choices
     )
     ai_action.help = (
         "semantic analysis provider; AUTO remains the homologated "

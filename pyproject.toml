@@ -9,6 +9,7 @@ description = "Local Search/GEO readiness auditor."
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "playwright>=1.57,<2",
+    "tzdata>=2026.1",
 ]
 
 [project.scripts]
