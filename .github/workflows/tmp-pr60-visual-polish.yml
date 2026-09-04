@@ -1,0 +1,181 @@
+name: tmp-pr60-visual-polish
+
+on:
+  push:
+    branches:
+      - feat/report-responsive-panels-main-integration
+
+permissions:
+  contents: write
+
+jobs:
+  polish-and-regress:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Apply idempotent visual polish
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('src/searchgeo/report_navigation.py')
+          text = path.read_text(encoding='utf-8')
+
+          if '_FOOTER_RE = re.compile(' not in text:
+              anchor = '''_M20_COST_RE = re.compile(
+              r"<small>Custo estimado</small><strong>([0-9]+(?:\\.[0-9]+)?) USD</strong>"
+          )
+          '''
+              addition = '''_M20_COST_RE = re.compile(
+              r"<small>Custo estimado</small><strong>([0-9]+(?:\\.[0-9]+)?) USD</strong>"
+          )
+          _FOOTER_RE = re.compile(
+              r"<footer\\b[^>]*class=(['\\\"])[^'\\\"]*\\bfooter\\b[^'\\\"]*\\1[^>]*>.*?</footer>",
+              flags=re.IGNORECASE | re.DOTALL,
+          )
+          '''
+              if anchor not in text:
+                  raise SystemExit('footer regex anchor not found')
+              text = text.replace(anchor, addition, 1)
+
+          replacements = {
+              '--amber:#b68a50;--red:#bf6f70;--slate:#7d899a;--radius:13px;':
+                  '--amber:#b68a50;--red:#bf6f70;--slate:#7d899a;--radius:5px;',
+              '.page-card{padding:20px clamp(17px,1.8vw,24px);box-shadow:0 2px 10px rgba(47,58,78,.03);border-left:3px solid rgba(101,127,198,.18)}':
+                  '.page-card{padding:20px clamp(17px,1.8vw,24px);box-shadow:0 2px 10px rgba(47,58,78,.03)}',
+              '.metric,.score-meta div,.page-summary div,.remediation-grid>div,.confidence-explain>div{border:0;background:#f7f8fb;border-radius:9px}':
+                  '.metric,.score-meta div,.page-summary div,.remediation-grid>div,.confidence-explain>div{border:0;background:#f7f8fb;border-radius:5px}',
+              '.metric strong{font-size:.96rem;font-weight:650}.score-number{font-weight:680}.score-card{border:1px solid var(--line);border-left-width:4px;border-radius:11px;box-shadow:0 3px 12px rgba(47,58,78,.03)}':
+                  '.metric strong{font-size:.96rem;font-weight:650}.score-number{font-weight:680}.score-card{border:1px solid var(--line);border-left-width:4px;border-radius:5px;box-shadow:0 3px 12px rgba(47,58,78,.03)}',
+              'position:sticky;top:20px;border:1px solid var(--line);border-radius:10px;overflow:hidden;':
+                  'position:sticky;top:20px;border:1px solid var(--line);border-radius:5px;overflow:hidden;',
+              '.notice{border-color:rgba(101,127,198,.20);background:var(--soft-blue);border-radius:10px}':
+                  '.notice{border-color:rgba(101,127,198,.20);background:var(--soft-blue);border-radius:5px}',
+              '.table-wrap{border-color:var(--line);border-radius:10px;box-shadow:none}th{':
+                  '.table-wrap{border-color:var(--line);border-radius:0;box-shadow:none}table{border-radius:0}th{',
+              'details{border-color:var(--line);border-radius:9px;background:#fbfbfc}':
+                  'details{border-color:var(--line);border-radius:5px;background:#fbfbfc}',
+              '.metric-grid,.score-grid,.grid,.ref-grid{grid-template-columns:1fr}.table-wrap{border-radius:8px}':
+                  '.metric-grid,.score-grid,.grid,.ref-grid{grid-template-columns:1fr}.table-wrap{border-radius:0}',
+          }
+          for old, new in replacements.items():
+              if old in text:
+                  text = text.replace(old, new, 1)
+              elif new not in text:
+                  raise SystemExit(f'expected CSS contract not found: {old[:72]}')
+
+          spacing = '#m20-ai-telemetry .table-wrap{margin-top:14px}'
+          if spacing not in text:
+              anchor = '.metric-grid{grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr));gap:9px}\n'
+              if anchor not in text:
+                  raise SystemExit('M20 spacing anchor not found')
+              text = text.replace(anchor, anchor + spacing + '\n', 1)
+
+          call = '        normalized = _enhance_rule_tooltips(normalized)\n'
+          if '        normalized = _move_footer_to_end_of_main(normalized)\n' not in text:
+              if call not in text:
+                  raise SystemExit('normalization anchor not found')
+              text = text.replace(call, call + '        normalized = _move_footer_to_end_of_main(normalized)\n', 1)
+
+          if 'def _move_footer_to_end_of_main(' not in text:
+              anchor = '\n\ndef _ensure_premium_css(report_dir: Path) -> None:\n'
+              function = '''
+
+          def _move_footer_to_end_of_main(html: str) -> str:
+              """Keep the report footer as the final element inside main after enrichers."""
+              match = _FOOTER_RE.search(html)
+              if match is None:
+                  return html
+              footer = match.group(0)
+              without_footer = html[: match.start()] + html[match.end() :]
+              if "</main>" not in without_footer:
+                  return html
+              return without_footer.replace("</main>", footer + "</main>", 1)
+
+
+          def _ensure_premium_css(report_dir: Path) -> None:
+          '''
+              if anchor not in text:
+                  raise SystemExit('footer function anchor not found')
+              text = text.replace(anchor, function, 1)
+
+          path.write_text(text, encoding='utf-8', newline='\n')
+
+          test_path = Path('tests/test_report_navigation.py')
+          tests = test_path.read_text(encoding='utf-8')
+          assertion_anchor = '            self.assertIn("@media(max-width:700px)", css)\n'
+          assertions = '''            self.assertIn("@media(max-width:700px)", css)
+              self.assertIn("--radius:5px", css)
+              self.assertNotIn("border-left:3px solid rgba(101,127,198,.18)", css)
+              self.assertIn("#m20-ai-telemetry .table-wrap{margin-top:14px}", css)
+              self.assertIn(".table-wrap{border-color:var(--line);border-radius:0", css)
+              self.assertIn("table{border-radius:0}", css)
+          '''
+          if 'self.assertIn("--radius:5px", css)' not in tests:
+              if assertion_anchor not in tests:
+                  raise SystemExit('CSS assertion anchor not found')
+              tests = tests.replace(assertion_anchor, assertions, 1)
+
+          if 'def test_footer_is_last_element_inside_main_after_enrichment' not in tests:
+              anchor = '    def test_accessibility_keeps_canonical_position_when_materialized(self) -> None:\n'
+              method = '''    def test_footer_is_last_element_inside_main_after_enrichment(self) -> None:
+              with tempfile.TemporaryDirectory() as tmp:
+                  report_dir = Path(tmp)
+                  (report_dir / "ai-usage.html").write_text(
+                      "<html><body><aside class='app-nav'><nav></nav></aside><main>"
+                      "<header class='hero'>Topo</header>"
+                      "<footer class='footer'>Rodapé</footer>"
+                      "<section id='m20-ai-telemetry' class='panel'>M20</section>"
+                      "</main></body></html>",
+                      encoding="utf-8",
+                  )
+                  normalize_report_navigation(report_dir)
+                  normalize_report_navigation(report_dir)
+                  html = (report_dir / "ai-usage.html").read_text(encoding="utf-8")
+                  main_match = re.search(r"<main>(.*?)</main>", html, re.DOTALL)
+                  self.assertIsNotNone(main_match)
+                  main = main_match.group(1)
+                  self.assertEqual(main.count("<footer class='footer'>"), 1)
+                  self.assertTrue(main.rstrip().endswith("</footer>"))
+                  self.assertLess(main.index("m20-ai-telemetry"), main.index("<footer"))
+
+              def test_accessibility_keeps_canonical_position_when_materialized(self) -> None:
+          '''
+              if anchor not in tests:
+                  raise SystemExit('footer test anchor not found')
+              tests = tests.replace(anchor, method, 1)
+
+          test_path.write_text(tests, encoding='utf-8', newline='\n')
+      - name: Install and test
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m compileall -q src tests
+          python -m unittest discover -s tests -p "test_*.py"
+      - name: Visual contract
+        shell: python
+        run: |
+          from searchgeo.report_navigation import _PREMIUM_CSS
+          assert '--radius:5px' in _PREMIUM_CSS
+          assert 'border-left:3px solid rgba(101,127,198,.18)' not in _PREMIUM_CSS
+          assert '#m20-ai-telemetry .table-wrap{margin-top:14px}' in _PREMIUM_CSS
+          assert '.table-wrap{border-color:var(--line);border-radius:0' in _PREMIUM_CSS
+          assert 'table{border-radius:0}' in _PREMIUM_CSS
+          print('PR60_VISUAL_POLISH=PASS')
+      - name: Commit generated polish when needed
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No generated changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/searchgeo/report_navigation.py tests/test_report_navigation.py
+          git commit -m "style(report): ajustar cards tabelas footer e respiro M20"
+          git push origin HEAD:feat/report-responsive-panels-main-integration
