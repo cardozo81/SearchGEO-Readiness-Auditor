@@ -305,21 +305,22 @@ class M23Persistence:
             )
 
     def upsert_summary(self, item: SyntheticApdexSummary) -> None:
+        values = (
+            item.summary_id, item.audit_id, item.page_id, item.device, item.url,
+            item.task_id, item.profile_id, item.threshold_seconds, item.frustration_seconds,
+            item.valid_samples, item.invalid_samples, item.satisfied_count,
+            item.tolerating_count, item.frustrated_count, item.success_count,
+            item.application_error_count, item.timeout_count, item.navigation_error_count,
+            item.apdex_score, int(item.small_group), int(item.final_group), item.min_ms,
+            item.max_ms, item.mean_ms, item.median_ms, item.stddev_ms,
+            item.coefficient_of_variation, item.p75_ms, item.p90_ms, item.p95_ms,
+            item.p99_ms, item.first_half_mean_ms, item.second_half_mean_ms,
+            item.trend_percent, item.calculated_at,
+        )
         with self.connection:
             self.connection.execute(
-                "INSERT OR REPLACE INTO synthetic_apdex_summaries VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (
-                    item.summary_id, item.audit_id, item.page_id, item.device, item.url,
-                    item.task_id, item.profile_id, item.threshold_seconds, item.frustration_seconds,
-                    item.valid_samples, item.invalid_samples, item.satisfied_count,
-                    item.tolerating_count, item.frustrated_count, item.success_count,
-                    item.application_error_count, item.timeout_count, item.navigation_error_count,
-                    item.apdex_score, int(item.small_group), int(item.final_group), item.min_ms,
-                    item.max_ms, item.mean_ms, item.median_ms, item.stddev_ms,
-                    item.coefficient_of_variation, item.p75_ms, item.p90_ms, item.p95_ms,
-                    item.p99_ms, item.first_half_mean_ms, item.second_half_mean_ms,
-                    item.trend_percent, item.calculated_at,
-                ),
+                "INSERT OR REPLACE INTO synthetic_apdex_summaries VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                values,
             )
 
     def upsert_lighthouse_profile(self, item: LighthouseExecutionProfile) -> None:
