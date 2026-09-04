@@ -8,15 +8,14 @@ from pathlib import Path
 import sqlite3
 
 from searchgeo.cli import validate_target
-from searchgeo.console_config import DEFAULT_MODELS, MODEL_ENV, PROVIDERS, State, provider_capabilities
+from searchgeo.console_config import State, provider_capabilities
 from searchgeo.m18_ai import PRICING_CATALOG, PRICING_VERSION
+from searchgeo.provider_registry import auto_provider_ids, get_provider_registration
 from searchgeo.url_utils import normalize_url
 
 
 @dataclass(frozen=True, slots=True)
 class ExposureEstimate:
-    """Conservative pre-run exposure based only on known configuration."""
-
     level: str
     min_pages: int
     max_pages: int
@@ -31,8 +30,6 @@ class ExposureEstimate:
 
 @dataclass(frozen=True, slots=True)
 class ActualUsage:
-    """Measured/persisted external usage for the completed audit."""
-
     ai_attempts: int
     ai_successes: int
     input_tokens: int
@@ -70,40 +67,76 @@ def _configured_page_range(state: State) -> tuple[int, int]:
     return 1, state.max_pages
 
 
+def _model_for(registration, state_model: str | None = None) -> str:
+    return (
+        state_model
+        or os.environ.get(registration.model_env)
+        or registration.default_model
+    ).strip()
+
+
 def _selected_provider_models(state: State) -> tuple[tuple[str, str], ...]:
     if state.ai_provider == "none":
         return ()
-    if state.ai_provider in PROVIDERS:
-        provider = PROVIDERS[state.ai_provider]
-        model = state.ai_model or os.environ.get(MODEL_ENV[provider], DEFAULT_MODELS[provider])
-        return ((provider, model),)
+
     if state.ai_provider == "auto":
         capabilities = provider_capabilities(blocks=state.runtime_blocks)
         rows: list[tuple[str, str]] = []
-        for selection, provider in PROVIDERS.items():
-            if capabilities.get(selection) and capabilities[selection].available:
-                rows.append((provider, os.environ.get(MODEL_ENV[provider], DEFAULT_MODELS[provider])))
+        for provider_id in auto_provider_ids():
+            registration = get_provider_registration(provider_id)
+            if registration is None:
+                continue
+            capability = capabilities.get(provider_id)
+            if capability and capability.available:
+                rows.append(
+                    (registration.provider_name, _model_for(registration))
+                )
         return tuple(rows)
-    return ()
+
+    registration = get_provider_registration(state.ai_provider)
+    if registration is None:
+        return ()
+    return ((registration.provider_name, _model_for(registration, state.ai_model)),)
 
 
 def _pricing_lines(provider_models: tuple[tuple[str, str], ...]) -> tuple[str, ...]:
     lines: list[str] = []
     for provider, model in provider_models:
-        prices = [item for item in PRICING_CATALOG if item.provider == provider and item.model == model]
+        prices = [
+            item
+            for item in PRICING_CATALOG
+            if item.provider == provider and item.model == model
+        ]
         if not prices:
-            lines.append(f"{provider}/{model}: preço unitário não catalogado; custo monetário prévio não estimável.")
+            lines.append(
+                f"{provider}/{model}: preço unitário não catalogado; "
+                "custo monetário prévio não estimável."
+            )
             continue
         currencies = {item.currency for item in prices}
         if len(currencies) != 1:
-            lines.append(f"{provider}/{model}: catálogo possui moedas distintas; custo prévio não consolidado.")
+            lines.append(
+                f"{provider}/{model}: catálogo possui moedas distintas; "
+                "custo prévio não consolidado."
+            )
             continue
         currency = prices[0].currency
         input_values = sorted({item.input_price_per_million for item in prices})
         output_values = sorted({item.output_price_per_million for item in prices})
-        input_text = f"{input_values[0]:g}" if len(input_values) == 1 else f"{input_values[0]:g}–{input_values[-1]:g}"
-        output_text = f"{output_values[0]:g}" if len(output_values) == 1 else f"{output_values[0]:g}–{output_values[-1]:g}"
-        lines.append(f"{provider}/{model}: input {currency} {input_text}/1M tokens; output {currency} {output_text}/1M tokens.")
+        input_text = (
+            f"{input_values[0]:g}"
+            if len(input_values) == 1
+            else f"{input_values[0]:g}–{input_values[-1]:g}"
+        )
+        output_text = (
+            f"{output_values[0]:g}"
+            if len(output_values) == 1
+            else f"{output_values[0]:g}–{output_values[-1]:g}"
+        )
+        lines.append(
+            f"{provider}/{model}: input {currency} {input_text}/1M tokens; "
+            f"output {currency} {output_text}/1M tokens."
+        )
     return tuple(lines)
 
 
@@ -111,7 +144,11 @@ def _model_price_weight(provider_models: tuple[tuple[str, str], ...]) -> int:
     """Internal qualitative weight; deliberately not a billing formula."""
     maximum_output = 0.0
     for provider, model in provider_models:
-        prices = [item.output_price_per_million for item in PRICING_CATALOG if item.provider == provider and item.model == model]
+        prices = [
+            item.output_price_per_million
+            for item in PRICING_CATALOG
+            if item.provider == provider and item.model == model
+        ]
         if prices:
             maximum_output = max(maximum_output, max(prices))
     if maximum_output <= 0:
@@ -143,8 +180,16 @@ def estimate_exposure(state: State) -> ExposureEstimate:
     min_web = 0
     max_web = 0
     if state.web_performance:
-        web_pages_min = min(min_pages, state.web_max_pages) if state.web_max_pages else min_pages
-        web_pages_max = min(max_pages, state.web_max_pages) if state.web_max_pages else max_pages
+        web_pages_min = (
+            min(min_pages, state.web_max_pages)
+            if state.web_max_pages
+            else min_pages
+        )
+        web_pages_max = (
+            min(max_pages, state.web_max_pages)
+            if state.web_max_pages
+            else max_pages
+        )
         min_per_context = 1
         max_per_context = 2 if state.field_source in {"auto", "crux"} else 1
         min_web = web_pages_min * devices * min_per_context
@@ -152,17 +197,33 @@ def estimate_exposure(state: State) -> ExposureEstimate:
 
     reasons: list[str] = []
     if state.input_mode == "file" and min_pages:
-        reasons.append(f"TXT contém {min_pages} URL(s) única(s) válida(s) conhecidas antes da execução.")
+        reasons.append(
+            f"TXT contém {min_pages} URL(s) única(s) válida(s) conhecidas antes da execução."
+        )
     elif max_pages:
-        reasons.append(f"URL única é seed de crawl: 1 página conhecida, teto configurado de {max_pages}.")
+        reasons.append(
+            f"URL única é seed de crawl: 1 página conhecida, teto configurado de {max_pages}."
+        )
     if devices == 2:
         reasons.append("BOTH duplica os contextos potenciais mobile/desktop.")
     if provider_count:
-        reasons.append(f"IA ativa: até {max_ai} tentativa(s) potenciais considerando M18, cadeia de providers e M20 quando habilitado.")
+        reasons.append(
+            f"IA ativa: até {max_ai} tentativa(s) potenciais considerando M18, "
+            "cadeia de providers e M20 quando habilitado."
+        )
+    if state.ai_provider == "auto":
+        reasons.append(
+            "AUTO considera somente a cadeia homologada OpenAI -> DeepSeek -> MiMo; "
+            "providers PROVISIONAL explicit-only não entram na projeção AUTO."
+        )
     if state.content_remediation:
-        reasons.append("M20 pode acrescentar tentativas apenas quando houver findings elegíveis.")
+        reasons.append(
+            "M20 pode acrescentar tentativas apenas quando houver findings elegíveis."
+        )
     if state.web_performance:
-        reasons.append(f"M21: entre {min_web} e {max_web} chamada(s) externas potenciais PageSpeed/CrUX.")
+        reasons.append(
+            f"M21: entre {min_web} e {max_web} chamada(s) externas potenciais PageSpeed/CrUX."
+        )
 
     if not provider_count:
         level = "NENHUM"
@@ -176,7 +237,10 @@ def estimate_exposure(state: State) -> ExposureEstimate:
             level = "ALTO"
         else:
             level = "EXCESSIVO"
-        reasons.append("Faixa financeira é um índice interno de exposição baseado em volume máximo de tentativas e faixa de preço do modelo; não é invoice.")
+        reasons.append(
+            "Faixa financeira é um índice interno de exposição baseado em volume máximo "
+            "de tentativas e faixa de preço do modelo; não é invoice."
+        )
 
     return ExposureEstimate(
         level=level,
@@ -194,13 +258,27 @@ def estimate_exposure(state: State) -> ExposureEstimate:
 
 def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
     return connection.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", (table,)
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+        (table,),
     ).fetchone() is not None
 
 
-def _usage_from_table(connection: sqlite3.Connection, table: str) -> dict[str, int | dict[str, float]]:
+def _usage_from_table(
+    connection: sqlite3.Connection,
+    table: str,
+) -> dict[str, int | dict[str, float]]:
     if not _table_exists(connection, table):
-        return {"attempts": 0, "successes": 0, "input": 0, "cached": 0, "output": 0, "reasoning": 0, "total": 0, "unpriced": 0, "costs": {}}
+        return {
+            "attempts": 0,
+            "successes": 0,
+            "input": 0,
+            "cached": 0,
+            "output": 0,
+            "reasoning": 0,
+            "total": 0,
+            "unpriced": 0,
+            "costs": {},
+        }
     row = connection.execute(
         f"""
         SELECT COUNT(*) attempts,
@@ -210,7 +288,9 @@ def _usage_from_table(connection: sqlite3.Connection, table: str) -> dict[str, i
                COALESCE(SUM(output_tokens),0),
                COALESCE(SUM(reasoning_tokens),0),
                COALESCE(SUM(COALESCE(total_tokens, COALESCE(input_tokens,0)+COALESCE(output_tokens,0))),0),
-               SUM(CASE WHEN estimated_cost IS NULL AND (input_tokens IS NOT NULL OR output_tokens IS NOT NULL) THEN 1 ELSE 0 END)
+               SUM(CASE WHEN estimated_cost IS NULL
+                        AND (input_tokens IS NOT NULL OR output_tokens IS NOT NULL)
+                        THEN 1 ELSE 0 END)
         FROM {table}
         """
     ).fetchone()
@@ -226,14 +306,21 @@ def _usage_from_table(connection: sqlite3.Connection, table: str) -> dict[str, i
         ).fetchall()
     }
     return {
-        "attempts": int(row[0] or 0), "successes": int(row[1] or 0), "input": int(row[2] or 0),
-        "cached": int(row[3] or 0), "output": int(row[4] or 0), "reasoning": int(row[5] or 0),
-        "total": int(row[6] or 0), "unpriced": int(row[7] or 0), "costs": costs,
+        "attempts": int(row[0] or 0),
+        "successes": int(row[1] or 0),
+        "input": int(row[2] or 0),
+        "cached": int(row[3] or 0),
+        "output": int(row[4] or 0),
+        "reasoning": int(row[5] or 0),
+        "total": int(row[6] or 0),
+        "unpriced": int(row[7] or 0),
+        "costs": costs,
     }
 
 
-def _web_usage(connection: sqlite3.Connection) -> tuple[int, tuple[tuple[str, int], ...]]:
-    """Use M21 SQLite telemetry as the source of truth; do not recount log events."""
+def _web_usage(
+    connection: sqlite3.Connection,
+) -> tuple[int, tuple[tuple[str, int], ...]]:
     if not _table_exists(connection, "web_performance_attempts"):
         return 0, ()
     rows = connection.execute(
@@ -279,7 +366,9 @@ def actual_usage(workspace: Path | None) -> ActualUsage | None:
         output_tokens=int(m18["output"]) + int(m20["output"]),
         reasoning_tokens=int(m18["reasoning"]) + int(m20["reasoning"]),
         total_tokens=int(m18["total"]) + int(m20["total"]),
-        costs=tuple(sorted((currency, round(amount, 10)) for currency, amount in costs.items())),
+        costs=tuple(
+            sorted((currency, round(amount, 10)) for currency, amount in costs.items())
+        ),
         unpriced_ai_attempts=int(m18["unpriced"]) + int(m20["unpriced"]),
         web_external_calls=web_calls,
         web_services=services,
@@ -296,7 +385,7 @@ def persist_execution_projection(
     finished_at: str,
     duration_ms: int,
 ) -> bool:
-    """Persist only console-specific projection/timing; actual usage stays in M18/M20/M21 tables."""
+    """Persist only console-specific projection/timing; actual usage stays in M18/M20/M21."""
     if workspace is None:
         return False
     database = workspace / "audit.db"
@@ -361,9 +450,22 @@ def persist_execution_projection(
                         estimate.max_ai_attempts,
                         estimate.min_web_calls,
                         estimate.max_web_calls,
-                        json.dumps(provider_models, ensure_ascii=False, separators=(",", ":")),
-                        json.dumps(configuration, ensure_ascii=False, separators=(",", ":"), sort_keys=True),
-                        json.dumps(estimate.reasons, ensure_ascii=False, separators=(",", ":")),
+                        json.dumps(
+                            provider_models,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ),
+                        json.dumps(
+                            configuration,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                            sort_keys=True,
+                        ),
+                        json.dumps(
+                            estimate.reasons,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ),
                         PRICING_VERSION,
                     ),
                 )
