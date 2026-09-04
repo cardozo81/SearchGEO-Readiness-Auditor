@@ -1,6 +1,6 @@
 # M23 — Synthetic Navigation Apdex + Lighthouse Traceability
 
-**Status:** CANDIDATE — implementação exige smoke humano controlado antes de merge.  
+**Status:** INTEGRADO — smoke humano controlado aprovado antes do merge.  
 **Escopo:** Web Performance sintética e rastreabilidade de configuração Lighthouse.  
 **Não altera:** `BR-GEO-*`, `SCORE-GEO-002`, Coverage, Confidence, Consolidation, findings GEO ou recomendações GEO.
 
@@ -158,15 +158,7 @@ Nenhum secret deve ser persistido.
 
 M23 lê exclusivamente artifacts M21 já existentes e extrai `lighthouseResult.configSettings`/environment/timing quando disponíveis.
 
-Campos não observados permanecem `NULL`/ausentes. É proibido inventar:
-
-- throttling method;
-- RTT/throughput;
-- CPU slowdown;
-- viewport;
-- User-Agent;
-- benchmark index;
-- duração do Lighthouse.
+Campos não observados permanecem `NULL`/ausentes. É proibido inventar throttling method, RTT/throughput, CPU slowdown, viewport, User-Agent, benchmark index ou duração do Lighthouse.
 
 O tempo total de execução Lighthouse é telemetria do Lighthouse e não entra no Apdex.
 
@@ -195,7 +187,7 @@ A página deve mostrar:
 - aviso de carga;
 - separação explícita de SCORE-GEO-002, Lighthouse, CrUX e IA.
 
-`apdex.html` deve participar do menu canônico somente quando o arquivo existir.
+`apdex.html` participa do menu canônico somente quando o arquivo existir.
 
 ## 12. Fail-open
 
@@ -209,11 +201,11 @@ Falha de M23:
 - deve ser registrada no log operacional;
 - deve produzir status de limitação operacional quando possível.
 
-M21 e M23 são independentes: falha de PageSpeed/CrUX não impede, por si só, Synthetic Apdex; falha de Synthetic Apdex não invalida M21.
+M21 e M23 são independentes: falha PageSpeed/CrUX não impede, por si só, Synthetic Apdex; falha Synthetic Apdex não invalida M21.
 
 ## 13. Console
 
-O console deve expor M23 como item próprio e manter:
+O console expõe M23 como item próprio e mantém:
 
 - uma tela lógica por vez;
 - T obrigatório quando ON;
@@ -224,35 +216,24 @@ O console deve expor M23 como item próprio e manter:
 - observabilidade de progresso `M23_APDEX_SAMPLE`;
 - totais reais persistidos no resumo final.
 
-## 14. Gate de smoke humano
+## 14. Gate de smoke humano — concluído
 
-O primeiro smoke humano não deve usar 100 amostras em produção.
+O gate inicial foi executado antes da integração em `main` com alvo local/controlado, 1 URL, 1 device, `T` explícito, 5 amostras válidas, concorrência 1, IA OFF e M21 externo OFF.
 
-Gate inicial recomendado:
+Resultado aprovado:
 
-```text
-1 URL autorizada
-1 device
-T explícito
-3–5 amostras válidas
-concurrency=1
-delay >= 1s
-```
+- execução sem traceback;
+- 5/5 amostras válidas;
+- `PARTIAL` por small group, conforme contrato;
+- `small_group=*` explícito;
+- `apdex.html` materializado e validado visualmente;
+- menu canônico validado;
+- console com item `11. Synthetic Apdex M23` validado;
+- nenhum impacto em `SCORE-GEO-002`;
+- 0 chamadas LLM adicionais;
+- 0 chamadas PageSpeed/CrUX adicionadas por M23.
 
-Critérios:
-
-1. execução completa sem traceback;
-2. `small_group=*` explícito;
-3. amostras e contagens persistidas;
-4. Apdex reproduzível a partir de S/T/F;
-5. `apdex.html` no menu canônico;
-6. nenhum impacto em SCORE-GEO-002;
-7. console mostra carga, início/fim/duração e resultados;
-8. nenhum token/secret novo;
-9. 0 chamadas LLM adicionais;
-10. 0 chamadas PageSpeed/CrUX adicionadas por M23.
-
-Uma execução de 100 amostras contra ambiente real requer autorização humana específica de carga/capacidade.
+O gate funcional pequeno está encerrado. A regra operacional permanece: uma execução de 100 amostras contra ambiente real requer autorização humana específica de carga/capacidade.
 
 ## 15. Referências
 

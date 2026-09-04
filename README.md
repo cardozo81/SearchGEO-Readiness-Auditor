@@ -1,36 +1,50 @@
 # SearchGEO Readiness Auditor
 
-Auditor local de **Search/GEO Readiness** com evidência persistida, scoring reproduzível, análise semântica opcional por IA, remediação advisory evidence-backed e camada opcional de evidência externa de Web Performance. O produto avalia acessibilidade técnica, extraibilidade, estrutura semântica, entidades, answerability, citation readiness e outros sinais úteis para Search e sistemas generativos sem prometer ranking, tráfego, citação ou presença em respostas de IA.
+Auditor local de **Search/GEO Readiness** com evidência persistida, scoring reproduzível, análise semântica opcional por IA, remediação advisory evidence-backed, domínios separados de Acessibilidade/Web Performance e Synthetic Navigation Apdex opcional.
+
+O produto avalia acessibilidade técnica, extraibilidade, estrutura semântica, entidades, answerability, citation readiness e outros sinais úteis para Search e sistemas generativos sem prometer ranking, tráfego, citação ou presença em respostas de IA.
 
 ## Status atual
 
-**Baseline funcional atual: M22 + M21 + M20 + SCORE-GEO-002.**  
-**Capacidades integradas:** `REPORT-SITE-GEO-001`, seleção configurável de dispositivo, console interativo, provider registry canônico, `M20` para sugestões textuais opcionais + revisão/proposta determinística de JSON-LD, `M21` para Lighthouse/Core Web Vitals externos e `M22` para projeção separada de Acessibilidade e diagnósticos de Web Performance, sem alterar o scoring GEO.
+**Baseline funcional atual: M23 + M22 + M21 + M20 + SCORE-GEO-002.**
+
+Capacidades integradas:
+
+- `REPORT-SITE-GEO-001` com mini-site HTML e navegação canônica;
+- seleção `mobile`, `desktop` ou `both`;
+- console interativo de execução;
+- provider registry canônico;
+- M20 para sugestões textuais opcionais e revisão/proposta determinística de JSON-LD;
+- M21 para Lighthouse/Core Web Vitals externos;
+- M22 para projeção separada de Acessibilidade e diagnósticos técnicos de Web Performance;
+- M23 para `Synthetic Navigation Apdex`, com navegações reais repetidas em Chromium, persistência auditável e relatório dedicado;
+- `SCORE-GEO-002` preservado como modelo interno de readiness GEO.
 
 A aplicação:
 
 - executa auditoria ponta a ponta por CLI ou console interativo;
 - usa **Mobile como contexto padrão**;
-- permite `mobile`, `desktop` ou `both`;
-- persiste `audit.db` + `artifacts/`;
-- gera mini-site estático em `report/` com CSS externo compartilhado;
-- separa visão geral, Mobile, Desktop, remediações, conteúdo/JSON-LD, Acessibilidade, Web Performance, telemetria de IA e referências;
+- persiste `audit.db`, `artifacts/`, `logs/` e `report/`;
+- gera mini-site estático com CSS compartilhado;
+- separa GEO, Conteúdo/JSON-LD, Acessibilidade, Web Performance, Apdex e telemetria de IA;
 - suporta execução sem IA, provider explícito ou `auto`;
 - mantém Score, Coverage e Confidence distintos;
 - preserva rastreabilidade Evidence → RuleExecution → Finding → Priority → Remediation → Report;
-- mantém sugestões M20 advisory: não alteram automaticamente site, score ou findings;
-- mantém M21 como evidência externa aditiva: Lighthouse/CrUX não substituem, recalculam nem homologam `SCORE-GEO-002`;
-- mantém M22 como projeção de domínio: Acessibilidade e Web Performance não viram Score GEO nem findings GEO automaticamente.
+- mantém M20 advisory: não aplica conteúdo nem altera score/findings;
+- mantém M21/M22 como evidência/projeção separada: Lighthouse/CrUX não homologam nem recalculam `SCORE-GEO-002`;
+- mantém M23 separado: Apdex não é inferido de Lighthouse/CrUX e não entra no Score GEO.
 
-> O Score SearchGEO é um modelo interno de readiness. Não existe um score GEO/AEO normativo universal publicado por Google, OpenAI, Schema.org, WHATWG ou IETF. Lighthouse e Core Web Vitals possuem metodologia externa para seus fenômenos específicos e são exibidos separadamente.
+> O Score SearchGEO é um modelo interno de readiness. Não existe um score GEO/AEO normativo universal publicado por Google, OpenAI, Schema.org, WHATWG ou IETF. Lighthouse, Core Web Vitals e Apdex possuem metodologias próprias para fenômenos específicos e são exibidos separadamente.
 
 ## Base técnica GEO/AEO/SEO
 
 `report/references.html` documenta fontes e metodologia. O SearchGEO não trata como requisito oficial universal markup especial de GEO/AEO, `llms.txt`, chunking artificial, reescrita feita apenas para IA ou Structured Data específico para sistemas generativos.
 
-JSON-LD é tratado como **opcional/reforço**. Quando ausente, M20 pode propor um baseline conservador baseado apenas em dados observados. Quando existente, aponta melhorias sem substituição destrutiva.
+JSON-LD é tratado como **opcional/reforço**. Quando ausente, M20 pode propor baseline conservador baseado apenas em dados observados. Quando existente, aponta melhorias sem substituição destrutiva.
 
-M21 usa documentação oficial de PageSpeed Insights, Chrome UX Report, Lighthouse e Core Web Vitals. M22 reutiliza esses artifacts para separar Acessibilidade e diagnósticos de Performance sem nova chamada externa. Essas métricas complementam o diagnóstico técnico, mas não são convertidas automaticamente em Score GEO nem em probabilidade de citação.
+M21 usa documentação oficial de PageSpeed Insights, Chrome UX Report, Lighthouse e Core Web Vitals. M22 reutiliza esses artifacts para separar Acessibilidade e diagnósticos de Performance sem nova chamada externa.
+
+M23 usa a especificação Apdex para fórmula/classificação e Chrome DevTools Protocol/Playwright para perfis sintéticos controlados. M23 mede uma Task explícita de navegação e não converte LCP, INP, CLS, TBT ou duração do PageSpeed em Apdex.
 
 ## Compatibilidade
 
@@ -39,18 +53,48 @@ M21 usa documentação oficial de PageSpeed Insights, Chrome UX Report, Lighthou
 | Windows + PowerShell | target operacional principal |
 | CPython 3.13.x | obrigatório; `>=3.13,<3.14` |
 | Playwright `>=1.57,<2` | obrigatório |
-| Chromium | obrigatório para rendering real |
+| Chromium | obrigatório para rendering e M23 |
 | SQLite | embarcado/local |
-| OpenAI | opcional; OpenAI API Platform; `QUALIFIED` |
-| DeepSeek | opcional; DeepSeek API; qualificação SearchGEO `PROVISIONAL` |
-| Xiaomi MiMo | opcional; **Pay-as-you-go `sk-...`**; qualificação `PROVISIONAL` |
-| xAI / Grok | opcional; `PROVISIONAL`, somente seleção explícita |
-| Alibaba Qwen | opcional; `PROVISIONAL`, somente seleção explícita |
-| Google Gemini | opcional; `PROVISIONAL`, somente seleção explícita |
-| Anthropic Claude | opcional; `PROVISIONAL`, somente seleção explícita |
-| PageSpeed Insights | opcional M21; pode operar sem chave em uso ad hoc, chave recomendada para automação frequente |
-| Chrome UX Report API | opcional M21; chave Google necessária para API direta |
+| OpenAI | opcional; API Platform; `QUALIFIED` |
+| DeepSeek | opcional; `PROVISIONAL` |
+| Xiaomi MiMo | opcional; PAYG `sk-...`; `PROVISIONAL` |
+| xAI / Grok | opcional; `PROVISIONAL`, explícito |
+| Alibaba Qwen | opcional; `PROVISIONAL`, explícito |
+| Google Gemini | opcional; `PROVISIONAL`, explícito |
+| Anthropic Claude | opcional; `PROVISIONAL`, explícito |
+| PageSpeed Insights | opcional M21 |
+| Chrome UX Report API | opcional M21; chave Google para API direta |
+| Synthetic Apdex M23 | opcional; local/Chromium; sem API paga própria |
 | Docker / web server | não requeridos |
+
+### Provider registry e AUTO
+
+Providers concretos atuais:
+
+```text
+openai
+deepseek
+mimo
+xai
+qwen
+gemini
+anthropic
+```
+
+Aliases CLI:
+
+```text
+grok   -> xai
+claude -> anthropic
+```
+
+A cadeia homologada `AUTO` permanece:
+
+```text
+OpenAI -> DeepSeek -> MiMo
+```
+
+xAI, Qwen, Gemini e Anthropic permanecem `PROVISIONAL`, `explicit-only` e fora de `AUTO` até qualificação real de sucesso com credencial externa.
 
 ### Plano comercial não é sinônimo de API compatível
 
@@ -60,17 +104,21 @@ A compatibilidade depende de **provider + produto/plano + credencial + endpoint 
 |---|---|---|
 | OpenAI | API Platform com API key, billing/quota e acesso ao modelo | assinatura/créditos do ChatGPT não são saldo da API |
 | DeepSeek | DeepSeek API com saldo disponível | API key isolada não garante saldo/quota |
-| Xiaomi MiMo | PAYG `sk-...` em `https://api.xiaomimimo.com/v1` | Token Plan `tp-...`, com Base URL/créditos separados e fora do adapter atual |
+| Xiaomi MiMo | PAYG `sk-...` em `https://api.xiaomimimo.com/v1` | Token Plan `tp-...`, com Base URL/créditos separados |
 | xAI | API key xAI e modelo suportado | disponibilidade no produto Grok não implica credencial/API compatível |
 | Qwen | DashScope/Model Studio com key, região e endpoint compatíveis | assinatura de produto final não substitui a API |
 | Gemini | Gemini API com key e endpoint/modelo suportados | outras credenciais Google não são intercambiáveis automaticamente |
 | Anthropic | Anthropic API com key e modelo suportado | assinatura Claude não é saldo da API |
 
-Os quatro providers novos permanecem `PROVISIONAL`, `explicit-only` e **fora de `AUTO`** até qualificação real. A cadeia homologada continua `OpenAI -> DeepSeek -> MiMo`.
+As chaves Google de M21 são independentes das chaves dos providers de IA. O SearchGEO não envia uma credencial de um provider/serviço para endpoint de outro.
 
-As chaves Google de M21 são independentes das chaves dos providers de IA. O SearchGEO não envia uma credencial de um provider/serviço para endpoint de outro. Testes também isolam credenciais do ambiente para evitar chamadas externas acidentais.
+Detalhes:
 
-Detalhes: [docs/AI_GUIDE.md](docs/AI_GUIDE.md), [docs/AI_PROVIDER_EXTENSIONS.md](docs/AI_PROVIDER_EXTENSIONS.md), [docs/CONFIGURATION.md](docs/CONFIGURATION.md), [docs/GOOGLE_API_KEYS.md](docs/GOOGLE_API_KEYS.md), [docs/PROVIDER_REGISTRY.md](docs/PROVIDER_REGISTRY.md) e [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
+- [docs/AI_GUIDE.md](docs/AI_GUIDE.md)
+- [docs/AI_PROVIDER_EXTENSIONS.md](docs/AI_PROVIDER_EXTENSIONS.md)
+- [docs/PROVIDER_REGISTRY.md](docs/PROVIDER_REGISTRY.md)
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md)
+- [docs/GOOGLE_API_KEYS.md](docs/GOOGLE_API_KEYS.md)
 
 ## Instalação rápida — PowerShell
 
@@ -82,35 +130,47 @@ python -m playwright install chromium
 searchgeo --version
 ```
 
-`tzdata` é dependência formal do package para garantir `ZoneInfo("America/Sao_Paulo")` também em instalações Windows sem base IANA do sistema. M21 não exige client HTTP Python adicional: PageSpeed/CrUX usam a biblioteca padrão.
+`tzdata` é dependência formal do package para garantir `ZoneInfo("America/Sao_Paulo")` também em instalações Windows sem base IANA do sistema.
 
-### Console interativo opcional
-
-A instalação também registra:
+## Console interativo
 
 ```powershell
 searchgeo-console
 ```
 
-Esse console não substitui nem altera `searchgeo audit`. Ele oferece navegação em tela única, preflight de combinações, edição de variáveis somente para a sessão, cabeçalho de acompanhamento, classificação de exposição financeira potencial, cronômetro, resumo final de tokens/custo e bloqueio transitório de providers que terminem `QUARANTINED_FOR_AUDIT`. URL única é o default; TXT precisa ser selecionado explicitamente. Credenciais aparecem apenas como `[SET]`.
+O console não implementa pipeline alternativo; ele configura e executa a mesma superfície `searchgeo audit`.
 
-A seleção de IA do console é derivada do registry canônico, não de uma lista independente. Providers `PROVISIONAL` sem key aparecem indisponíveis; configurá-los permite seleção explícita, mas não os inclui em `AUTO`.
+Recursos:
 
-O menu inclui `H. Ajuda / custos`, com explicação da finalidade de cada parâmetro e marcadores para custo externo potencial, quota de API e multiplicadores de volume. A projeção considera URLs conhecidas/teto de crawl, dispositivos, IA/M20 e M21. Ao término, tokens/custo IA são consolidados das tabelas M18/M20 já existentes e chamadas M21 vêm de `web_performance_attempts`, sem duplicar telemetria. Apenas projeção prévia e timing, que não existiam no pipeline, são persistidos em `console_execution_projections`.
+- uma tela lógica por vez;
+- preflight antes de executar;
+- secrets exibidos somente como `[SET]`;
+- seleção dinâmica de providers pelo registry;
+- estimativa de exposição financeira de IA/M21;
+- projeção separada de carga sintética M23;
+- início/fim/duração;
+- tokens/custo IA persistidos;
+- chamadas M21 persistidas;
+- navegações M23 persistidas;
+- atalhos para abrir pasta e report.
 
-Ao término de uma auditoria, `I` abre diretamente `report/index.html` no navegador padrão e `P` abre a pasta `audits/<AUD-ID>/` da própria sessão; os atalhos permanecem disponíveis ao voltar ao menu.
+M23 aparece como:
 
-Detalhes: [docs/INTERACTIVE_CONSOLE.md](docs/INTERACTIVE_CONSOLE.md), [docs/CONSOLE_COST_AND_USAGE.md](docs/CONSOLE_COST_AND_USAGE.md) e [docs/PROVIDER_REGISTRY.md](docs/PROVIDER_REGISTRY.md).
+```text
+11. Synthetic Apdex M23
+```
+
+Detalhes: [docs/INTERACTIVE_CONSOLE.md](docs/INTERACTIVE_CONSOLE.md).
 
 ## Execução rápida
 
-### Mobile, sem IA e sem Web Performance externo — defaults
+### Mobile, sem IA, sem M21 e sem M23 — defaults
 
 ```powershell
 searchgeo audit https://example.com --project "Exemplo"
 ```
 
-Equivale a `--device-context mobile --ai-provider none --no-web-performance`. M20 textual fica OFF; a revisão JSON-LD determinística continua disponível. `SCORE-GEO-002` continua sendo o scoring baseline.
+Equivale operacionalmente a Mobile, IA `none`, M20 textual OFF, M21 OFF e M23 OFF. A revisão JSON-LD determinística continua disponível. `SCORE-GEO-002` continua sendo o scoring baseline.
 
 ### Desktop
 
@@ -144,7 +204,7 @@ searchgeo audit https://example.com `
   --ai-content-remediation
 ```
 
-`--ai-content-remediation` é **OFF por padrão**. O gatilho é finding contentual/semântico elegível e evidence-backed; `Confidence LOW` sozinho nunca é gatilho.
+`--ai-content-remediation` é OFF por padrão. O gatilho é finding contentual/semântico elegível e evidence-backed; `Confidence LOW` sozinho nunca é gatilho.
 
 ### Lighthouse + Core Web Vitals M21
 
@@ -154,37 +214,59 @@ searchgeo audit https://example.com `
   --web-performance
 ```
 
-`--web-performance` também é **OFF por padrão**. M21 adiciona zero chamadas de LLM. O consumo externo adicional é apenas PageSpeed/CrUX.
+M21 é OFF por padrão e adiciona zero chamadas LLM. O consumo externo adicional é PageSpeed/CrUX conforme configuração.
 
-Para controlar volume:
+### Synthetic Navigation Apdex M23
 
 ```powershell
 searchgeo audit https://example.com `
-  --web-performance `
-  --web-performance-max-pages 5 `
-  --web-performance-timeout-seconds 45
+  --ai-provider none `
+  --no-web-performance `
+  --synthetic-apdex `
+  --apdex-threshold-seconds 1.5 `
+  --apdex-samples-per-context 5 `
+  --apdex-max-attempts-per-context 7 `
+  --apdex-max-pages 1 `
+  --apdex-delay-seconds 1 `
+  --apdex-concurrency 1
 ```
 
-Default M21: no máximo 10 páginas lógicas; `0` significa todas as páginas auditadas.
+Esse exemplo usa 5 amostras válidas e é adequado para smoke controlado; grupos com menos de 100 válidas recebem marcador `*`.
 
-Para usar CrUX API direta:
+Default M23 quando habilitado:
 
-```powershell
-$env:SEARCHGEO_CRUX_API_KEY = "<google-api-key>"
-searchgeo audit https://example.com `
-  --web-performance `
-  --web-performance-field-source crux
+```text
+amostras válidas/contexto = 100
+max attempts              = ceil(1.25 × alvo)
+max pages                 = 1
+timeout                   = max(45 s, 4T + 5 s)
+delay                     = 1 s
+concurrency               = 1 (máximo 2)
 ```
 
-Para criar e restringir corretamente as chaves Google usadas pelo M21, consulte [docs/GOOGLE_API_KEYS.md](docs/GOOGLE_API_KEYS.md).
+`T` é obrigatório. M23 gera 0 tokens IA e 0 chamadas PageSpeed/CrUX adicionais, mas realiza navegações reais e pode carregar muitos subrecursos. Não execute volume relevante contra produção sem autorização.
+
+Detalhes: [docs/SYNTHETIC_APDEX.md](docs/SYNTHETIC_APDEX.md).
+
+## Fórmula M23
+
+```text
+Apdex = (Satisfied + 0.5 × Tolerating) / Total de amostras válidas
+
+Satisfied  <= T
+Tolerating > T e <= 4T
+Frustrated > 4T
+```
+
+Falha da ferramenta/profile fica fora do denominador. Timeout/erro de navegação ou erro de aplicação/servidor conta como `FRUSTRATED` quando o profile sintético foi efetivamente aplicado.
 
 ## Contexto de dispositivo
 
 Precedência: `--device-context` → `SEARCHGEO_DEVICE_CONTEXT` → `mobile`.
 
-A seleção controla rendering e os contextos de M7/M20. `both` habilita BR-GEO-052; em `mobile`/`desktop` ela fica `NOT_APPLICABLE` com `DEVICE_COMPARISON_DISABLED_BY_CONTEXT`.
+A seleção controla rendering e os contextos de M7/M20. Em M21, Mobile é enviado como PageSpeed `mobile`/CrUX `PHONE`; Desktop como PageSpeed `desktop`/CrUX `DESKTOP`.
 
-No M21, Mobile é enviado como PageSpeed `mobile`/CrUX `PHONE`; Desktop como PageSpeed `desktop`/CrUX `DESKTOP`. Somente snapshots materializados entram na coleta externa.
+Em M23, cada URL/device materializado dentro de `--apdex-max-pages` forma um contexto de amostragem próprio.
 
 ## Estrutura de saída
 
@@ -193,6 +275,8 @@ audits/<AUD-ID>/
 ├─ audit.db
 ├─ artifacts/
 │  └─ web-performance/        # quando M21 possui respostas externas
+├─ logs/
+│  └─ audit.log
 └─ report/
    ├─ index.html
    ├─ mobile.html              # condicional
@@ -201,30 +285,39 @@ audits/<AUD-ID>/
    ├─ content-suggestions.html
    ├─ accessibility.html       # quando M22 materializa a projeção
    ├─ web-performance.html
+   ├─ apdex.html               # quando M23 está habilitado/materializado
    ├─ ai-usage.html
    ├─ references.html
    └─ css/site.css
 ```
 
-`audit.db` + `artifacts/` são a fonte de verdade. O report é projeção humana e não recalcula scoring/findings.
+`audit.db` + `artifacts/` são a fonte persistida principal. O report é projeção humana e não recalcula scoring/findings.
 
-## Score, Coverage, Confidence e evidência externa
+M23 persiste:
 
-- **Score / Readiness (`SCORE-GEO-002`):** índice interno sobre regras avaliadas;
-- **Coverage:** quanto do universo aplicável pôde ser avaliado;
-- **Confidence:** força da conclusão do auditor;
-- **Consolidation:** se há base suficiente para publicar a dimensão/Overall;
-- **Lighthouse:** medição de laboratório com metodologia externa do Chrome;
-- **Core Web Vitals/CrUX:** experiência real agregada no p75 quando existe amostra suficiente;
-- **Acessibilidade M22:** projeção separada dos diagnostics Lighthouse quando disponíveis, sem declarar conformidade WCAG.
+```text
+synthetic_apdex_runs
+synthetic_apdex_samples
+synthetic_apdex_summaries
+lighthouse_execution_profiles
+```
 
-**Confidence LOW não significa texto ruim ou não-GEO.** Uma sugestão de conteúdo exige finding/evidência específica.
+## Score, Coverage, Confidence e domínios auxiliares
 
-Da mesma forma, Lighthouse/CWV/Acessibilidade não são adicionados matematicamente ao Overall SearchGEO e não significam chance de citação.
+- **Score / Readiness (`SCORE-GEO-002`)**: índice interno sobre regras avaliadas;
+- **Coverage**: quanto do universo aplicável pôde ser avaliado;
+- **Confidence**: força da conclusão;
+- **Consolidation**: se há base suficiente para publicar dimensão/Overall;
+- **Lighthouse**: medição de laboratório externa;
+- **Core Web Vitals/CrUX**: experiência real agregada no p75 quando existe amostra suficiente;
+- **Acessibilidade M22**: projeção separada de diagnostics Lighthouse;
+- **Synthetic Apdex M23**: índice de Task sintética repetida com `T` explícito.
+
+Nenhum score Lighthouse/CWV/Acessibilidade/Apdex é adicionado matematicamente ao Overall SearchGEO.
 
 ## Core Web Vitals M21
 
-Thresholds oficiais atuais de boa experiência usados para o p75:
+Thresholds de boa experiência usados para o p75:
 
 ```text
 LCP <= 2.5 s
@@ -232,13 +325,9 @@ INP <= 200 ms
 CLS <= 0.10
 ```
 
-M21 usa `PASS` somente quando as três métricas existem e atendem aos thresholds. Dado faltante produz `INCOMPLETE`/`UNAVAILABLE`, nunca FAIL artificial.
+Dado faltante produz `INCOMPLETE`/`UNAVAILABLE`, nunca FAIL artificial.
 
-## IA, providers e planos
-
-OpenAI usa API Platform; ChatGPT e API possuem billing separado. DeepSeek exige saldo da API. MiMo atual usa PAYG `sk-...`; não use Token Plan `tp-...` no endpoint PAYG.
-
-Modelos aceitos atualmente:
+## Modelos de IA aceitos
 
 ```text
 OPENAI:    gpt-5.6-sol | gpt-5.6-terra | gpt-5.6-luna
@@ -250,72 +339,32 @@ GEMINI:    gemini-3.8-flash
 ANTHROPIC: claude-sonnet-5
 ```
 
-Aliases CLI: `grok -> xai` e `claude -> anthropic`. xAI/Qwen/Gemini/Anthropic permanecem `PROVISIONAL`, somente explícitos e fora do `AUTO`.
+Model ID aceito pelo código não garante acesso operacional da conta/plano.
 
-Timeout default IA: 180 s por chamada externa (`SEARCHGEO_AI_TIMEOUT_SECONDS`).
+## Telemetria
 
-M21 tem timeout separado, default 60 s (`SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS`).
+- `report/ai-usage.html`: M18/M20;
+- `report/web-performance.html`: M21/M22;
+- `report/accessibility.html`: M22 Accessibility;
+- `report/apdex.html`: M23;
+- `logs/audit.log`: telemetria operacional sanitizada.
 
-## Telemetria M18/M20/M21
-
-`report/ai-usage.html` separa telemetria M18 e M20. `report/content-suggestions.html` contém propostas textuais advisory e revisão/proposta JSON-LD.
-
-`report/web-performance.html` contém PageSpeed/Lighthouse/CrUX, field/lab data, status operacional e referências a artifacts. `report/accessibility.html` apresenta Acessibilidade como domínio separado quando a projeção M22 existe. Esses serviços não são tratados como uso de LLM.
-
-A sugestão M20:
-
-- não altera o site;
-- não altera Score/RuleExecution/Finding;
-- deve citar evidence IDs válidos;
-- não pode inventar autor, preço, data, rating, estatística, garantia ou claim;
-- exige revisão humana.
-
-M21/M22:
-
-- não alteram Score/RuleExecution/Finding;
-- M21 não chama SemanticProvider;
-- M22 não cria chamada externa adicional;
-- não persistem API keys;
-- não transformam falha/quota/sem amostra em finding do website;
-- preservam a separação entre evidência externa e `SCORE-GEO-002`.
-
-## Segurança
-
-Não versionar/persistir API keys ou Authorization. Presença de variável não prova compatibilidade do plano.
-
-```powershell
-Test-Path Env:OPENAI_API_KEY
-Test-Path Env:DEEPSEEK_API_KEY
-Test-Path Env:MIMO_API_KEY
-Test-Path Env:XAI_API_KEY
-Test-Path Env:DASHSCOPE_API_KEY
-Test-Path Env:GEMINI_API_KEY
-Test-Path Env:ANTHROPIC_API_KEY
-Test-Path Env:SEARCHGEO_PAGESPEED_API_KEY
-Test-Path Env:SEARCHGEO_CRUX_API_KEY
-```
+Custos IA são estimativas técnicas dos adapters, não invoice. M23 não possui preço de API próprio; sua carga é local + tráfego real contra o alvo.
 
 ## Documentação
 
-- [CLI](docs/CLI_REFERENCE.md)
-- [Console interativo](docs/INTERACTIVE_CONSOLE.md)
-- [Console — custo e telemetria](docs/CONSOLE_COST_AND_USAGE.md)
-- [Provider registry canônico](docs/PROVIDER_REGISTRY.md)
-- [Providers adicionais](docs/AI_PROVIDER_EXTENSIONS.md)
-- [Compatibilidade](docs/COMPATIBILITY.md)
-- [Instalação](docs/INSTALLATION.md)
-- [Guia do usuário](docs/USER_GUIDE.md)
-- [Configuração](docs/CONFIGURATION.md)
-- [Chaves Google — PageSpeed e CrUX](docs/GOOGLE_API_KEYS.md)
-- [Report](docs/REPORT_GUIDE.md)
-- [Acessibilidade e Performance](docs/ACCESSIBILITY_PERFORMANCE_DOMAINS.md)
-- [Scoring](docs/SCORING_GUIDE.md)
-- [Validação de scoring](docs/SCORING_VALIDATION.md)
-- [IA e M20](docs/AI_GUIDE.md)
-- [Outputs](docs/OUTPUTS_AND_ARTIFACTS.md)
-- [Guia técnico](docs/TECHNICAL_GUIDE.md)
-- [Troubleshooting](docs/TROUBLESHOOTING.md)
-- [Smoke](docs/SMOKE_TEST.md)
-- [Especificações](docs/specification/00_SPEC_INDEX.md)
-- [M21 — Web Performance externo](docs/specification/21_EXTERNAL_WEB_PERFORMANCE_EVIDENCE.md)
-- [M22 — diagnósticos separados por domínio](docs/specification/22_DOMAIN_SEPARATED_WEB_QUALITY_DIAGNOSTICS.md)
+- [docs/INSTALLATION.md](docs/INSTALLATION.md)
+- [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
+- [docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md)
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md)
+- [docs/INTERACTIVE_CONSOLE.md](docs/INTERACTIVE_CONSOLE.md)
+- [docs/REPORT_GUIDE.md](docs/REPORT_GUIDE.md)
+- [docs/OUTPUTS_AND_ARTIFACTS.md](docs/OUTPUTS_AND_ARTIFACTS.md)
+- [docs/SYNTHETIC_APDEX.md](docs/SYNTHETIC_APDEX.md)
+- [docs/AI_GUIDE.md](docs/AI_GUIDE.md)
+- [docs/AI_PROVIDER_EXTENSIONS.md](docs/AI_PROVIDER_EXTENSIONS.md)
+- [docs/GOOGLE_API_KEYS.md](docs/GOOGLE_API_KEYS.md)
+- [docs/SCORING_GUIDE.md](docs/SCORING_GUIDE.md)
+- [docs/SCORING_VALIDATION.md](docs/SCORING_VALIDATION.md)
+
+Normativa M23: [docs/specification/23_SYNTHETIC_APDEX_LIGHTHOUSE_TRACEABILITY.md](docs/specification/23_SYNTHETIC_APDEX_LIGHTHOUSE_TRACEABILITY.md).

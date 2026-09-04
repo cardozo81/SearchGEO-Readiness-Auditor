@@ -1,35 +1,51 @@
-# Acessibilidade e Web Performance — domínios separados
+# Acessibilidade, Web Performance e Synthetic Apdex — domínios separados
 
 ## Objetivo
 
-O SearchGEO mantém três contextos analíticos independentes:
+O SearchGEO mantém contextos analíticos independentes:
 
 | Domínio | Finalidade | Fonte principal | Altera SCORE-GEO-002? |
 | --- | --- | --- | --- |
-| GEO | readiness técnico/semântico para descoberta, extração, entendimento e citação | BR-GEO, evidências locais e providers explicitamente configurados | **Sim**, somente pelas regras e pelo contrato de scoring GEO |
-| Acessibilidade | identificar problemas automatizáveis de acessibilidade e apontar elementos afetados quando a fonte fornece evidência | Lighthouse Accessibility + referências W3C/WCAG/WAI-ARIA | **Não** |
-| Web Performance | medir laboratório/campo e diagnosticar recursos/caminho crítico que interferem no carregamento e experiência | Lighthouse/PageSpeed + CrUX + documentação Chrome/web.dev | **Não** |
+| GEO | readiness técnico/semântico para descoberta, extração, entendimento e citação | BR-GEO, evidências locais e providers explicitamente configurados | **Sim**, somente pelas regras e contrato de scoring GEO |
+| Acessibilidade M22 | identificar problemas automatizáveis e apontar elementos afetados quando a fonte fornece evidência | Lighthouse Accessibility + referências W3C/WCAG/WAI-ARIA | **Não** |
+| Web Performance M21/M22 | medir laboratório/campo e diagnosticar recursos/caminho crítico | Lighthouse/PageSpeed + CrUX + documentação Chrome/web.dev | **Não** |
+| Synthetic Navigation Apdex M23 | medir repetidamente uma Task explícita de navegação sob profile sintético controlado | Chromium/Playwright + Apdex Technical Specification + CDP | **Não** |
 
-Compartilhar uma coleta não significa compartilhar semântica. M21 pode solicitar várias categorias Lighthouse na mesma chamada PageSpeed para evitar chamadas externas duplicadas, mas M22 projeta os resultados em páginas, linguagem e conclusões separadas.
+Compartilhar evidência não significa compartilhar semântica. M21 pode solicitar categorias Lighthouse na mesma chamada PageSpeed; M22 projeta Acessibilidade e Performance separadamente; M23 usa navegações próprias e só reutiliza artifact M21 para rastreabilidade de `configSettings` Lighthouse quando ele já existe.
 
 ## Ativação
 
-Acessibilidade automatizada e os diagnósticos detalhados de performance reutilizam o artifact PageSpeed/Lighthouse do M21. Portanto, a coleta externa continua controlada por:
+M21/M22:
 
 ```text
 --web-performance
 --no-web-performance
 ```
 
-Quando Web Performance está desabilitado:
+M23:
 
-- nenhuma nova chamada PageSpeed/CrUX é feita;
-- `report/accessibility.html` declara que não existe artifact Lighthouse suficiente;
-- `report/web-performance.html` mantém o estado da coleta;
-- nenhuma ausência de dados é tratada como falha do website;
-- SCORE-GEO-002 continua independente.
+```text
+--synthetic-apdex
+--no-synthetic-apdex
+--apdex-threshold-seconds T
+```
 
-M22 não chama OpenAI, DeepSeek, MiMo ou qualquer outro LLM.
+M21 e M23 são default OFF.
+
+Quando M21 está OFF:
+
+- nenhuma chamada PageSpeed/CrUX é feita;
+- Acessibilidade/Performance ficam limitadas ao que já existe localmente;
+- ausência de dados não é falha do website;
+- `SCORE-GEO-002` continua independente.
+
+Quando M23 está OFF:
+
+- nenhuma navegação sintética adicional é executada;
+- não existe população Synthetic Apdex;
+- M21/M22 continuam sem inferir Apdex de Lighthouse/CrUX.
+
+M22/M23 não chamam LLM.
 
 ---
 
@@ -41,84 +57,43 @@ M22 não chama OpenAI, DeepSeek, MiMo ou qualquer outro LLM.
 report/accessibility.html
 ```
 
-A página contém, quando o Lighthouse fornece os dados:
-
-- URL;
-- Mobile/Desktop;
-- Lighthouse Accessibility score;
-- audit Lighthouse reprovado;
-- selector observado;
-- trecho HTML observado (`snippet`);
-- explicação da ocorrência;
-- sugestão de correção;
-- referência oficial W3C/WAI quando existe mapeamento específico;
-- quantidade de checks manuais declarados pelo Lighthouse.
+A página pode conter URL/device, Lighthouse Accessibility score, audit reprovado, selector/snippet somente quando a fonte fornece, explicação, sugestão, referência W3C/WAI e quantidade de checks manuais declarados pelo Lighthouse.
 
 ## Regra de evidência
 
-O SearchGEO **não inventa selector ou HTML**.
+O SearchGEO **não inventa selector ou HTML**. Se o artifact Lighthouse não contiver selector/snippet, o report registra que a fonte não forneceu o dado.
 
-Se o artifact Lighthouse não contiver selector/snippet para uma ocorrência, o report informa explicitamente que a fonte não forneceu o dado.
-
-O identificador apresentado no report tem formato:
-
-```text
-A11Y-LH-<lighthouse-audit-id>
-```
-
-Esse identificador significa **audit Lighthouse projetado pelo SearchGEO**. Ele não é um Success Criterion WCAG nem uma certificação externa.
+O identificador `A11Y-LH-<lighthouse-audit-id>` representa audit Lighthouse projetado pelo SearchGEO; não é Success Criterion WCAG nem certificação externa.
 
 ## `aria-label` não é correção universal
 
-Um botão ou outro componente deve possuir nome acessível programaticamente determinável quando aplicável. Isso não significa adicionar `aria-label` indiscriminadamente.
-
-Dependendo da semântica do elemento, o nome pode vir de:
-
-- texto nativo do controle;
-- `<label>` associado;
-- `aria-labelledby`;
-- `aria-label` quando um rótulo visível adequado não pode ser usado;
-- outra relação prevista pela plataforma/acessibility API.
-
-A correção deve priorizar HTML nativo e preservar a semântica apropriada.
+Nome acessível pode vir de texto nativo, `<label>`, `aria-labelledby`, `aria-label` ou outro mecanismo previsto pela plataforma. A correção deve priorizar HTML nativo quando suficiente.
 
 ## Limitação obrigatória
 
-Lighthouse é uma ferramenta automatizada. Sua pontuação de acessibilidade não cobre todos os aspectos que exigem avaliação humana. Portanto:
-
 ```text
 Lighthouse 100/100 ≠ conformidade WCAG comprovada
-```
-
-O SearchGEO apresenta:
-
-```text
 Conformidade WCAG: NÃO DETERMINADA
 ```
 
-até que exista processo de conformidade específico com checks manuais suficientes.
+A automação não substitui avaliação manual suficiente.
 
 ## Referências oficiais
 
-- WCAG 2.2 — W3C Recommendation: <https://www.w3.org/TR/WCAG22/>
-- Understanding SC 4.1.2 — Name, Role, Value: <https://www.w3.org/WAI/WCAG22/Understanding/name-role-value>
+- WCAG 2.2: <https://www.w3.org/TR/WCAG22/>
+- Name, Role, Value: <https://www.w3.org/WAI/WCAG22/Understanding/name-role-value>
 - WAI-ARIA 1.2: <https://www.w3.org/TR/wai-aria-1.2/>
-- Technique ARIA14: <https://www.w3.org/WAI/WCAG22/Techniques/aria/ARIA14.html>
-- Technique ARIA16: <https://www.w3.org/WAI/WCAG22/Techniques/aria/ARIA16.html>
 - Lighthouse Accessibility scoring: <https://developer.chrome.com/docs/lighthouse/accessibility/scoring>
-- Lighthouse overview: <https://developer.chrome.com/docs/lighthouse/overview>
 
 ---
 
-# 2. Domínio de Web Performance
+# 2. Domínio de Web Performance M21/M22
 
 ## Saída
 
 ```text
 report/web-performance.html
 ```
-
-A página continua sendo o único contexto de performance e contém:
 
 ### Campo — CrUX/Core Web Vitals
 
@@ -127,7 +102,7 @@ A página continua sendo o único contexto de performance e contém:
 - CLS p75;
 - escopo URL/origin;
 - fonte de field data;
-- estado PASS/FAIL/INCOMPLETE/UNAVAILABLE.
+- PASS/FAIL/INCOMPLETE/UNAVAILABLE.
 
 ### Laboratório — Lighthouse
 
@@ -140,64 +115,15 @@ A página continua sendo o único contexto de performance e contém:
 
 ### Diagnóstico técnico M22
 
-M22 também projeta oportunidades/insights do artifact Lighthouse relacionados a:
+Quando o artifact fornece evidência, M22 pode projetar render-blocking, cadeias críticas, LCP, layout shift, JavaScript/main thread, CSS, imagens, fontes, terceiros, documento/servidor, DOM e cache.
 
-- solicitações render-blocking;
-- cadeias/dependências críticas;
-- descoberta e subpartes de LCP;
-- layout shift;
-- JavaScript/main thread;
-- CSS não utilizado/custos de CSS quando informado;
-- imagens e entrega de imagens;
-- fontes;
-- recursos de terceiros;
-- latência de documento/servidor;
-- tamanho/complexidade DOM;
-- cache;
-- outros diagnósticos Lighthouse explicitamente identificados pela fonte.
+Por ocorrência, preserva somente dados presentes na fonte: URL, selector, snippet, label, `wastedMs`, `wastedBytes`, tamanho, duração, descrição e `displayValue`.
 
-Para cada ocorrência, o report preserva, quando disponível:
+## Primeira dobra e causalidade
 
-- URL do recurso;
-- selector;
-- snippet do elemento;
-- label/descrição do nó;
-- `wastedMs`;
-- `wastedBytes`;
-- tamanho transferido/observado;
-- duração;
-- descrição e `displayValue` do Lighthouse.
+M22 não classifica arbitrariamente todo elemento “above the fold”. A causalidade depende de sinais sustentados pelo Lighthouse/Chrome.
 
-## Primeira dobra e renderização inicial
-
-O M22 não tenta classificar arbitrariamente todos os elementos "above the fold".
-
-A análise usa sinais que o navegador/Lighthouse consegue fundamentar, principalmente:
-
-- recurso que bloqueou a renderização inicial;
-- cadeia crítica;
-- elemento/recurso associado a LCP quando informado;
-- subpartes do LCP;
-- layout shift culprits quando disponíveis.
-
-Isso evita transformar apenas posição visual em causalidade de performance.
-
-## Causalidade
-
-O report distingue:
-
-```text
-observado pela fonte
-→ recurso/elemento/tempo realmente devolvido pelo Lighthouse
-
-recomendação
-→ ação tecnicamente plausível sustentada pela classe do diagnóstico
-
-causa não comprovada
-→ não é afirmada como fato
-```
-
-Por exemplo, um recurso listado como render-blocking pode ser declarado como bloqueador da renderização inicial porque esse é o significado do insight do Chrome. O report não afirma que ele foi a única causa de um LCP ruim se o artifact não demonstrar essa relação.
+É válido afirmar que um recurso foi classificado como render-blocking quando o artifact demonstra isso; não é válido atribuir causalidade exclusiva de LCP sem evidência específica.
 
 ## Referências oficiais
 
@@ -211,62 +137,101 @@ Por exemplo, um recurso listado como render-blocking pode ser declarado como blo
 
 ---
 
-# 3. Apdex
+# 3. Synthetic Navigation Apdex M23
 
-O SearchGEO **não calcula Apdex a partir de Lighthouse, LCP, INP, CLS ou da duração da chamada PageSpeed**.
+## Fronteira metodológica
 
-A especificação Apdex requer:
+M21/M22 **não calculam Apdex a partir de Lighthouse, LCP, INP, CLS, TBT ou duração da chamada PageSpeed**. Essa decisão permanece válida.
 
-1. um conjunto de amostras de tempos de resposta de uma Task/Task Chain;
-2. um threshold alvo `T` explicitamente definido;
-3. a separação das amostras nas zonas Satisfied, Tolerating e Frustrated;
-4. `F = 4T`;
-5. cálculo sobre a população de amostras.
+O M23 é a implementação separada que passou a fornecer os insumos que faltavam ao domínio M21/M22:
 
-Fórmula definida pela especificação:
+1. Task explícita;
+2. início/fim definidos;
+3. população de amostras de navegação;
+4. threshold `T` explícito;
+5. classificação Satisfied/Tolerating/Frustrated;
+6. persistência de samples e summaries;
+7. segmentação por URL/device.
+
+## Saída
 
 ```text
-Apdex(T) = (Satisfied + Tolerating / 2) / Total Samples
+report/apdex.html
 ```
 
-Referência:
+## Task
+
+```text
+NAVIGATION_LOAD
+início = imediatamente antes de page.goto
+fim    = conclusão de wait_until=load
+```
+
+Cada amostra usa BrowserContext novo e cache desabilitado. Perfis CPU/rede são determinísticos e versionados.
+
+## Fórmula
+
+```text
+Apdex = (Satisfied + 0.5 × Tolerating) / Total de amostras válidas
+
+Satisfied  <= T
+Tolerating > T e <= 4T
+Frustrated > 4T
+```
+
+`F = 4T`.
+
+Timeout/erro de navegação ou erro de aplicação/servidor é `FRUSTRATED` quando o profile foi aplicado. Falha de browser/ferramenta/profile é amostra inválida e fica fora do denominador.
+
+## Tamanho de grupo
+
+Default normal:
+
+```text
+100 amostras válidas por URL/device
+```
+
+Grupos com 1–99 recebem `*` e são diagnósticos de grupo pequeno. Por isso um smoke 5/5 pode ter M23 `PARTIAL` sem falha operacional.
+
+## Custo e carga
+
+M23 adiciona:
+
+```text
+0 chamadas LLM
+0 tokens IA
+0 chamadas PageSpeed/CrUX
+```
+
+Não há API paga própria no contrato atual. Porém existe CPU/RAM/tempo local e tráfego HTTP real contra o alvo; cada navegação pode carregar muitos subrecursos.
+
+## Relação com Lighthouse
+
+Quando M21 já preservou artifact PageSpeed, M23 pode extrair `lighthouseResult.configSettings` para comparação/rastreabilidade. Não presume igualdade entre profile Lighthouse e profile Apdex; campos ausentes não são inventados.
+
+O tempo total Lighthouse não entra na fórmula Apdex.
+
+## Referências
 
 - Apdex Technical Specification v1.1: <https://www.apdex.org/wp-content/uploads/2020/09/ApdexTechnicalSpecificationV11_000.pdf>
+- Chrome DevTools Protocol — Emulation: <https://chromedevtools.github.io/devtools-protocol/tot/Emulation/>
+- Chrome DevTools Protocol — Network: <https://chromedevtools.github.io/devtools-protocol/tot/Network/>
 
-### Estado atual
-
-```text
-Apdex: NÃO CALCULADO
-```
-
-Motivo: M21 mede Lighthouse/CrUX, mas não possui uma população de tempos de resposta transacionais com `T` aprovado.
-
-Uma implementação futura de Apdex só deve ser ativada após definir:
-
-- qual jornada/Task será medida;
-- início e fim da Task;
-- origem das amostras;
-- volume mínimo de amostras;
-- `T` acordado para aquela Task;
-- tratamento de erros/aborts;
-- segmentação por dispositivo/contexto.
-
-Inventar um `T` ou reutilizar a latência da API PageSpeed produziria um número formalmente calculável, mas semanticamente incorreto.
+Detalhes operacionais: [SYNTHETIC_APDEX.md](SYNTHETIC_APDEX.md).
 
 ---
 
 # 4. Interdependências entre domínios
 
-Interdependência é permitida apenas como **rastreabilidade**, não como mistura de score.
-
-Exemplos:
+Interdependência é permitida apenas como **rastreabilidade**, não mistura de score.
 
 | Evidência | Domínio primário | Relação possível | Regra |
 | --- | --- | --- | --- |
-| CSS/JS render-blocking | Performance | pode atrasar renderização de conteúdo que também é relevante ao crawler | mostrar cross-reference; não alterar BR-GEO automaticamente |
-| elemento LCP | Performance | pode ser também conteúdo principal/semântico | manter IDs/evidências separados |
-| botão sem accessible name | Acessibilidade | pode coexistir com HTML semanticamente pobre | não criar BR-GEO a partir do A11Y automaticamente |
-| HTML/ARIA inválido | Acessibilidade | pode dificultar interpretação por tecnologia assistiva | não converter em penalidade GEO sem regra GEO específica |
+| CSS/JS render-blocking | Performance | pode atrasar conteúdo relevante ao crawler | cross-reference; não alterar BR-GEO automaticamente |
+| elemento LCP | Performance | pode ser conteúdo principal | manter IDs/evidências separados |
+| botão sem accessible name | Acessibilidade | pode coexistir com HTML semanticamente pobre | não criar BR-GEO automaticamente |
 | falha de rendering que oculta conteúdo essencial | GEO | pode ter causa de performance | evidenciar Performance quando houver prova; manter resultado GEO independente |
+| navegação lenta sob profile M23 | Apdex | pode coexistir com Lighthouse/CWV ruins ou bons | comparar, não combinar scores |
+| configSettings Lighthouse | Performance | pode ser comparado ao profile M23 | rastreabilidade; não assumir equivalência |
 
-A mesma evidência física pode ser referenciada por dois domínios. A interpretação, regra, severidade, score e remediação continuam pertencendo ao domínio que fez a afirmação.
+A mesma evidência física pode ser referenciada por mais de um domínio. Interpretação, regra, severidade, score e remediação continuam pertencendo ao domínio que fez a afirmação.
