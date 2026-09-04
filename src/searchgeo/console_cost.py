@@ -9,7 +9,7 @@ import sqlite3
 
 from searchgeo.cli import validate_target
 from searchgeo.console_config import DEFAULT_MODELS, MODEL_ENV, PROVIDERS, State, provider_capabilities
-from searchgeo.m18_ai import PRICING_CATALOG
+from searchgeo.m18_ai import PRICING_CATALOG, PRICING_VERSION
 from searchgeo.url_utils import normalize_url
 
 
@@ -64,11 +64,9 @@ def _configured_page_range(state: State) -> tuple[int, int]:
         except (OSError, UnicodeError):
             return 0, 0
         count = len(dict.fromkeys(urls))
-        # TXT is an explicit URL_SET; preflight blocks count > max-pages.
         return count, count
     if not state.target.strip() or state.max_pages <= 0:
         return 0, 0
-    # A single URL is a crawl seed: one page is known and max-pages is the ceiling.
     return 1, state.max_pages
 
 
@@ -105,9 +103,7 @@ def _pricing_lines(provider_models: tuple[tuple[str, str], ...]) -> tuple[str, .
         output_values = sorted({item.output_price_per_million for item in prices})
         input_text = f"{input_values[0]:g}" if len(input_values) == 1 else f"{input_values[0]:g}–{input_values[-1]:g}"
         output_text = f"{output_values[0]:g}" if len(output_values) == 1 else f"{output_values[0]:g}–{output_values[-1]:g}"
-        lines.append(
-            f"{provider}/{model}: input {currency} {input_text}/1M tokens; output {currency} {output_text}/1M tokens."
-        )
+        lines.append(f"{provider}/{model}: input {currency} {input_text}/1M tokens; output {currency} {output_text}/1M tokens.")
     return tuple(lines)
 
 
@@ -139,10 +135,8 @@ def estimate_exposure(state: State) -> ExposureEstimate:
     min_ai = 0
     max_ai = 0
     if provider_count:
-        # M18 is potentially one semantic context per materialized page/device.
         min_ai = min_pages * devices
         max_ai = max_pages * devices * provider_count
-        # M20 is conditional on eligible findings, therefore contributes only to the ceiling.
         if state.content_remediation:
             max_ai += max_pages * devices * provider_count
 
@@ -151,7 +145,6 @@ def estimate_exposure(state: State) -> ExposureEstimate:
     if state.web_performance:
         web_pages_min = min(min_pages, state.web_max_pages) if state.web_max_pages else min_pages
         web_pages_max = min(max_pages, state.web_max_pages) if state.web_max_pages else max_pages
-        # Lighthouse/PageSpeed is the base external request. CrUX direct may add another request.
         min_per_context = 1
         max_per_context = 2 if state.field_source in {"auto", "crux"} else 1
         min_web = web_pages_min * devices * min_per_context
@@ -165,20 +158,16 @@ def estimate_exposure(state: State) -> ExposureEstimate:
     if devices == 2:
         reasons.append("BOTH duplica os contextos potenciais mobile/desktop.")
     if provider_count:
-        reasons.append(
-            f"IA ativa: até {max_ai} tentativa(s) potenciais considerando M18, cadeia de providers e M20 quando habilitado."
-        )
+        reasons.append(f"IA ativa: até {max_ai} tentativa(s) potenciais considerando M18, cadeia de providers e M20 quando habilitado.")
     if state.content_remediation:
         reasons.append("M20 pode acrescentar tentativas apenas quando houver findings elegíveis.")
     if state.web_performance:
         reasons.append(f"M21: entre {min_web} e {max_web} chamada(s) externas potenciais PageSpeed/CrUX.")
 
     if not provider_count:
-        # Google integrations are tracked as quota/external consumption; no monetary price is assumed here.
         level = "NENHUM"
     else:
-        weight = _model_price_weight(provider_models)
-        score = max_ai * max(weight, 1)
+        score = max_ai * max(_model_price_weight(provider_models), 1)
         if score <= 10:
             level = "BAIXO"
         elif score <= 50:
@@ -187,9 +176,7 @@ def estimate_exposure(state: State) -> ExposureEstimate:
             level = "ALTO"
         else:
             level = "EXCESSIVO"
-        reasons.append(
-            "Faixa financeira é um índice interno de exposição baseado em volume máximo de tentativas e faixa de preço do modelo; não é invoice."
-        )
+        reasons.append("Faixa financeira é um índice interno de exposição baseado em volume máximo de tentativas e faixa de preço do modelo; não é invoice.")
 
     return ExposureEstimate(
         level=level,
@@ -206,28 +193,24 @@ def estimate_exposure(state: State) -> ExposureEstimate:
 
 
 def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
-    row = connection.execute(
+    return connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", (table,)
-    ).fetchone()
-    return row is not None
+    ).fetchone() is not None
 
 
-def _usage_from_table(connection: sqlite3.Connection, table: str) -> dict[str, int | float | dict[str, float]]:
+def _usage_from_table(connection: sqlite3.Connection, table: str) -> dict[str, int | dict[str, float]]:
     if not _table_exists(connection, table):
-        return {
-            "attempts": 0, "successes": 0, "input": 0, "cached": 0, "output": 0,
-            "reasoning": 0, "total": 0, "unpriced": 0, "costs": {},
-        }
+        return {"attempts": 0, "successes": 0, "input": 0, "cached": 0, "output": 0, "reasoning": 0, "total": 0, "unpriced": 0, "costs": {}}
     row = connection.execute(
         f"""
         SELECT COUNT(*) attempts,
                SUM(CASE WHEN status='SUCCESS' THEN 1 ELSE 0 END) successes,
-               COALESCE(SUM(input_tokens),0) input_tokens,
-               COALESCE(SUM(cached_input_tokens),0) cached_input_tokens,
-               COALESCE(SUM(output_tokens),0) output_tokens,
-               COALESCE(SUM(reasoning_tokens),0) reasoning_tokens,
-               COALESCE(SUM(COALESCE(total_tokens, COALESCE(input_tokens,0)+COALESCE(output_tokens,0))),0) total_tokens,
-               SUM(CASE WHEN estimated_cost IS NULL AND (input_tokens IS NOT NULL OR output_tokens IS NOT NULL) THEN 1 ELSE 0 END) unpriced
+               COALESCE(SUM(input_tokens),0),
+               COALESCE(SUM(cached_input_tokens),0),
+               COALESCE(SUM(output_tokens),0),
+               COALESCE(SUM(reasoning_tokens),0),
+               COALESCE(SUM(COALESCE(total_tokens, COALESCE(input_tokens,0)+COALESCE(output_tokens,0))),0),
+               SUM(CASE WHEN estimated_cost IS NULL AND (input_tokens IS NOT NULL OR output_tokens IS NOT NULL) THEN 1 ELSE 0 END)
         FROM {table}
         """
     ).fetchone()
@@ -249,29 +232,24 @@ def _usage_from_table(connection: sqlite3.Connection, table: str) -> dict[str, i
     }
 
 
-def _web_usage(workspace: Path) -> tuple[int, tuple[tuple[str, int], ...]]:
-    log_path = workspace / "logs" / "audit.log"
-    if not log_path.is_file():
+def _web_usage(connection: sqlite3.Connection) -> tuple[int, tuple[tuple[str, int], ...]]:
+    """Use M21 SQLite telemetry as the source of truth; do not recount log events."""
+    if not _table_exists(connection, "web_performance_attempts"):
         return 0, ()
-    services: dict[str, int] = {}
-    try:
-        lines = log_path.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeError):
-        return 0, ()
-    for line in lines:
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(payload, dict) or payload.get("event") != "M21_EXTERNAL_ATTEMPT":
-            continue
-        service = str(payload.get("service") or "EXTERNAL").upper()
-        services[service] = services.get(service, 0) + 1
-    ordered = tuple(sorted(services.items()))
-    return sum(count for _, count in ordered), ordered
+    rows = connection.execute(
+        """
+        SELECT UPPER(service),COUNT(*)
+        FROM web_performance_attempts
+        GROUP BY UPPER(service)
+        ORDER BY UPPER(service)
+        """
+    ).fetchall()
+    services = tuple((str(service), int(count)) for service, count in rows)
+    return sum(count for _, count in services), services
 
 
 def actual_usage(workspace: Path | None) -> ActualUsage | None:
+    """Aggregate existing M18/M20/M21 telemetry without persisting duplicate totals."""
     if workspace is None:
         return None
     database = workspace / "audit.db"
@@ -282,6 +260,7 @@ def actual_usage(workspace: Path | None) -> ActualUsage | None:
         try:
             m18 = _usage_from_table(connection, "ai_provider_attempts")
             m20 = _usage_from_table(connection, "content_remediation_attempts")
+            web_calls, services = _web_usage(connection)
         finally:
             connection.close()
     except sqlite3.Error:
@@ -292,7 +271,6 @@ def actual_usage(workspace: Path | None) -> ActualUsage | None:
         assert isinstance(source, dict)
         for currency, amount in source.items():
             costs[str(currency)] = costs.get(str(currency), 0.0) + float(amount)
-    web_calls, services = _web_usage(workspace)
     return ActualUsage(
         ai_attempts=int(m18["attempts"]) + int(m20["attempts"]),
         ai_successes=int(m18["successes"]) + int(m20["successes"]),
@@ -306,3 +284,91 @@ def actual_usage(workspace: Path | None) -> ActualUsage | None:
         web_external_calls=web_calls,
         web_services=services,
     )
+
+
+def persist_execution_projection(
+    workspace: Path | None,
+    state: State,
+    estimate: ExposureEstimate,
+    *,
+    projected_at: str,
+    started_at: str,
+    finished_at: str,
+    duration_ms: int,
+) -> bool:
+    """Persist only console-specific projection/timing; actual usage stays in M18/M20/M21 tables."""
+    if workspace is None:
+        return False
+    database = workspace / "audit.db"
+    if not database.is_file() or not state.audit_id:
+        return False
+    provider_models = _selected_provider_models(state)
+    configuration = {
+        "input_mode": state.input_mode,
+        "device": state.device,
+        "ai_provider": state.ai_provider,
+        "ai_model": state.ai_model,
+        "content_remediation": state.content_remediation,
+        "web_performance": state.web_performance,
+        "web_max_pages": state.web_max_pages,
+        "field_source": state.field_source,
+        "max_pages": state.max_pages,
+    }
+    try:
+        connection = sqlite3.connect(database, timeout=1.0)
+        try:
+            with connection:
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS console_execution_projections (
+                        audit_id TEXT PRIMARY KEY REFERENCES audits(audit_id) ON DELETE CASCADE,
+                        projected_at TEXT NOT NULL,
+                        started_at TEXT NOT NULL,
+                        finished_at TEXT NOT NULL,
+                        duration_ms INTEGER NOT NULL,
+                        exposure_level TEXT NOT NULL,
+                        min_pages INTEGER NOT NULL,
+                        max_pages INTEGER NOT NULL,
+                        device_contexts INTEGER NOT NULL,
+                        min_ai_attempts INTEGER NOT NULL,
+                        max_ai_attempts INTEGER NOT NULL,
+                        min_web_calls INTEGER NOT NULL,
+                        max_web_calls INTEGER NOT NULL,
+                        provider_models TEXT NOT NULL,
+                        configuration TEXT NOT NULL,
+                        reasons TEXT NOT NULL,
+                        pricing_version TEXT NOT NULL
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    INSERT OR REPLACE INTO console_execution_projections VALUES (
+                        ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+                    )
+                    """,
+                    (
+                        state.audit_id,
+                        projected_at,
+                        started_at,
+                        finished_at,
+                        int(duration_ms),
+                        estimate.level,
+                        estimate.min_pages,
+                        estimate.max_pages,
+                        estimate.device_contexts,
+                        estimate.min_ai_attempts,
+                        estimate.max_ai_attempts,
+                        estimate.min_web_calls,
+                        estimate.max_web_calls,
+                        json.dumps(provider_models, ensure_ascii=False, separators=(",", ":")),
+                        json.dumps(configuration, ensure_ascii=False, separators=(",", ":"), sort_keys=True),
+                        json.dumps(estimate.reasons, ensure_ascii=False, separators=(",", ":")),
+                        PRICING_VERSION,
+                    ),
+                )
+        finally:
+            connection.close()
+    except sqlite3.Error:
+        return False
+    return True
