@@ -21,13 +21,16 @@ class SyntheticApdexRun:
     task_id: str
     threshold_seconds: float | None
     frustration_seconds: float | None
-    runs_per_context: int
+    target_valid_samples: int
+    max_attempts_per_context: int
     page_limit: int
     pages_considered: int
     contexts_considered: int
     attempted_samples: int
     valid_samples: int
     invalid_samples: int
+    delay_seconds: float
+    concurrency: int
     configuration: dict[str, Any]
     host_environment: dict[str, Any]
     reason: str | None
@@ -140,13 +143,16 @@ class M23Persistence:
                     task_id TEXT NOT NULL,
                     threshold_seconds REAL,
                     frustration_seconds REAL,
-                    runs_per_context INTEGER NOT NULL,
+                    target_valid_samples INTEGER NOT NULL,
+                    max_attempts_per_context INTEGER NOT NULL,
                     page_limit INTEGER NOT NULL,
                     pages_considered INTEGER NOT NULL,
                     contexts_considered INTEGER NOT NULL,
                     attempted_samples INTEGER NOT NULL,
                     valid_samples INTEGER NOT NULL,
                     invalid_samples INTEGER NOT NULL,
+                    delay_seconds REAL NOT NULL,
+                    concurrency INTEGER NOT NULL,
                     configuration TEXT NOT NULL,
                     host_environment TEXT NOT NULL,
                     reason TEXT,
@@ -245,14 +251,16 @@ class M23Persistence:
             self.connection.execute(
                 """
                 INSERT OR REPLACE INTO synthetic_apdex_runs VALUES (
-                    ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+                    ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
                 )
                 """,
                 (
                     item.audit_id, 1 if item.enabled else 0, item.status, item.task_id,
-                    item.threshold_seconds, item.frustration_seconds, item.runs_per_context,
+                    item.threshold_seconds, item.frustration_seconds,
+                    item.target_valid_samples, item.max_attempts_per_context,
                     item.page_limit, item.pages_considered, item.contexts_considered,
                     item.attempted_samples, item.valid_samples, item.invalid_samples,
+                    item.delay_seconds, item.concurrency,
                     _dump(item.configuration), _dump(item.host_environment), item.reason,
                     item.updated_at,
                 ),
