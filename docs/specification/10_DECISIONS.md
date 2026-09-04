@@ -189,13 +189,33 @@ Decisão aprovada:
 3. LCP, INP e CLS de CrUX representam experiência real agregada quando houver amostra suficiente e não constituem automaticamente RuleExecution/ScoreContribution do SearchGEO;
 4. ausência/erro de PageSpeed ou CrUX é limitação de coleta, nunca website FAIL por si só;
 5. coleta externa M21 é default OFF, com limite de páginas e timeout parametrizáveis;
-6. M21 adiciona zero chamadas LLM e não pode aumentar consumo OpenAI/DeepSeek/MiMo por efeito colateral;
+6. M21 adiciona zero chamadas LLM e não pode aumentar consumo de qualquer SemanticProvider/M20 por efeito colateral;
 7. PageSpeed/CrUX possuem credenciais isoladas e opcionais conforme o serviço;
 8. M21 é enrichment pós-auditoria e fail-open em relação ao resultado principal;
 9. resultados M21 são persistidos em tabelas/artifacts auxiliares e apresentados em `report/web-performance.html`;
 10. qualquer futura incorporação de métrica M21 ao scoring exigirá decisão humana explícita, novo contrato/versionamento de scoring, documentação de fundamento e regressão comparativa; não pode ocorrer silenciosamente.
 
 D-038 complementa D-037; não a supersede.
+
+### D-039 — Expansão segura de providers sem regressão do M18
+
+Fica aprovada a inclusão aditiva de xAI/Grok, Alibaba Qwen, Google Gemini e Anthropic Claude, sob as seguintes condições obrigatórias:
+
+1. OpenAI, DeepSeek, MiMo e `AUTO` permanecem sob o núcleo M18 homologado;
+2. `AUTO` continua restrito a `OpenAI → DeepSeek → MiMo`; configurar keys dos novos providers não pode alterar essa cadeia;
+3. os novos providers entram inicialmente como `PROVISIONAL` e `explicit-only`;
+4. a implementação deve permanecer isolada do core homologado sempre que tecnicamente possível; nesta evolução, `src/searchgeo/m18_ai.py`, `src/searchgeo/cli.py` e `src/searchgeo/m20_ai.py` não devem ser modificados pela feature;
+5. cada provider usa somente sua própria credencial/modelo/endpoint; ausência da key selecionada resulta em `NOT_CONFIGURED` e zero request;
+6. cada adapter deve cumprir o mesmo contrato semântico M18, incluindo exatamente BR-GEO-028..049, schema/evidence validation, fail-closed e telemetria normalizada;
+7. M20 pode usar os novos providers quando explicitamente selecionados, sem reativar provider quarantined no M7/M18 e sem alterar scoring/findings;
+8. novos preços comerciais não devem ser incorporados ao catálogo homologado M18 antes de qualificação específica de preço; custo pode permanecer indisponível enquanto o provider estiver provisório;
+9. CI/regressão automatizada é obrigatória, mas não suficiente para promoção/merge;
+10. antes de merge/promoção, smoke humano com credenciais reais deve validar os quatro novos providers e revalidar OpenAI, DeepSeek, MiMo e `AUTO`, incluindo ausência de vazamento de secrets;
+11. qualquer promoção para `QUALIFIED` ou entrada em `AUTO` exige mudança explícita, versionada e documentada; não pode ocorrer automaticamente por presença de credencial.
+
+Fonte normativa específica: `22_SAFE_AI_PROVIDER_EXTENSIONS.md`.
+
+D-039 complementa D-020, D-027 e o M18; não altera `SCORE-GEO-002` nem a natureza opcional da IA definida em D-017/D-019/D-023.
 
 ## PENDING ENVIRONMENT VALIDATION
 
@@ -215,17 +235,23 @@ Validar:
 
 Acessibilidade técnica não significa autorização corporativa.
 
+O mesmo tipo de validação técnica deve ser aplicado a qualquer provider externo explicitamente habilitado no ambiente em que o SearchGEO for executado.
+
 ## PENDING CORPORATE VALIDATION
 
 ### D-029
 Identificar provider de IA permitido/preferido corporativamente.
 
-Possibilidades arquiteturais:
+Possibilidades arquiteturais incluem:
 
 - OpenAI;
-- Azure OpenAI;
+- DeepSeek;
+- Xiaomi MiMo;
+- xAI;
+- Alibaba Qwen;
 - Google;
 - Anthropic;
+- Azure OpenAI;
 - AWS Bedrock;
 - modelo local;
 - nenhum.
@@ -240,7 +266,7 @@ Também validar corporativamente:
 - antivírus/EDR;
 - políticas de execução.
 
-Essas pendências não bloqueiam desenvolvimento local do MVP.
+Essas pendências não bloqueiam desenvolvimento local do MVP, mas podem bloquear uso de determinado provider em ambiente corporativo.
 
 ## Restrições aprovadas adicionais
 
@@ -257,4 +283,5 @@ Essas pendências não bloqueiam desenvolvimento local do MVP.
 - findings devem ser evidence-backed;
 - LLM nunca é scoring engine;
 - cascading failures devem ser controladas;
-- métricas PageSpeed/CrUX/Lighthouse não alteram `SCORE-GEO-002` sem nova decisão/versionamento explícito.
+- métricas PageSpeed/CrUX/Lighthouse não alteram `SCORE-GEO-002` sem nova decisão/versionamento explícito;
+- provider `PROVISIONAL` não entra em `AUTO` sem decisão/versionamento explícito.
