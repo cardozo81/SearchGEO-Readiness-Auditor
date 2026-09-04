@@ -10,6 +10,7 @@ from unittest.mock import patch
 from searchgeo.console_m23 import State, observe_m23_workspace
 from searchgeo.console_runtime import clear_runtime_progress, runtime_progress_summary, set_runtime_progress
 from searchgeo.interactive_console import _configure, _configure_apdex, _menu
+from searchgeo.report_consistency_v2 import _sanitize_presentation
 
 
 class ConsoleProgressGuidanceTests(unittest.TestCase):
@@ -103,6 +104,16 @@ class ConsoleProgressGuidanceTests(unittest.TestCase):
         rendered = output.getvalue()
         self.assertIn("11. Synthetic Apdex", rendered)
         self.assertIsNone(re.search(r"\bM(?:18|20|21|22|23)\b", rendered))
+
+    def test_report_label_sanitizer_does_not_rewrite_arbitrary_page_content(self) -> None:
+        html = (
+            "<p>Produto M20 com motor M23 permanece conteúdo auditado.</p>"
+            "<div>M22 · diagnóstico técnico</div>"
+        )
+        rendered = _sanitize_presentation(html)
+        self.assertIn("Produto M20 com motor M23 permanece conteúdo auditado.", rendered)
+        self.assertIn("Diagnóstico técnico", rendered)
+        self.assertNotIn("M22 · diagnóstico técnico", rendered)
 
 
 if __name__ == "__main__":
