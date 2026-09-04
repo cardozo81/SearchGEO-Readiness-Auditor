@@ -1,0 +1,58 @@
+name: tmp-m23-post-main
+
+on:
+  push:
+    branches:
+      - m23-synthetic-apdex-lighthouse-traceability
+
+jobs:
+  regression:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install Ubuntu
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m playwright install --with-deps chromium
+      - name: Install Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m playwright install chromium
+      - name: Compile and full regression
+        run: |
+          python -m compileall -q src tests
+          python -m unittest discover -s tests -p "test_*.py"
+      - name: M23 focused regression
+        run: |
+          python -m unittest tests.test_m23_integration tests.test_m23_e2e_local tests.test_report_navigation tests.test_report_visual_contract
+      - name: CLI surface
+        shell: python
+        run: |
+          from searchgeo.cli_extensions import build_parser
+          p=build_parser()
+          a=p.parse_args(['audit','https://example.com','--synthetic-apdex','--apdex-threshold-seconds','1.0','--apdex-samples-per-context','5'])
+          assert a.synthetic_apdex is True
+          assert a.apdex_threshold_seconds == 1.0
+          print('M23_CLI=PASS')
+      - name: Console surface
+        shell: python
+        run: |
+          from searchgeo.console_m23 import State, append_m23_command, validate_m23_state
+          s=State(target='https://example.com',synthetic_apdex=True,apdex_threshold=1.0,apdex_samples=5,apdex_max_attempts=7,apdex_timeout=5.0)
+          validate_m23_state(s)
+          c=append_m23_command(['python','-m','searchgeo','audit','https://example.com'],s)
+          assert '--synthetic-apdex' in c
+          print('M23_CONSOLE=PASS')
