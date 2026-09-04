@@ -83,7 +83,10 @@ class ReportNavigationTests(unittest.TestCase):
 
             css = (report_dir / "css" / "site.css").read_text(encoding="utf-8")
             html = (report_dir / "index.html").read_text(encoding="utf-8")
-            self.assertEqual(css.count("searchgeo-premium-report-v1"), 1)
+            self.assertEqual(css.count("searchgeo-premium-report-v2"), 1)
+            self.assertIn("grid-template-columns:minmax(0,1fr) minmax(320px,390px)", css)
+            self.assertIn("@media(max-width:700px)", css)
+            self.assertIn(".snapshot>figure{grid-column:2;grid-row:1", css)
             self.assertEqual(html.count("class='br-rule-tooltip'"), 1)
             self.assertIn("Severidade HIGH · Verifica se a página é tecnicamente recuperável.", html)
             self.assertIn("<code>BR-GEO-006</code>", html)
