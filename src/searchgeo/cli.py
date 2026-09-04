@@ -20,6 +20,7 @@ from searchgeo.logging_config import configure_logging
 from searchgeo.m18_ai import build_semantic_provider
 from searchgeo.m21_reporting import enrich_m21_report_site
 from searchgeo.m21_web_performance import DEFAULT_CATEGORIES, WebPerformanceConfig, execute_m21
+from searchgeo.operational_log import try_append_operational_event
 from searchgeo.persistence import AuditWorkspace
 
 _LOGGER = logging.getLogger(__name__)
@@ -346,6 +347,7 @@ def main(argv: list[str] | None = None) -> int:
         web_result = None
         web_report_path: Path | None = None
         web_runtime_failed = False
+        workspace: AuditWorkspace | None = None
         try:
             targets = _audit_targets(args)
             if args.max_pages <= 0:
@@ -390,8 +392,23 @@ def main(argv: list[str] | None = None) -> int:
                             audit_id=result.audit_id,
                             workspace=workspace,
                         )
-                    except (OSError, ValueError, RuntimeError):
+                        try_append_operational_event(
+                            workspace,
+                            "M21_REPORT_GENERATED",
+                            audit_id=result.audit_id,
+                            report_path=str(web_report_path.relative_to(workspace.root)),
+                        )
+                    except (OSError, ValueError, RuntimeError) as exc:
                         web_runtime_failed = True
+                        if workspace is not None:
+                            try_append_operational_event(
+                                workspace,
+                                "M21_RUNTIME_FAILURE",
+                                level="ERROR",
+                                audit_id=result.audit_id,
+                                error_type=type(exc).__name__,
+                                error_message=str(exc)[:512],
+                            )
                         _LOGGER.exception(
                             "External web-performance enrichment failed after core audit completion"
                         )
@@ -415,8 +432,15 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 "Web Performance externo: HABILITADO "
                 f"({web_result.status}; páginas {web_result.pages_considered}; "
-                f"contextos {web_result.successful_contexts}/{web_result.context_attempts})"
+                f"contextos úteis {web_result.successful_contexts}/{web_result.context_attempts}; "
+                f"PageSpeed {web_result.pagespeed_successes}/{web_result.pagespeed_attempts}; "
+                f"CrUX {web_result.crux_successes}/{web_result.crux_attempts})"
             )
+            if web_result.status == "PARTIAL":
+                print(
+                    "Web Performance aviso: coleta parcial; um ou mais componentes externos falharam "
+                    "ou ficaram indisponíveis. Consulte o relatório e o log operacional."
+                )
         elif web_runtime_failed:
             print(
                 "Web Performance externo: HABILITADO (INCOMPLETO por erro operacional do enriquecimento; "
@@ -433,6 +457,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Conteúdo e JSON-LD: {content_path}")
         if web_report_path is not None and web_report_path.is_file():
             print(f"Core Web Vitals e Lighthouse: {web_report_path}")
+        log_path = result.audit_root / "logs" / "audit.log"
+        if log_path.is_file():
+            print(f"Log operacional: {log_path}")
         return 0
 
     parser.error(f"unsupported command: {args.command}")
