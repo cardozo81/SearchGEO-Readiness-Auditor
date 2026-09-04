@@ -88,7 +88,7 @@ Menu principal:
 11. Synthetic Apdex
 
 H. Ajuda / custos
-E. Variáveis de ambiente
+E. Variáveis de ambiente / credenciais
 S. Salvar configuração INI [SEM CHAVES]
 R. Executar
 Q. Sair
@@ -104,7 +104,11 @@ searchgeo-console.ini
 
 Se não existir, é criado com defaults. Parâmetros não sensíveis podem ser salvos e carregados automaticamente na próxima execução.
 
-**API keys, tokens, senhas e outras credenciais não são gravados no INI.** O usuário pode inseri-los/alterá-los pelo menu de variáveis de ambiente; secrets aparecem somente como `[SET]` e permanecem voláteis à sessão, salvo configuração externa do próprio usuário.
+**API keys, tokens, senhas e outras credenciais não são gravados no INI.** No menu `E. Variáveis de ambiente / credenciais`, o usuário pode alterar uma credencial apenas para a sessão atual ou, mediante confirmação explícita, persistir/remover a credencial no ambiente **User** do Windows. A persistência no Windows não exige privilégio de administrador e não grava o segredo em arquivos do SearchGEO.
+
+Para cada secret, o console indica a origem do valor efetivamente usado, por exemplo `SO:USER`, `SO:MACHINE`, `SESSÃO` ou `SESSÃO | SO:USER existente`. Se um valor é alterado dentro do console, o valor da **sessão atual prevalece** durante aquela execução; a variável persistida no Windows funciona como valor herdado por novos processos.
+
+O console nunca exibe o valor da chave em claro. Variáveis de ambiente do Windows não são um cofre de segredos: processos executados sob o mesmo usuário e ferramentas com acesso ao perfil podem lê-las.
 
 O console marca alterações não salvas e alerta antes de sair.
 
@@ -332,8 +336,11 @@ A página inicial inclui **Configuração × resultado obtido**, permitindo dist
 ## Segurança
 
 - secrets não são persistidos no INI;
+- a persistência opcional de secrets no Windows usa apenas o escopo `User` e exige confirmação explícita por chave;
+- a sessão atual prevalece sobre o valor herdado do SO para a execução em andamento;
+- o console mascara credenciais como `[SET]` e informa sua origem sem revelar o valor;
+- variáveis de ambiente não substituem um secret manager quando esse nível de proteção for necessário;
 - secrets não devem aparecer em reports/logs;
-- o console mascara credenciais como `[SET]`;
 - não trate key configurada como prova de saldo/quota;
 - não execute Synthetic Apdex em volume relevante contra produção sem autorização.
 

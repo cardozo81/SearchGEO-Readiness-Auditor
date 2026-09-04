@@ -36,6 +36,7 @@ from searchgeo.console_m23 import (
 )
 from searchgeo.console_runtime import render_header
 from searchgeo.console_session import (
+    clear_secret_volatile,
     get_config_path,
     has_volatile_secrets,
     is_dirty,
@@ -67,6 +68,14 @@ from searchgeo.provider_runtime_policy import (
     WEB_PERFORMANCE_TIMEOUT_ENV,
     apply_console_reasoning_environment,
     configured_reasoning,
+)
+from searchgeo.windows_environment import (
+    current_matches_persisted,
+    environment_origin,
+    machine_environment_value,
+    persist_user_environment,
+    remove_user_environment,
+    user_environment_value,
 )
 
 ENV_NAMES = tuple(dict.fromkeys((*BASE_ENV_NAMES, *M23_ENV_NAMES)))
@@ -115,16 +124,92 @@ def _environment_help_menu(state: State) -> None:
     input("\nENTER para voltar...")
 
 
+def _sync_secret_volatility(state: State, name: str) -> None:
+    if current_matches_persisted(name):
+        clear_secret_volatile(state, name)
+    else:
+        mark_secret_volatile(state, name)
+
+
+def _secret_persistence_action(state: State, name: str) -> None:
+    while True:
+        render_header(state)
+        current = (os.environ.get(name) or "").strip()
+        user_value = user_environment_value(name)
+        machine_value = machine_environment_value(name)
+        print("PERSISTÊNCIA DE CREDENCIAL NO WINDOWS\n")
+        print(f"Variável           : {name}")
+        print(f"Sessão atual       : {'[SET]' if current else '<não definida>'}")
+        print(f"Windows / User     : {'[PERSISTIDA]' if user_value else '<não persistida>'}")
+        print(f"Windows / Machine  : {'[PERSISTIDA]' if machine_value else '<não persistida>'}")
+        print("\nO valor da sessão atual é o valor efetivamente usado por esta execução.")
+        print("Persistir grava a credencial no ambiente do usuário Windows (User), nunca no INI.")
+        print(paint("Variáveis de ambiente não são um cofre de segredos: processos com acesso ao mesmo usuário podem lê-las.", YELLOW))
+        print("\nP. Persistir no Windows/User o valor atual da sessão")
+        print("R. Remover a persistência Windows/User (mantém a sessão atual)")
+        print("V. Voltar")
+        action = input("Escolha: ").strip().upper()
+        if action == "V":
+            return
+        if action == "P":
+            if os.name != "nt":
+                state.error = "persistência de credenciais no SO está disponível somente no Windows"
+                return
+            if not current:
+                state.error = "defina a credencial na sessão antes de persistir"
+                return
+            confirm = input(f"Confirmar persistência de {name} no ambiente USER do Windows? Digite SIM: ").strip().upper()
+            if confirm != "SIM":
+                state.error = "persistência cancelada"
+                return
+            try:
+                persist_user_environment(name, current)
+                _sync_secret_volatility(state, name)
+                state.error = ""
+                state.operation = "LOCAL:PERSIST_USER_SECRET"
+                print(paint("\nCredencial persistida no ambiente USER do Windows.", GREEN, bold=True))
+                input("ENTER para continuar...")
+            except (OSError, ValueError) as exc:
+                state.error = f"falha ao persistir {name}: {type(exc).__name__}: {exc}"
+            return
+        if action == "R":
+            if os.name != "nt":
+                state.error = "persistência de credenciais no SO está disponível somente no Windows"
+                return
+            if user_value is None:
+                state.error = f"{name} não possui persistência no escopo Windows/User"
+                return
+            confirm = input(f"Confirmar remoção da persistência USER de {name}? Digite SIM: ").strip().upper()
+            if confirm != "SIM":
+                state.error = "remoção cancelada"
+                return
+            try:
+                remove_user_environment(name)
+                _sync_secret_volatility(state, name)
+                state.error = ""
+                state.operation = "LOCAL:REMOVE_USER_SECRET"
+                print(paint("\nPersistência Windows/User removida. O valor da sessão atual não foi alterado.", GREEN, bold=True))
+                input("ENTER para continuar...")
+            except OSError as exc:
+                state.error = f"falha ao remover persistência de {name}: {type(exc).__name__}: {exc}"
+            return
+
+
 def _environment_menu(state: State) -> None:
     while True:
         render_header(state)
-        print("Variáveis de ambiente — valores sensíveis nunca são exibidos nem gravados no INI.\n")
+        print("Variáveis de ambiente — secrets nunca são exibidos nem gravados no INI.\n")
+        print("Para credenciais, a origem do valor efetivamente usado é indicada como SO ou SESSÃO.\n")
         for index, name in enumerate(ENV_NAMES, 1):
             value = os.environ.get(name)
-            if not value:
+            if is_secret(name):
+                shown = paint("[SET]", GREEN, bold=True) if value else paint("<não definida>", DIM)
+                origin = environment_origin(name, value)
+                if origin:
+                    origin_color = GREEN if origin in {"SO:USER", "SO:MACHINE"} else YELLOW
+                    shown += " " + paint(f"[{origin}]", origin_color, bold=True)
+            elif not value:
                 shown = paint("<não definida>", DIM)
-            elif is_secret(name):
-                shown = paint("[SET]", GREEN, bold=True)
             elif value.strip().casefold() in {"true", "1", "yes", "on"}:
                 shown = paint(value, GREEN, bold=True)
             elif value.strip().casefold() in {"false", "0", "no", "off"}:
@@ -132,19 +217,25 @@ def _environment_menu(state: State) -> None:
             else:
                 shown = paint(value, CYAN)
             print(f"{index:2d}. {name:<44} {shown}")
-        action = input("\nS=setar/alterar | R=remover | H=ajuda/custo | V=voltar: ").strip().upper()
+        action = input("\nS=setar/alterar sessão | R=remover da sessão | P=persistir/remover credencial no Windows | H=ajuda/custo | V=voltar: ").strip().upper()
         if action == "V":
             return
         if action == "H":
             _environment_help_menu(state)
             continue
-        if action not in {"S", "R"}:
+        if action not in {"S", "R", "P"}:
             continue
         try:
             selected = int(input("Número: ").strip()) - 1
             name = ENV_NAMES[selected]
         except (ValueError, IndexError):
             state.error = "variável inválida"
+            continue
+        if action == "P":
+            if not is_secret(name):
+                state.error = "persistência pelo item P é restrita a credenciais; parâmetros não sensíveis devem usar o INI"
+                continue
+            _secret_persistence_action(state, name)
             continue
         render_header(state)
         print(f"Variável selecionada: {name}\n")
@@ -161,7 +252,7 @@ def _environment_menu(state: State) -> None:
                 state.error = str(exc)
                 continue
         if secret:
-            mark_secret_volatile(state)
+            _sync_secret_volatility(state, name)
         issues = list(apply_environment_defaults(state, names={name}))
         issues.extend(apply_m23_environment_defaults(state, names={name}))
         state.error = "; ".join(issues)
@@ -342,7 +433,7 @@ def _confirm_exit(state: State) -> bool:
         if dirty:
             print(paint("Há alterações de configuração ainda não salvas no arquivo INI.", YELLOW, bold=True))
         if volatile:
-            print(paint("Uma ou mais chaves/credenciais foram alteradas nesta sessão. Por segurança elas nunca são gravadas no INI e serão perdidas ao encerrar o processo.", YELLOW, bold=True))
+            print(paint("Uma ou mais alterações de credenciais desta sessão diferem da persistência do Windows e não serão mantidas como default de novos processos.", YELLOW, bold=True))
         if dirty:
             print("\nS. Salvar parâmetros não sensíveis e sair")
             print("D. Sair descartando alterações não salvas")
@@ -356,7 +447,7 @@ def _confirm_exit(state: State) -> bool:
             elif choice == "C":
                 return False
         else:
-            print("\nQ. Confirmar saída (credenciais da sessão serão descartadas)")
+            print("\nQ. Confirmar saída (alterações voláteis de credenciais da sessão serão descartadas)")
             print("C. Cancelar")
             choice = input("Escolha: ").strip().upper()
             if choice == "Q":
@@ -459,7 +550,7 @@ def _menu(state: State) -> str:
     path = get_config_path(state)
     config_state = paint("ALTERAÇÕES NÃO SALVAS", YELLOW, bold=True) if is_dirty(state) else paint("SALVO", GREEN, bold=True)
     print("CONFIGURAÇÃO DA AUDITORIA\n")
-    print(f"Arquivo INI: {path or '<não resolvido>'} | {config_state} | credenciais não são persistidas")
+    print(f"Arquivo INI: {path or '<não resolvido>'} | {config_state} | credenciais: sessão/Windows User; nunca no INI")
     print("Exposição financeira potencial: " + paint(estimate.level, cost_color(estimate.level), bold=True))
     if estimate.min_pages == estimate.max_pages:
         print(f"Volume prévio: {estimate.min_pages} página(s) conhecida(s) × {estimate.device_contexts} contexto(s) de dispositivo")
@@ -493,7 +584,7 @@ def _menu(state: State) -> str:
     ready, reason = _execution_readiness(state)
     marker = availability_badge(ready)
     reason_text = paint(reason, GREEN if ready else RED)
-    print(f"\nS. Salvar configuração INI [SEM CHAVES] | H. Ajuda / custos | E. Variáveis de ambiente")
+    print("\nS. Salvar configuração INI [SEM CHAVES] | H. Ajuda / custos | E. Variáveis de ambiente / credenciais")
     print(f"R. Executar [{marker}] {reason_text} | Q. Sair")
     workspace, report = artifact_status(state)
     if workspace or report:

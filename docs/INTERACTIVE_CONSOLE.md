@@ -15,6 +15,7 @@ O console é uma camada de configuração, preflight, observabilidade e execuç�
 - progresso/etapa durante a execução sem polling externo adicional;
 - secrets nunca são exibidos em claro;
 - credenciais não são gravadas no arquivo INI;
+- persistência opcional de credenciais no Windows exige confirmação explícita e usa apenas o escopo `User`;
 - integração externa indisponível é explicada e não vira finding do website;
 - custo prévio é estimativa de exposição, não invoice;
 - consumo real exibido após a execução vem da telemetria persistida;
@@ -47,7 +48,7 @@ ou:
 Arquivo INI: ...\searchgeo-console.ini | ALTERAÇÕES NÃO SALVAS
 ```
 
-Para persistir as alterações:
+Para persistir os parâmetros não sensíveis:
 
 ```text
 S. Salvar configuração INI [SEM CHAVES]
@@ -55,15 +56,7 @@ S. Salvar configuração INI [SEM CHAVES]
 
 A gravação é atômica: o conteúdo é produzido em arquivo temporário e substitui o INI somente após a escrita concluir.
 
-Ao sair com alterações pendentes, o console pede uma decisão explícita:
-
-```text
-S. Salvar parâmetros não sensíveis e sair
-D. Sair descartando alterações não salvas
-C. Cancelar
-```
-
-Se uma credencial foi alterada na sessão, o console também informa que esse segredo é volátil e será perdido ao encerrar o processo, salvo se o usuário o mantiver por mecanismo externo seguro de ambiente/secret management.
+Ao sair com alterações pendentes, o console pede uma decisão explícita. Credenciais que diferem da persistência do Windows continuam sendo tratadas como alterações voláteis da sessão.
 
 ## Credenciais
 
@@ -84,10 +77,39 @@ Principais variáveis:
 As credenciais podem ser inseridas/alteradas no menu:
 
 ```text
-E. Variáveis de ambiente
+E. Variáveis de ambiente / credenciais
 ```
 
 Secrets são lidos com entrada sem eco e aparecem somente como `[SET]`.
+
+### Sessão × persistência no Windows
+
+O valor efetivamente usado pela auditoria é sempre o valor presente no processo atual. Portanto, quando uma key já existe no Windows e o usuário a altera dentro do console, **o valor da sessão aberta prevalece imediatamente**.
+
+O menu representa a origem sem exibir o segredo:
+
+```text
+[SET] [SO:USER]
+[SET] [SO:MACHINE]
+[SET] [SESSÃO]
+[SET] [SESSÃO | SO:USER existente]
+```
+
+Se uma credencial persistida foi removida apenas da sessão atual, o console também pode indicar que ela continua persistida no SO, mas não está ativa naquele processo.
+
+Dentro do menu de ambiente:
+
+```text
+S = setar/alterar somente a sessão atual
+R = remover somente da sessão atual
+P = persistir/remover credencial no Windows
+```
+
+A opção `P` é restrita a secrets. Para persistir, o usuário precisa primeiro ter um valor válido na sessão e confirmar explicitamente digitando `SIM`. A gravação é feita no ambiente **User** do Windows, equivalente à persistência de variável de ambiente do usuário; não usa o escopo `Machine` e não exige execução como Administrador.
+
+A remoção de persistência também exige confirmação e remove somente o valor do escopo Windows/User. O valor da sessão atual é preservado até que o processo seja encerrado ou o usuário o remova pela opção `R`.
+
+A persistência no Windows não transforma a variável em secret manager: processos e ferramentas com acesso ao mesmo perfil do usuário podem ler variáveis de ambiente persistidas. O SearchGEO nunca grava essas chaves em `searchgeo-console.ini`, reports ou logs.
 
 MiMo exige credencial PAYG compatível com `sk-...` no adapter atual. Token Plan `tp-...` usa produto/endpoint diferente e não é tratado como credencial PAYG válida.
 
@@ -154,7 +176,7 @@ A superfície funcional é:
 11. Synthetic Apdex
 
 H. Ajuda / custos
-E. Variáveis de ambiente
+E. Variáveis de ambiente / credenciais
 S. Salvar configuração INI [SEM CHAVES]
 R. Executar [APTO|INDISPONÍVEL]
 Q. Sair
@@ -296,7 +318,11 @@ Uma fonte configurada que falhou por timeout, quota, HTTP, ausência de artifact
 - o INI não armazena secrets;
 - reports/logs não devem conter chaves em claro;
 - o console não pressupõe que uma key configurada possua saldo/quota;
-- alteração de credencial é volátil à sessão, salvo configuração externa do usuário;
+- a sessão atual prevalece sobre valores herdados do SO durante a execução aberta;
+- persistência opcional de credencial no Windows usa somente `User`, mediante confirmação explícita;
+- remoção da persistência `User` não apaga automaticamente o valor já carregado na sessão atual;
+- o console informa `SO:USER`, `SO:MACHINE` ou `SESSÃO` sem revelar o secret;
+- variáveis de ambiente não são equivalentes a um secret manager;
 - valores não sensíveis podem ser salvos no INI;
 - alterações não salvas são avisadas antes da saída.
 

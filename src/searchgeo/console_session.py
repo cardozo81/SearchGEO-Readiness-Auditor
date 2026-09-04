@@ -1,7 +1,7 @@
 """Ephemeral metadata for one interactive-console process."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +10,7 @@ from typing import Any
 class SessionMeta:
     config_path: Path | None = None
     dirty: bool = False
-    volatile_secrets: bool = False
+    volatile_secrets: set[str] = field(default_factory=set)
 
 
 _META: dict[int, SessionMeta] = {}
@@ -36,12 +36,16 @@ def is_dirty(state: Any) -> bool:
     return _meta(state).dirty
 
 
-def mark_secret_volatile(state: Any) -> None:
-    _meta(state).volatile_secrets = True
+def mark_secret_volatile(state: Any, name: str = "*") -> None:
+    _meta(state).volatile_secrets.add(name)
+
+
+def clear_secret_volatile(state: Any, name: str) -> None:
+    _meta(state).volatile_secrets.discard(name)
 
 
 def has_volatile_secrets(state: Any) -> bool:
-    return _meta(state).volatile_secrets
+    return bool(_meta(state).volatile_secrets)
 
 
 def clear_session_meta(state: Any) -> None:
