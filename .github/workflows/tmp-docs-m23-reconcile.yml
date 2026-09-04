@@ -1,0 +1,59 @@
+name: tmp-docs-m23-reconcile
+
+on:
+  push:
+    branches:
+      - docs/reconcile-main-m23-public-contracts
+
+jobs:
+  docs-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Validate Markdown links and M23 public contract
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          root = Path('.')
+          files = [root / 'README.md', *sorted((root / 'docs').rglob('*.md'))]
+          link_re = re.compile(r'\[[^\]]+\]\(([^)]+)\)')
+          broken = []
+          for path in files:
+              text = path.read_text(encoding='utf-8')
+              for raw in link_re.findall(text):
+                  target = raw.strip().split()[0].strip('<>')
+                  if not target or target.startswith(('#', 'http://', 'https://', 'mailto:')):
+                      continue
+                  target = target.split('#', 1)[0]
+                  if not target:
+                      continue
+                  resolved = (path.parent / target).resolve()
+                  if not resolved.exists():
+                      broken.append(f'{path}: {raw}')
+          assert not broken, 'Broken local Markdown links:\n' + '\n'.join(broken)
+
+          readme = Path('README.md').read_text(encoding='utf-8')
+          cli = Path('docs/CLI_REFERENCE.md').read_text(encoding='utf-8')
+          cfg = Path('docs/CONFIGURATION.md').read_text(encoding='utf-8')
+          console = Path('docs/INTERACTIVE_CONSOLE.md').read_text(encoding='utf-8')
+          outputs = Path('docs/OUTPUTS_AND_ARTIFACTS.md').read_text(encoding='utf-8')
+          report = Path('docs/REPORT_GUIDE.md').read_text(encoding='utf-8')
+          spec_index = Path('docs/specification/00_SPEC_INDEX.md').read_text(encoding='utf-8')
+          spec23 = Path('docs/specification/23_SYNTHETIC_APDEX_LIGHTHOUSE_TRACEABILITY.md').read_text(encoding='utf-8')
+
+          assert 'Baseline funcional atual: M23 + M22 + M21 + M20 + SCORE-GEO-002' in readme
+          assert 'report/apdex.html' in readme
+          assert '--synthetic-apdex' in cli and '--apdex-threshold-seconds' in cli
+          assert 'SEARCHGEO_APDEX_CONCURRENCY' in cfg
+          assert '11. Synthetic Apdex M23' in console
+          assert 'synthetic_apdex_samples' in outputs
+          assert 'Synthetic Navigation Apdex — M23' in report
+          assert 'M23 CANDIDATE' not in spec_index
+          assert '**Status:** INTEGRADO' in spec23
+          assert 'SCORE-GEO-002' in spec23
+          print('DOCS_M23_CONTRACT=PASS')
