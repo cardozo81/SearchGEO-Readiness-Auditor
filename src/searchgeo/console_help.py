@@ -86,7 +86,7 @@ def environment_help(name: str) -> tuple[str, str]:
     if upper.endswith("_MODEL") or "_MODEL_" in upper:
         return ("Seleciona o modelo do provider conforme catálogo suportado.", COST_EXTERNAL + ": modelos podem ter preços diferentes.")
     if upper.endswith("_REASONING_EFFORT"):
-        return ("Controla o esforço de reasoning quando suportado.", COST_EXTERNAL + ": esforço maior pode aumentar tokens/processamento conforme o provider.")
+        return ("Controla o esforço de reasoning quando suportado.", COST_EXTERNAL + ": custo/processamento pode aumentar com esforço maior conforme o provider.")
     return (
         "Variável reconhecida pelo SearchGEO; consulte a referência de configuração para o contrato completo.",
         "Impacto financeiro não classificado automaticamente; valide a integração associada.",
