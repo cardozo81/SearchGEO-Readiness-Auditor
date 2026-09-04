@@ -65,7 +65,7 @@ class State:
 
 def is_secret(name: str) -> bool:
     upper = name.upper()
-    return name in SECRET_NAMES or any(token in upper for token in ("TOKEN", "SECRET", "PASSWORD", "CREDENTIAL"))
+    return name in SECRET_NAMES or any(token in upper for token in ("API_KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL"))
 
 
 def environment_summary(env: Mapping[str, str] | None = None) -> tuple[str, ...]:
@@ -199,7 +199,7 @@ def preflight(state: State, env: Mapping[str, str] | None = None) -> tuple[str, 
         raise ValueError("remediação textual exige provider de IA apto")
     if state.ai_provider == "auto" and state.ai_model:
         raise ValueError("AUTO não aceita --ai-model")
-    if state.field_source == "crux" and not (environment.get("SEARCHGEO_CRUX_API_KEY") or "").strip():
+    if state.web_performance and state.field_source == "crux" and not (environment.get("SEARCHGEO_CRUX_API_KEY") or "").strip():
         raise ValueError("field source crux exige SEARCHGEO_CRUX_API_KEY")
     browser = (environment.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE") or "").strip()
     if browser and not Path(browser).is_file():
