@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 import re
 import tempfile
@@ -13,7 +14,7 @@ _NAV_RE = re.compile(r"<nav>(.*?)</nav>", re.DOTALL)
 
 
 class ReportNavigationTests(unittest.TestCase):
-    def test_all_generated_pages_share_canonical_order_and_current_item(self) -> None:
+    def test_all_generated_pages_share_canonical_order_current_item_and_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
             filenames = [filename for _, filename in NAV_ITEMS]
@@ -24,7 +25,11 @@ class ReportNavigationTests(unittest.TestCase):
                     encoding="utf-8",
                 )
 
-            normalize_report_navigation(report_dir)
+            normalize_report_navigation(
+                report_dir,
+                generated_at=datetime(2026, 9, 4, 1, 30, 45, tzinfo=timezone.utc),
+                software_version="9.9.9",
+            )
 
             expected = [(filename, label) for label, filename in NAV_ITEMS]
             for filename in filenames:
@@ -35,6 +40,8 @@ class ReportNavigationTests(unittest.TestCase):
                 self.assertEqual([(href, label) for _, href, label in links], expected, filename)
                 active = [href for css_class, href, _ in links if css_class == "active"]
                 self.assertEqual(active, [filename], filename)
+                self.assertIn("Versão 9.9.9", html)
+                self.assertIn("Gerado em 03/09/2026 22:30:45 — Horário de Brasília", html)
 
     def test_optional_pages_are_omitted_until_their_files_exist(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
