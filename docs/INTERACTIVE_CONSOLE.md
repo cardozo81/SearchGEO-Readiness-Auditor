@@ -1,49 +1,36 @@
 # Console interativo de execução
 
-O SearchGEO mantém `searchgeo audit` como interface de linha de comando estável e oferece o console textual opcional:
+O SearchGEO mantém `searchgeo audit` como interface estável e oferece o console textual opcional:
 
 ```powershell
 searchgeo-console
 ```
 
-O console é uma camada de orquestração e segurança operacional. Ele não implementa um segundo pipeline: após o preflight, executa o mesmo `python -m searchgeo audit ...` do produto.
+O console é uma camada de orquestração e segurança operacional. Ele não implementa um segundo pipeline: após o preflight, executa a mesma superfície `searchgeo audit` do produto.
 
 ## Princípios
 
-- uma tela lógica por vez; menus anteriores são limpos e não ficam empilhados;
+- uma tela lógica por vez; menus anteriores não ficam empilhados;
 - configuração explícita antes da execução;
 - segredo nunca é exibido em claro;
-- integração externa indisponível bloqueia a opção antes de executar;
+- integração externa indisponível é bloqueada antes de executar;
 - erro de provider não vira finding do website;
 - Score, Coverage, Confidence, regras e persistência pertencem ao pipeline estável;
 - custo prévio é indicador de exposição, não invoice;
-- custo/tokens finais são derivados da telemetria persistida, sem inventar consumo.
+- tokens/custos finais vêm da telemetria persistida;
+- M23 é tratado como **carga sintética**, não como custo financeiro de API.
 
 ## Provider registry canônico
 
-A descoberta de providers do console é dinâmica e usa exclusivamente:
+A descoberta de providers do console usa:
 
 ```text
 src/searchgeo/provider_registry.py
 ```
 
-O console não mantém uma lista independente de providers, modelos ou credenciais. O registry fornece:
+O console não mantém lista independente de providers, modelos ou credenciais.
 
-- id canônico;
-- nome de exibição;
-- aliases;
-- variável da API key;
-- variável de modelo;
-- variável de endpoint quando aplicável;
-- variável e valores de reasoning quando aplicável;
-- modelos suportados;
-- modelo default;
-- qualification;
-- flag `explicit_only`;
-- flag `auto_eligible`;
-- restrições de formato de chave.
-
-A ordem corrente de providers concretos é:
+Providers concretos:
 
 ```text
 openai
@@ -55,18 +42,16 @@ gemini
 anthropic
 ```
 
-O menu apresenta os ids canônicos. Os aliases continuam aceitos pela CLI, por exemplo:
+Aliases aceitos pela CLI:
 
 ```text
 grok   -> xai
 claude -> anthropic
 ```
 
-Adicionar um provider ao registry, com adapter e contrato válidos, faz o console descobrir seus metadados sem exigir nova lista hardcoded em `interactive_console.py` ou `console_config.py`.
-
 ## Qualification e AUTO
 
-A cadeia `AUTO` permanece homologada e deliberadamente restrita a:
+A cadeia `AUTO` permanece deliberadamente restrita a:
 
 ```text
 OpenAI -> DeepSeek -> MiMo
@@ -80,23 +65,15 @@ explicit-only
 auto_eligible = false
 ```
 
-Enquanto estiverem nesse estado, configurar suas keys pode habilitar seleção explícita no console, mas nunca os inclui em `AUTO`.
-
-A projeção de custo/volume de `AUTO` usa somente providers `auto_eligible`. Keys de providers PROVISIONAL não aumentam artificialmente o teto do `AUTO`.
+Configurar suas keys pode habilitar seleção explícita, mas não os inclui em `AUTO`.
 
 ## Credenciais e disponibilidade
 
 `none` está sempre disponível.
 
-Um provider explícito fica apto somente quando o registry e o ambiente indicam configuração válida:
+Provider explícito fica apto somente quando registry e ambiente indicam configuração válida: key correspondente, modelo compatível, reasoning válido quando aplicável e ausência de bloqueio transitório da sessão.
 
-1. API key correspondente presente;
-2. formato de key compatível quando houver restrição;
-3. modelo default/override pertencente ao catálogo do provider;
-4. reasoning válido quando o adapter expõe essa configuração;
-5. provider não bloqueado por quarantine da sessão.
-
-Principais keys correntes:
+Principais keys:
 
 | Provider | Variável |
 |---|---|
@@ -108,19 +85,15 @@ Principais keys correntes:
 | Gemini | `GEMINI_API_KEY` |
 | Anthropic | `ANTHROPIC_API_KEY` |
 
-MiMo exige chave PAYG compatível com `sk-...`. Token Plan `tp-...` é tratado como indisponível pelo console e não deve ser enviado ao adapter.
-
-Ausência de key resulta em opção indisponível no menu. O console não faz fallback silencioso de provider explícito.
+MiMo exige credencial PAYG compatível com `sk-...`. Token Plan `tp-...` não deve ser enviado ao adapter PAYG atual.
 
 ## Variáveis de ambiente
 
-O menu:
+Menu:
 
 ```text
 E. Variáveis de ambiente
 ```
-
-é gerado a partir das variáveis gerais do SearchGEO e das variáveis expostas pelo provider registry. Isso inclui automaticamente keys, model envs, endpoint envs e reasoning envs dos providers registrados.
 
 Ações:
 
@@ -131,9 +104,9 @@ H = ajuda/custo
 V = voltar
 ```
 
-Alterações valem somente para a sessão atual do console e subprocessos filhos. O console não grava permanentemente o perfil do Windows/PowerShell.
+Alterações valem somente para a sessão do console e subprocessos filhos. O console não grava permanentemente o perfil do Windows/PowerShell.
 
-Variáveis sensíveis aparecem como:
+Secrets aparecem como:
 
 ```text
 [SET]
@@ -141,28 +114,50 @@ Variáveis sensíveis aparecem como:
 
 Nunca como valor real.
 
-A detecção de segredo cobre explicitamente as credenciais registradas e também nomes contendo `API_KEY`, `TOKEN`, `SECRET`, `PASSWORD` ou `CREDENTIAL`.
+Além das variáveis de providers e M21, o menu incorpora as variáveis M23:
+
+```text
+SEARCHGEO_SYNTHETIC_APDEX
+SEARCHGEO_APDEX_THRESHOLD_SECONDS
+SEARCHGEO_APDEX_SAMPLES_PER_CONTEXT
+SEARCHGEO_APDEX_MAX_ATTEMPTS_PER_CONTEXT
+SEARCHGEO_APDEX_MAX_PAGES
+SEARCHGEO_APDEX_TIMEOUT_SECONDS
+SEARCHGEO_APDEX_DELAY_SECONDS
+SEARCHGEO_APDEX_CONCURRENCY
+```
 
 ## Defaults
 
-Na ausência de override:
+```text
+entrada             = URL única
+device              = mobile
+IA                  = none
+remediação M20      = off
+Web Performance M21 = off
+Synthetic Apdex M23 = off
+max-pages           = 100
+web max-pages       = 10
+idioma              = pt-BR
+mercado             = BR
+audits root         = audits
+```
+
+Quando M23 é habilitado no console:
 
 ```text
-entrada            = URL única
-device             = mobile
-IA                 = none
-remediação M20     = off
-Web Performance    = off
-max-pages          = 100
-web max-pages      = 10
-idioma             = pt-BR
-mercado            = BR
-audits root        = audits
+T                   = obrigatório
+amostras válidas    = 100 por default
+max attempts        = ceil(1.25 × alvo)
+max pages           = 1
+timeout              = max(45 s, 4T+5 s)
+delay                = 1 s
+concorrência         = 1; máximo 2
 ```
 
 ## Menu principal
 
-O menu contém:
+O menu canônico contém:
 
 ```text
 1. Entrada
@@ -175,6 +170,7 @@ O menu contém:
 8. WebPerf max-pages
 9. Idioma / mercado
 10. Raiz auditorias
+11. Synthetic Apdex M23
 
 H. Ajuda / custos
 E. Variáveis de ambiente
@@ -182,31 +178,25 @@ R. Executar [APTO|INDISPONÍVEL]
 Q. Sair
 ```
 
-Após uma auditoria desta sessão, também ficam disponíveis:
+Após uma auditoria da sessão:
 
 ```text
 P. Abrir pasta da auditoria
 I. Abrir relatório HTML
 ```
 
-Esses atalhos permanecem disponíveis ao voltar para o menu enquanto o `AUD-ID` da sessão estiver associado ao estado do console.
-
 ## Navegação em tela única
 
-Ao entrar em configuração, provider, modelo, ajuda, variáveis ou ações pós-execução, o console limpa a tela anterior e redesenha o contexto atual. O objetivo é impedir o empilhamento de múltiplos menus no terminal.
-
-Em saída não-TTY/testes, a interface não depende de ANSI para transmitir significado.
+Ao entrar em configuração, provider, modelo, ajuda, variáveis ou ações pós-execução, o console limpa a tela anterior e redesenha o contexto atual. O objetivo é evitar empilhamento de menus no terminal.
 
 `NO_COLOR` remove coloração sem remover textos de status.
 
 ## Cores
 
-Convenção operacional:
-
 | Cor/ênfase | Significado |
 |---|---|
 | verde | pronto, sucesso, opção ativa/apta |
-| amarelo | execução, atenção, custo estimado |
+| amarelo | atenção, execução, custo/carga relevante |
 | vermelho | erro, bloqueio, indisponibilidade |
 | magenta | API externa |
 | ciano/azul | informação, dispositivo, integração/processamento local |
@@ -214,18 +204,7 @@ Convenção operacional:
 
 ## Cabeçalho operacional
 
-O cabeçalho acompanha:
-
-- versão;
-- status;
-- URL corrente/mais recente;
-- dispositivo;
-- operação;
-- ambiente relevante com segredos mascarados;
-- início;
-- fim;
-- duração;
-- erro operacional, quando houver.
+O cabeçalho acompanha versão, status, URL, device, operação, ambiente relevante com secrets mascarados, início, fim, duração e erro operacional quando houver.
 
 Exemplo:
 
@@ -243,36 +222,21 @@ Duração     : 00:01:37
 ====================================================================================================
 ```
 
-A duração usa relógio monotônico; início/fim usam timestamp local timezone-aware.
+Duração usa relógio monotônico; início/fim usam timestamp timezone-aware.
 
 ## Entrada URL e TXT
 
 ### URL única
 
-Uma URL/domínio é seed de crawl. Antes da execução conhece-se uma página e o teto configurado:
-
-```text
-1 página conhecida -> teto max-pages
-```
+Uma URL/domínio é seed de crawl. Antes da execução conhece-se uma página e o teto `max-pages`.
 
 ### TXT
 
-O arquivo é UTF-8, uma URL/domínio por linha. Linhas vazias e comentários `#` são ignorados.
+UTF-8, uma URL/domínio por linha. Vazias e comentários `#` são ignorados.
 
-O preflight valida:
-
-- arquivo existente;
-- conteúdo UTF-8 legível;
-- pelo menos um target;
-- targets válidos;
-- mesma origem normalizada;
-- quantidade de URLs únicas menor ou igual a `max-pages`.
-
-Para TXT, a quantidade exata de URLs únicas alimenta a projeção prévia.
+O preflight valida arquivo, UTF-8, targets, origem normalizada e compatibilidade com `max-pages`.
 
 ## Dispositivo
-
-Valores:
 
 ```text
 mobile
@@ -280,110 +244,142 @@ desktop
 both
 ```
 
-`both` duplica contextos potenciais por página e é sinalizado como multiplicador de volume.
+`both` duplica contextos potenciais por página e é sinalizado como multiplicador de volume. Em M23, uma página com `both` pode gerar dois grupos independentes de amostragem.
 
 ## Preflight
 
-`R. Executar` somente inicia o subprocesso se toda a configuração estiver apta.
+`R. Executar` só inicia se a configuração estiver apta.
 
-Entre os bloqueios:
+Bloqueios incluem:
 
 - target ausente/inválido;
-- TXT inexistente ou inválido;
+- TXT inexistente/inválido;
 - origens misturadas;
 - `max-pages` insuficiente;
-- provider inexistente ou indisponível;
-- provider sem key;
-- key incompatível;
-- modelo inválido;
-- reasoning inválido;
-- `none` com remediação M20;
+- provider inexistente/indisponível;
+- provider sem key ou key incompatível;
+- modelo/reasoning inválido;
+- `none` com M20 textual;
 - `auto` com `--ai-model`;
 - CrUX direto sem `SEARCHGEO_CRUX_API_KEY`;
-- Chromium configurado em caminho inexistente.
+- Chromium configurado em caminho inexistente;
+- M23 ON sem threshold `T` explícito;
+- M23 com amostras < 1;
+- max attempts M23 menor que alvo;
+- timeout M23 <= `4T`;
+- delay negativo;
+- concorrência M23 fora de 1–2.
 
-Nenhum workspace deve ser criado por uma execução bloqueada no preflight.
+Nenhum workspace deve ser criado por execução bloqueada no preflight.
 
 ## Remediação M20
 
-M20 é opcional e pode acrescentar chamadas de IA para findings elegíveis.
+M20 é opcional e pode acrescentar chamadas de IA para findings elegíveis. Só pode ser ativado quando o provider selecionado está apto.
 
-Só pode ser ativado quando o provider selecionado está apto. Não altera Score, Coverage, Confidence, RuleExecution ou Finding.
-
-O custo potencial de M20 aparece separadamente como incremento de exposição.
+Não altera Score, Coverage, Confidence, RuleExecution ou Finding.
 
 ## Web Performance M21
 
-M21 é integração externa independente de LLM.
-
-O console mostra PageSpeed/CrUX como consumo de API/quota externa e não inventa preço monetário quando não existe base confiável persistida.
+M21 é integração externa independente de LLM. O console mostra PageSpeed/CrUX como consumo de API/quota e não inventa preço monetário quando não há base confiável.
 
 `field_source=crux` exige `SEARCHGEO_CRUX_API_KEY`.
 
+## Synthetic Apdex M23
+
+Item:
+
+```text
+11. Synthetic Apdex M23
+```
+
+Ao habilitar, o console solicita/configura:
+
+```text
+T
+amostras válidas por contexto
+máximo de tentativas por contexto
+máximo de páginas M23
+timeout por navegação
+delay mínimo entre inícios
+concorrência
+```
+
+### Regras
+
+- M23 é default OFF;
+- `T` é obrigatório;
+- timeout deve ser > `4T`;
+- concorrência máxima = 2;
+- default normal = 100 válidas por URL/device;
+- grupo com 1–99 é small group `*`;
+- cada amostra usa navegação real Chromium com BrowserContext novo e cache desabilitado;
+- M23 não usa LLM e não exige PageSpeed/CrUX.
+
+### Fórmula
+
+```text
+Apdex = (Satisfied + 0.5 × Tolerating) / Total de amostras válidas
+
+Satisfied  <= T
+Tolerating > T e <= 4T
+Frustrated > 4T
+```
+
+### Carga
+
+M23 não altera a classificação financeira `NENHUM/BAIXO/MÉDIO/ALTO/EXCESSIVO`, porque essa faixa representa exposição financeira externa, não CPU local ou tráfego do alvo.
+
+Em vez disso, o console mostra uma linha separada de **Carga M23 potencial**, considerando páginas, devices, alvo de amostras e orçamento máximo de tentativas.
+
+Uma navegação pode carregar muitos subrecursos; por isso a projeção não trata “100 amostras” como “100 requests HTTP”.
+
 ## Exposição financeira antes da execução
 
-A classificação é:
+Faixa:
 
 ```text
 NENHUM | BAIXO | MÉDIO | ALTO | EXCESSIVO
 ```
 
-É uma heurística operacional, não previsão de invoice.
+É heurística operacional, não previsão de invoice.
 
-Entram na projeção:
+Entram na projeção financeira:
 
 1. quantidade conhecida/teto de páginas;
-2. dispositivo;
+2. device;
 3. provider explícito ou cadeia AUTO elegível;
-4. modelo;
-5. pricing catalogado quando disponível;
-6. M20;
-7. M21 e seus limites.
+4. modelo/pricing conhecido;
+5. M20;
+6. M21 e limites externos.
 
-Para provider cujo modelo não possui linha no `PRICING_CATALOG`, o console informa explicitamente:
+M23 é exibido separadamente como carga sintética.
 
-```text
-preço unitário não catalogado; custo monetário prévio não estimável
-```
-
-Ele não transforma ausência de preço em custo zero.
-
-Antes da execução, quantidades de tokens não são inventadas.
+Para modelo sem pricing catalogado, o console informa que o preço unitário não está catalogado; não converte ausência de preço em custo zero.
 
 ## AUTO e teto potencial
 
-Em `AUTO`, o teto considera somente providers homologados e disponíveis da cadeia:
+Em `AUTO`, o teto considera somente:
 
 ```text
 OpenAI -> DeepSeek -> MiMo
 ```
 
-O primeiro resultado válido encerra a cadeia naquele contexto. A projeção é conservadora porque falhas podem avançar para o provider seguinte.
-
-Providers PROVISIONAL explicit-only não participam dessa conta.
+O primeiro resultado válido encerra a cadeia naquele contexto. Providers extension `PROVISIONAL` não participam da conta AUTO.
 
 ## Quarantine
 
-Quando a telemetria persistida indica:
-
-```text
-QUARANTINED_FOR_AUDIT
-```
-
-o console bloqueia novamente aquele provider durante a sessão e mostra um motivo sanitizado, como classe de erro/status HTTP.
-
-Alterar/remover a credencial correspondente limpa o bloqueio transitório no estado do console para nova avaliação.
+Quando telemetria indica `QUARANTINED_FOR_AUDIT`, o console bloqueia aquele provider na sessão e mostra motivo sanitizado. Alterar/remover a credencial correspondente limpa o bloqueio transitório para nova avaliação.
 
 ## Monitoramento da execução
 
-O console observa o workspace produzido pelo pipeline:
+O console observa:
 
 ```text
 audit.db
 logs/audit.log
 ```
 
-Mapeamento operacional resumido:
+Mapeamento resumido:
 
 ```text
 DISCOVERING / ACQUIRING -> INTEGRATION:HTTP
@@ -392,40 +388,34 @@ ANALYZING sem IA         -> LOCAL:SEMANTIC_RULES
 COMPARING / SCORING      -> LOCAL:RULES/SCORE
 REPORTING                -> LOCAL:REPORT
 M21                      -> API:PAGESPEED/CRUX
+M23                      -> LOCAL/HTTP:SYNTHETIC_APDEX
 ```
+
+M23 não é rotulado como API paga; a operação representa browser local + tráfego HTTP real.
 
 ## Consumo após execução
 
-A tela final consolida a telemetria persistida de:
+A tela final consolida telemetria persistida de IA/M20/M21 e M23.
 
-```text
-ai_provider_attempts
-content_remediation_attempts
-web_performance_attempts
-```
-
-São exibidos:
+Pode exibir:
 
 - tentativas IA;
 - sucessos;
-- input tokens;
-- cached input tokens;
-- output tokens;
-- reasoning tokens;
-- total tokens;
+- input/cached/output/reasoning/total tokens;
 - custo estimado por moeda quando persistido;
-- número de tentativas com tokens mas sem custo estimável;
-- chamadas M21 por serviço.
+- tentativas IA sem custo estimável;
+- chamadas M21 por serviço;
+- tentativas de navegação M23;
+- amostras válidas/inválidas M23;
+- contextos/status M23.
 
-O console não recalcula billing do provider e não duplica os totais em uma segunda fonte de verdade.
-
-A projeção/configuração do console é persistida separadamente em:
+Mensagem M23:
 
 ```text
-console_execution_projections
+Custo M23 monetário : sem API paga própria; há CPU/tempo local e tráfego HTTP real contra o alvo.
 ```
 
-sem duplicar colunas de tokens ou custo real.
+O console não recalcula billing e não duplica os totais em uma segunda fonte de verdade.
 
 ## Abertura de artefatos
 
@@ -438,29 +428,16 @@ M. Voltar ao menu
 Q. Sair
 ```
 
-`P` resolve exclusivamente:
+`P` resolve `audits/<AUD-ID>/`. `I` prefere `audits/<AUD-ID>/report/index.html`.
 
-```text
-audits/<AUD-ID>/
-```
-
-`I` prefere:
-
-```text
-audits/<AUD-ID>/report/index.html
-```
-
-e mantém fallback para layout legado quando necessário.
+M23, quando materializado, aparece no menu HTML como `Apdex` e em `report/apdex.html`.
 
 ## Instalação
 
-Instalação editable:
-
 ```powershell
 python -m pip install -e .
+python -m playwright install chromium
 ```
-
-O package declara `tzdata` formalmente, necessário para `ZoneInfo("America/Sao_Paulo")` em instalações Windows sem base IANA do sistema.
 
 Entrypoints:
 
@@ -469,56 +446,19 @@ searchgeo         -> searchgeo.cli_extensions:main
 searchgeo-console -> searchgeo.interactive_console:main
 ```
 
-Assim, o console executa a mesma superfície CLI capaz de resolver os providers do registry.
+## Segurança operacional
 
-## Estado de qualificação
+- não exibir secrets em claro;
+- não persistir API key em report/log;
+- não assumir que key configurada implica crédito/compatibilidade;
+- não executar M23 com volume relevante em produção sem autorização;
+- para smoke M23, preferir 1 URL, 1 device, 3–5 amostras, concurrency 1 e alvo controlado/local.
 
-A integração estrutural do console com o registry foi validada automaticamente em Windows/Python 3.13 com:
+## Leituras relacionadas
 
-- instalação limpa editable;
-- compileall;
-- timezone;
-- integridade do registry;
-- testes do console;
-- testes específicos de provider registry no console;
-- superfície CLI dos providers;
-- inicialização e saída limpa do console.
-
-A liberação funcional continua sujeita ao smoke humano do console.
-
-Providers PROVISIONAL que ainda não tiveram caminho real de sucesso validado com credencial permanecem explicit-only e fora de AUTO. Ausência de credencial deve ser exibida como indisponibilidade, não como falha do website.
-
-## Smoke humano obrigatório antes de merge
-
-Validar, no mínimo:
-
-1. `git pull` da branch e instalação editable limpa;
-2. `searchgeo --version`;
-3. `searchgeo audit --help` com providers novos;
-4. `searchgeo-console`;
-5. uma tela lógica por vez, sem empilhamento;
-6. cores e `NO_COLOR`;
-7. cabeçalho com início/fim/duração;
-8. menu de IA contendo os sete ids canônicos mais `none` e `auto`;
-9. OpenAI e DeepSeek aptos quando as respectivas keys estiverem configuradas;
-10. MiMo indisponível sem PAYG `sk-...`;
-11. xAI/Qwen/Gemini/Anthropic indisponíveis quando sem key e identificados como PROVISIONAL/explicit-only;
-12. `AUTO` apto somente pela cadeia homologada e sem considerar keys de extensions;
-13. seleção de modelo por provider;
-14. menu de ambiente contendo as variáveis dos providers novos;
-15. segredos exibidos somente como `[SET]`;
-16. preflight bloqueando combinação inválida;
-17. exposição `NENHUM` com IA/M21 desligados;
-18. exposição alterada ao habilitar IA/dispositivos/limites;
-19. TXT usando quantidade exata de URLs válidas;
-20. M21 contabilizando quota sem inventar custo;
-21. execução mínima `none/mobile/M21 off`;
-22. execução mínima com provider real já homologado;
-23. tokens/custos finais reconciliados com `audit.db`;
-24. custo parcial sinalizado quando pricing estiver ausente;
-25. `P` abrindo exatamente o workspace do `AUD-ID`;
-26. `I` abrindo o report da mesma sessão;
-27. P/I permanecendo disponíveis após retorno ao menu;
-28. quarantine exibido sem segredo;
-29. nenhum segredo em tela, report, SQLite ou log;
-30. resultado da auditoria equivalente ao CLI com a mesma configuração.
+- [CLI_REFERENCE.md](CLI_REFERENCE.md)
+- [CONFIGURATION.md](CONFIGURATION.md)
+- [CONSOLE_COST_AND_USAGE.md](CONSOLE_COST_AND_USAGE.md)
+- [SYNTHETIC_APDEX.md](SYNTHETIC_APDEX.md)
+- [PROVIDER_REGISTRY.md](PROVIDER_REGISTRY.md)
+- [AI_PROVIDER_EXTENSIONS.md](AI_PROVIDER_EXTENSIONS.md)
