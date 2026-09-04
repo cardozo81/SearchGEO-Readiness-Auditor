@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from typing import Sequence
 
@@ -12,8 +13,12 @@ from searchgeo.m23_cli import SyntheticApdexConfig, configured_apdex, register_a
 from searchgeo.m23_lighthouse_traceability import extract_lighthouse_execution_profiles
 from searchgeo.m23_reporting import enrich_m23_report_site
 from searchgeo.operational_log import try_append_operational_event
-from searchgeo.provider_extensions import build_semantic_provider
-from searchgeo.provider_extensions_m20 import build_content_remediation_router
+from searchgeo.provider_runtime_policy import (
+    DEFAULT_WEB_PERFORMANCE_TIMEOUT_SECONDS,
+    WEB_PERFORMANCE_TIMEOUT_ENV,
+    build_content_remediation_router,
+    build_semantic_provider,
+)
 from searchgeo.provider_registry import extension_cli_choices
 from searchgeo.report_consistency_v2 import reconcile_report_outputs
 
@@ -36,7 +41,19 @@ def build_parser():
     )
     ai_action.help = (
         "semantic analysis provider; AUTO remains the homologated "
-        "OpenAI/DeepSeek/MiMo chain, extension providers are explicit-only"
+        "OpenAI/DeepSeek/MiMo chain, extension providers are explicit-only; "
+        "when model/effort are not explicitly configured SearchGEO uses the "
+        "simplest supported model and lowest supported reasoning effort"
+    )
+    web_timeout_action = next(
+        action for action in audit_parser._actions
+        if action.dest == "web_performance_timeout_seconds"
+    )
+    web_timeout_action.help = (
+        "client wait limit for each complete PageSpeed/CrUX external response; "
+        f"public default {DEFAULT_WEB_PERFORMANCE_TIMEOUT_SECONDS:g}s or "
+        f"{WEB_PERFORMANCE_TIMEOUT_ENV}. PageSpeed runs Lighthouse remotely; "
+        "this is not a separate Lighthouse page-load parameter"
     )
     register_apdex_arguments(audit_parser)
     return parser
@@ -57,6 +74,12 @@ def _resolve_m23_config(argv: list[str]) -> SyntheticApdexConfig | None:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run legacy CLI with additive providers and fail-open Synthetic Apdex enrichment."""
     effective_argv = list(argv) if argv is not None else list(sys.argv[1:])
+    # PageSpeed/Lighthouse analysis is performed remotely and may legitimately
+    # exceed the old 60s client wait. Preserve an explicit user override.
+    os.environ.setdefault(
+        WEB_PERFORMANCE_TIMEOUT_ENV,
+        f"{DEFAULT_WEB_PERFORMANCE_TIMEOUT_SECONDS:g}",
+    )
     m23_config = _resolve_m23_config(effective_argv)
 
     original_build_parser = _legacy_cli.build_parser
