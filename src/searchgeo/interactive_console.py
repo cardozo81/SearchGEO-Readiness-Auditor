@@ -6,11 +6,12 @@ import os
 
 from searchgeo.console_artifacts import artifact_status, open_audit_folder, open_report
 from searchgeo.console_config import (
+    DEFAULT_MODELS,
     ENV_NAMES,
     KEY_ENV,
     MODEL_ENV,
-    DEFAULT_MODELS,
     PROVIDERS,
+    PROVIDER_MENU_CHOICES,
     SUPPORTED_MODELS,
     State,
     apply_environment_defaults,
@@ -91,7 +92,9 @@ def _environment_menu(state: State) -> None:
             else:
                 shown = paint(value, CYAN)
             print(f"{index:2d}. {name:<44} {shown}")
-        action = input("\nS=setar/alterar | R=remover | H=ajuda/custo | V=voltar: ").strip().upper()
+        action = input(
+            "\nS=setar/alterar | R=remover | H=ajuda/custo | V=voltar: "
+        ).strip().upper()
         if action == "V":
             return
         if action == "H":
@@ -105,6 +108,7 @@ def _environment_menu(state: State) -> None:
         except (ValueError, IndexError):
             state.error = "variável inválida"
             continue
+
         render_header(state)
         print(f"Variável selecionada: {name}\n")
         if action == "R":
@@ -118,6 +122,7 @@ def _environment_menu(state: State) -> None:
             except (ValueError, OverflowError) as exc:
                 state.error = str(exc)
                 continue
+
         issues = apply_environment_defaults(state, names={name})
         state.error = "; ".join(issues)
         for selection, provider in PROVIDERS.items():
@@ -131,13 +136,18 @@ def _configure(state: State, choice: str) -> None:
         mode = _select(
             state,
             "Fonte (default: URL única)",
-            [("url", True, "URL/domínio; seed de crawl"), ("file", True, "TXT UTF-8; uma URL por linha")],
+            [
+                ("url", True, "URL/domínio; seed de crawl"),
+                ("file", True, "TXT UTF-8; uma URL por linha"),
+            ],
         )
         if mode:
             render_header(state)
             print(f"Entrada selecionada: {mode}\n")
             state.input_mode = mode
-            state.target = input("URL/domínio: " if mode == "url" else "Caminho TXT: ").strip()
+            state.target = input(
+                "URL/domínio: " if mode == "url" else "Caminho TXT: "
+            ).strip()
             state.current_url = state.target or "-"
     elif choice == "2":
         state.project = input("Projeto (vazio=auto): ").strip()
@@ -145,7 +155,11 @@ def _configure(state: State, choice: str) -> None:
         value = _select(
             state,
             "Dispositivo",
-            [("mobile", True, "default"), ("desktop", True, "somente desktop"), ("both", True, "mobile + desktop; multiplica volume")],
+            [
+                ("mobile", True, "default"),
+                ("desktop", True, "somente desktop"),
+                ("both", True, "mobile + desktop; multiplica volume"),
+            ],
         )
         if value:
             state.device, state.current_device = value, value.upper()
@@ -153,8 +167,12 @@ def _configure(state: State, choice: str) -> None:
         capabilities = provider_capabilities(blocks=state.runtime_blocks)
         value = _select(
             state,
-            "Provider de IA — providers externos podem gerar cobrança por uso",
-            [(name, capabilities[name].available, capabilities[name].reason) for name in ("none", "openai", "deepseek", "mimo", "auto")],
+            "Provider de IA — lista dinâmica do registry canônico; "
+            "providers externos podem gerar cobrança por uso",
+            [
+                (name, capabilities[name].available, capabilities[name].reason)
+                for name in PROVIDER_MENU_CHOICES
+            ],
         )
         if value:
             state.ai_provider, state.ai_model = value, None
@@ -162,38 +180,81 @@ def _configure(state: State, choice: str) -> None:
                 state.content_remediation = False
             elif value in PROVIDERS:
                 provider = PROVIDERS[value]
-                default = os.environ.get(MODEL_ENV[provider], DEFAULT_MODELS[provider])
+                default = os.environ.get(
+                    MODEL_ENV[provider],
+                    DEFAULT_MODELS[provider],
+                )
                 chosen = _select(
                     state,
                     f"Modelo {provider} — preços podem variar por modelo",
-                    [(model, True, "default" if model == default else "suportado") for model in SUPPORTED_MODELS[provider]],
+                    [
+                        (
+                            model,
+                            True,
+                            "default" if model == default else "suportado",
+                        )
+                        for model in SUPPORTED_MODELS[provider]
+                    ],
                 )
                 state.ai_model = chosen or default
     elif choice == "5":
-        capability = provider_capabilities(blocks=state.runtime_blocks)[state.ai_provider]
+        capability = provider_capabilities(
+            blocks=state.runtime_blocks
+        )[state.ai_provider]
         if state.ai_provider == "none" or not capability.available:
-            state.content_remediation, state.error = False, "remediação IA indisponível"
+            state.content_remediation, state.error = (
+                False,
+                "remediação IA indisponível",
+            )
         else:
-            state.content_remediation = input("Remediação textual IA? Pode gerar chamadas/custo adicionais [s/N]: ").strip().casefold() == "s"
+            state.content_remediation = (
+                input(
+                    "Remediação textual IA? Pode gerar chamadas/custo adicionais [s/N]: "
+                )
+                .strip()
+                .casefold()
+                == "s"
+            )
     elif choice == "6":
-        state.web_performance = input("Web Performance? Usa API/quota externa PageSpeed/CrUX [s/N]: ").strip().casefold() == "s"
+        state.web_performance = (
+            input(
+                "Web Performance? Usa API/quota externa PageSpeed/CrUX [s/N]: "
+            )
+            .strip()
+            .casefold()
+            == "s"
+        )
         if state.web_performance:
-            crux_available = bool((os.environ.get("SEARCHGEO_CRUX_API_KEY") or "").strip())
+            crux_available = bool(
+                (os.environ.get("SEARCHGEO_CRUX_API_KEY") or "").strip()
+            )
             value = _select(
                 state,
                 "Field data",
                 [
-                    ("auto", True, "PageSpeed + CrUX direto quando necessário/disponível"),
+                    (
+                        "auto",
+                        True,
+                        "PageSpeed + CrUX direto quando necessário/disponível",
+                    ),
                     ("pagespeed", True, "PageSpeed"),
                     ("crux", crux_available, "exige SEARCHGEO_CRUX_API_KEY"),
-                    ("none", True, "sem field data; Lighthouse lab permanece"),
+                    (
+                        "none",
+                        True,
+                        "sem field data; Lighthouse lab permanece",
+                    ),
                 ],
             )
             if value:
                 state.field_source = value
     elif choice == "7":
         try:
-            value = int(input("max-pages (>0; maior valor aumenta teto potencial de consumo): "))
+            value = int(
+                input(
+                    "max-pages (>0; maior valor aumenta teto potencial de consumo): "
+                )
+            )
             if value <= 0:
                 raise ValueError
             state.max_pages = value
@@ -202,7 +263,11 @@ def _configure(state: State, choice: str) -> None:
             state.error = "max-pages inválido"
     elif choice == "8":
         try:
-            value = int(input("WebPerf max-pages (>=0; 0=todas as páginas auditadas): "))
+            value = int(
+                input(
+                    "WebPerf max-pages (>=0; 0=todas as páginas auditadas): "
+                )
+            )
             if value < 0:
                 raise ValueError
             state.web_max_pages = value
@@ -210,10 +275,14 @@ def _configure(state: State, choice: str) -> None:
         except ValueError:
             state.error = "WebPerf max-pages inválido"
     elif choice == "9":
-        state.language = input(f"Idioma [{state.language}]: ").strip() or state.language
+        state.language = (
+            input(f"Idioma [{state.language}]: ").strip() or state.language
+        )
         state.market = input(f"Mercado [{state.market}]: ").strip() or state.market
     elif choice == "10":
-        state.audits_root = input(f"Raiz [{state.audits_root}]: ").strip() or state.audits_root
+        state.audits_root = (
+            input(f"Raiz [{state.audits_root}]: ").strip() or state.audits_root
+        )
 
 
 def _execution_readiness(state: State) -> tuple[bool, str]:
@@ -233,7 +302,14 @@ def _artifact_action(state: State, action: str) -> None:
         state.operation = "LOCAL:OPEN_REPORT"
     state.error = "" if ok else detail
     render_header(state)
-    print((paint("Aberto: ", GREEN, bold=True) if ok else paint("Não foi possível abrir: ", RED, bold=True)) + detail)
+    print(
+        (
+            paint("Aberto: ", GREEN, bold=True)
+            if ok
+            else paint("Não foi possível abrir: ", RED, bold=True)
+        )
+        + detail
+    )
     input("\nENTER para continuar...")
 
 
@@ -243,30 +319,65 @@ def _render_actual_usage(state: State) -> None:
     print("\nCONSUMO REAL / ESTIMADO PERSISTIDO")
     print("-" * 100)
     if usage is None:
-        print(paint("Telemetria de consumo indisponível para esta auditoria.", YELLOW))
+        print(
+            paint(
+                "Telemetria de consumo indisponível para esta auditoria.",
+                YELLOW,
+            )
+        )
         return
-    print(f"Tentativas IA       : {usage.ai_attempts} (sucesso: {usage.ai_successes})")
+    print(
+        f"Tentativas IA       : {usage.ai_attempts} "
+        f"(sucesso: {usage.ai_successes})"
+    )
     print(f"Tokens input        : {usage.input_tokens:,}")
     print(f"Tokens input cache  : {usage.cached_input_tokens:,}")
     print(f"Tokens output       : {usage.output_tokens:,}")
     print(f"Tokens reasoning    : {usage.reasoning_tokens:,}")
-    print(f"Tokens total        : {paint(f'{usage.total_tokens:,}', CYAN, bold=True)}")
+    print(
+        f"Tokens total        : "
+        f"{paint(f'{usage.total_tokens:,}', CYAN, bold=True)}"
+    )
     if usage.costs:
-        rendered_costs = " | ".join(f"{currency} {amount:.8f}" for currency, amount in usage.costs)
-        print(f"Custo IA estimado   : {paint(rendered_costs, YELLOW, bold=True)}")
+        rendered_costs = " | ".join(
+            f"{currency} {amount:.8f}"
+            for currency, amount in usage.costs
+        )
+        print(
+            f"Custo IA estimado   : "
+            f"{paint(rendered_costs, YELLOW, bold=True)}"
+        )
     elif usage.ai_attempts:
-        print("Custo IA estimado   : não disponível com dados de pricing/tokens persistidos")
+        print(
+            "Custo IA estimado   : não disponível com dados de "
+            "pricing/tokens persistidos"
+        )
     else:
         print("Custo IA estimado   : 0 (nenhuma tentativa de IA persistida)")
     if usage.unpriced_ai_attempts:
-        print(paint(f"Atenção: {usage.unpriced_ai_attempts} tentativa(s) IA possuem tokens mas não custo estimável persistido.", YELLOW, bold=True))
+        print(
+            paint(
+                f"Atenção: {usage.unpriced_ai_attempts} tentativa(s) IA "
+                "possuem tokens mas não custo estimável persistido.",
+                YELLOW,
+                bold=True,
+            )
+        )
     if usage.web_external_calls:
-        services = ", ".join(f"{service}={count}" for service, count in usage.web_services)
+        services = ", ".join(
+            f"{service}={count}" for service, count in usage.web_services
+        )
         print(f"Chamadas M21        : {usage.web_external_calls} ({services})")
-        print("Custo M21 monetário : não presumido; o console contabiliza chamadas/quota sem inventar preço.")
+        print(
+            "Custo M21 monetário : não presumido; o console contabiliza "
+            "chamadas/quota sem inventar preço."
+        )
     else:
         print("Chamadas M21        : 0")
-    print("Observação           : custos são estimativas técnicas dos adapters, não invoice do provider.")
+    print(
+        "Observação           : custos são estimativas técnicas dos adapters, "
+        "não invoice do provider."
+    )
 
 
 def _post_run_actions(state: State) -> bool:
@@ -278,8 +389,14 @@ def _post_run_actions(state: State) -> bool:
             print(f"Audit ID    : {state.audit_id}")
         _render_actual_usage(state)
         print("\nAÇÕES DA AUDITORIA DESTA SESSÃO")
-        print(f" P. Abrir pasta da auditoria [{availability_badge(bool(workspace))}]")
-        print(f" I. Abrir relatório HTML   [{availability_badge(bool(report))}]")
+        print(
+            f" P. Abrir pasta da auditoria "
+            f"[{availability_badge(bool(workspace))}]"
+        )
+        print(
+            f" I. Abrir relatório HTML   "
+            f"[{availability_badge(bool(report))}]"
+        )
         print(" M. Voltar ao menu")
         print(" Q. Sair")
         choice = input("Escolha: ").strip().upper()
@@ -297,37 +414,82 @@ def _post_run_actions(state: State) -> bool:
 
 def _menu(state: State) -> str:
     render_header(state)
-    capability = provider_capabilities(blocks=state.runtime_blocks)[state.ai_provider]
+    capability = provider_capabilities(
+        blocks=state.runtime_blocks
+    )[state.ai_provider]
     badges = menu_cost_badges(state)
     estimate = estimate_exposure(state)
     print("CONFIGURAÇÃO DA AUDITORIA\n")
-    print(f"Exposição financeira potencial: {paint(estimate.level, cost_color(estimate.level), bold=True)}")
+    print(
+        "Exposição financeira potencial: "
+        + paint(
+            estimate.level,
+            cost_color(estimate.level),
+            bold=True,
+        )
+    )
     if estimate.min_pages == estimate.max_pages:
-        print(f"Volume prévio: {estimate.min_pages} página(s) conhecida(s) × {estimate.device_contexts} contexto(s) de dispositivo")
+        print(
+            f"Volume prévio: {estimate.min_pages} página(s) conhecida(s) "
+            f"× {estimate.device_contexts} contexto(s) de dispositivo"
+        )
     else:
-        print(f"Volume prévio: {estimate.min_pages} página conhecida → teto {estimate.max_pages} × {estimate.device_contexts} contexto(s) de dispositivo")
+        print(
+            f"Volume prévio: {estimate.min_pages} página conhecida → "
+            f"teto {estimate.max_pages} × {estimate.device_contexts} "
+            "contexto(s) de dispositivo"
+        )
     if estimate.max_ai_attempts:
-        print(f"IA potencial: {estimate.min_ai_attempts}–{estimate.max_ai_attempts} tentativa(s)")
+        print(
+            f"IA potencial: {estimate.min_ai_attempts}–"
+            f"{estimate.max_ai_attempts} tentativa(s)"
+        )
     if estimate.max_web_calls:
-        print(f"APIs M21 potenciais: {estimate.min_web_calls}–{estimate.max_web_calls} chamada(s)")
+        print(
+            f"APIs M21 potenciais: {estimate.min_web_calls}–"
+            f"{estimate.max_web_calls} chamada(s)"
+        )
     print()
-    print(f"1. Entrada               : {'URL única' if state.input_mode == 'url' else 'TXT'} | {state.target or '<não informada>'}")
+    print(
+        f"1. Entrada               : "
+        f"{'URL única' if state.input_mode == 'url' else 'TXT'} | "
+        f"{state.target or '<não informada>'}"
+    )
     print(f"2. Projeto               : {state.project or '<auto>'}")
     print(f"3. Dispositivo           : {state.device}{badges['device']}")
-    print(f"4. IA                    : {state.ai_provider} [{availability_badge(capability.available)}] | {state.ai_model or '<default>'}{badges['ai']}")
-    print(f"5. Remediação textual IA : {bool_badge(state.content_remediation)}{badges['remediation']}")
-    print(f"6. Web Performance       : {bool_badge(state.web_performance)} | field={state.field_source}{badges['web']}")
+    print(
+        f"4. IA                    : {state.ai_provider} "
+        f"[{availability_badge(capability.available)}] | "
+        f"{state.ai_model or '<default>'}{badges['ai']}"
+    )
+    print(
+        f"5. Remediação textual IA : "
+        f"{bool_badge(state.content_remediation)}{badges['remediation']}"
+    )
+    print(
+        f"6. Web Performance       : {bool_badge(state.web_performance)} | "
+        f"field={state.field_source}{badges['web']}"
+    )
     print(f"7. max-pages             : {state.max_pages}{badges['max_pages']}")
-    print(f"8. WebPerf max-pages     : {state.web_max_pages}{badges['web_max_pages']}")
+    print(
+        f"8. WebPerf max-pages     : "
+        f"{state.web_max_pages}{badges['web_max_pages']}"
+    )
     print(f"9. Idioma / mercado      : {state.language} / {state.market}")
     print(f"10. Raiz auditorias      : {state.audits_root}")
     ready, reason = _execution_readiness(state)
     marker = availability_badge(ready)
     reason_text = paint(reason, GREEN if ready else RED)
-    print(f"\nH. Ajuda / custos | E. Variáveis de ambiente | R. Executar [{marker}] {reason_text} | Q. Sair")
+    print(
+        f"\nH. Ajuda / custos | E. Variáveis de ambiente | "
+        f"R. Executar [{marker}] {reason_text} | Q. Sair"
+    )
     workspace, report = artifact_status(state)
     if workspace or report:
-        print(f"P. Abrir última pasta [{availability_badge(bool(workspace))}] | I. Abrir último relatório [{availability_badge(bool(report))}]")
+        print(
+            f"P. Abrir última pasta [{availability_badge(bool(workspace))}] | "
+            f"I. Abrir último relatório [{availability_badge(bool(report))}]"
+        )
     return input("Escolha: ").strip().upper()
 
 
@@ -352,12 +514,20 @@ def main() -> int:
         if choice == "R":
             ready, reason = _execution_readiness(state)
             if not ready:
-                state.status, state.operation, state.error = "PRECHECK_BLOCKED", "LOCAL:PRECHECK", reason
+                state.status, state.operation, state.error = (
+                    "PRECHECK_BLOCKED",
+                    "LOCAL:PRECHECK",
+                    reason,
+                )
                 continue
             run_audit_from_console(state)
             if _post_run_actions(state):
                 return 0
-            state.status, state.operation, state.error = "READY", "LOCAL:MENU", ""
+            state.status, state.operation, state.error = (
+                "READY",
+                "LOCAL:MENU",
+                "",
+            )
             continue
         _configure(state, choice)
 
