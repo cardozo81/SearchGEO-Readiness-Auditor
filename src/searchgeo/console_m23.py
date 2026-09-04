@@ -1,8 +1,7 @@
-"""M23 integration helpers for the optional interactive execution console.
+"""Synthetic Apdex integration helpers for the optional interactive console.
 
-M23 is deliberately separated from monetary API exposure: Synthetic Apdex uses
-local Chromium plus real HTTP traffic against the audited origin, but makes no
-LLM, PageSpeed or CrUX call by itself.
+Internal event/table identifiers retain their historical M23 names for schema
+compatibility, but user-facing text describes the capability by function.
 """
 from __future__ import annotations
 
@@ -86,7 +85,7 @@ def apply_m23_environment_defaults(
     env: Mapping[str, str] | None = None,
     names: set[str] | None = None,
 ) -> tuple[str, ...]:
-    """Resolve M23 environment defaults with the exact CLI contract."""
+    """Resolve Synthetic Apdex environment defaults with the exact CLI contract."""
     if names is not None and not (set(M23_ENV_NAMES) & names):
         return ()
     environment = env if env is not None else os.environ
@@ -163,18 +162,16 @@ def append_m23_command(command: list[str], state: State) -> list[str]:
         result.append("--no-synthetic-apdex")
         return result
     cfg = config_from_state(state)
-    result.extend(
-        [
-            "--synthetic-apdex",
-            "--apdex-threshold-seconds", str(cfg.threshold_seconds),
-            "--apdex-samples-per-context", str(cfg.target_valid_samples),
-            "--apdex-max-attempts-per-context", str(cfg.max_attempts_per_context),
-            "--apdex-max-pages", str(cfg.max_pages),
-            "--apdex-timeout-seconds", str(cfg.timeout_seconds),
-            "--apdex-delay-seconds", str(cfg.delay_seconds),
-            "--apdex-concurrency", str(cfg.concurrency),
-        ]
-    )
+    result.extend([
+        "--synthetic-apdex",
+        "--apdex-threshold-seconds", str(cfg.threshold_seconds),
+        "--apdex-samples-per-context", str(cfg.target_valid_samples),
+        "--apdex-max-attempts-per-context", str(cfg.max_attempts_per_context),
+        "--apdex-max-pages", str(cfg.max_pages),
+        "--apdex-timeout-seconds", str(cfg.timeout_seconds),
+        "--apdex-delay-seconds", str(cfg.delay_seconds),
+        "--apdex-concurrency", str(cfg.concurrency),
+    ])
     return result
 
 
@@ -203,9 +200,7 @@ def actual_m23_usage(workspace: Path | None) -> SyntheticUsage | None:
         connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True, timeout=0.5)
         connection.row_factory = sqlite3.Row
         try:
-            exists = connection.execute(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='synthetic_apdex_runs'"
-            ).fetchone()
+            exists = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='synthetic_apdex_runs'").fetchone()
             if not exists:
                 return None
             row = connection.execute(
@@ -255,9 +250,8 @@ def _latest_m23_event(path: Path) -> dict[str, object] | None:
 
 
 def observe_m23_workspace(workspace: Path, state: State) -> None:
-    """Project the latest M23 JSONL event into the single-screen runtime header."""
-    path = workspace / "logs" / "audit.log"
-    event = _latest_m23_event(path)
+    """Project the latest Synthetic Apdex event into the single-screen runtime header."""
+    event = _latest_m23_event(workspace / "logs" / "audit.log")
     if event is None:
         return
     from searchgeo.console_runtime import set_runtime_progress
@@ -266,7 +260,7 @@ def observe_m23_workspace(workspace: Path, state: State) -> None:
     if name == "M23_STARTED" and event.get("enabled"):
         state.status = "SYNTHETIC_APDEX"
         state.operation = "BROWSER:SYNTHETIC_APDEX"
-        set_runtime_progress(state, "Synthetic Apdex M23", 0.0, detail="preparando navegações sintéticas", exact=True)
+        set_runtime_progress(state, "Synthetic Apdex", 0.0, detail="preparando navegações sintéticas", exact=True)
     elif name == "M23_APDEX_SAMPLE":
         state.status = "SYNTHETIC_APDEX"
         state.operation = "BROWSER:SYNTHETIC_APDEX"
@@ -284,30 +278,29 @@ def observe_m23_workspace(workspace: Path, state: State) -> None:
             f"contexto {context_index}/{context_total}; válidas {valid}/{target}; "
             f"tentativas {attempts}/{max_attempts}; último={event.get('classification') or event.get('status') or '-'}"
         )
-        set_runtime_progress(state, "Synthetic Apdex M23", overall, detail=detail, exact=True)
+        set_runtime_progress(state, "Synthetic Apdex", overall, detail=detail, exact=True)
     elif name == "M23_COMPLETED":
         state.status = "FINALIZING"
-        state.operation = "LOCAL:M23_REPORT"
+        state.operation = "LOCAL:APDEX_REPORT"
         set_runtime_progress(
             state,
-            "Finalização do M23",
+            "Finalização do Synthetic Apdex",
             100.0,
             detail=(
-                f"M23 concluído: {int(event.get('valid_samples') or 0)} válidas; "
+                f"Synthetic Apdex concluído: {int(event.get('valid_samples') or 0)} válidas; "
                 f"{int(event.get('invalid_samples') or 0)} inválidas"
             ),
             exact=True,
         )
     elif name in {"M23_RUNTIME_FAILURE", "M23_REPORT_FAILURE"}:
-        state.status = "M23_LIMITATION"
-        state.operation = "LOCAL:M23_FAIL_OPEN"
-        set_runtime_progress(state, "Limitação operacional M23", 100.0, detail=name, exact=True)
+        state.status = "SYNTHETIC_LIMITATION"
+        state.operation = "LOCAL:APDEX_FAIL_OPEN"
+        set_runtime_progress(state, "Limitação operacional Synthetic Apdex", 100.0, detail=name, exact=True)
 
 
 def run_audit_from_console(state: State) -> int:
-    """Run the existing console runtime while extending command/observation only for M23."""
+    """Run the base console runtime with Synthetic Apdex command/observation extension."""
     from searchgeo import console_runtime
-
     original_build = console_runtime.build_command
     original_observe = console_runtime.observe_workspace
 
@@ -329,7 +322,7 @@ def run_audit_from_console(state: State) -> int:
 
 def render_m23_help(state: State) -> None:
     attempts, load = synthetic_load_summary(state)
-    print("\n11. Synthetic Apdex (M23)")
+    print("\n11. Synthetic Apdex")
     print("  Para que serve : mede repetidamente a Task de navegação com Chromium, perfis CPU/rede controlados e cache frio.")
     print("  Fórmula         : Apdex = (Satisfied + 0,5 × Tolerating) / amostras válidas; Frustrated > 4T ou erro de aplicação/navegação válido.")
     print("  Custo monetário : sem API paga própria e sem LLM; não altera a faixa financeira do console.")
