@@ -23,6 +23,7 @@ NAV_ITEMS: tuple[tuple[str, str], ...] = (
     ("Relatório Desktop", "desktop.html"),
     ("Remediações", "remediation.html"),
     ("Conteúdo e JSON-LD", "content-suggestions.html"),
+    ("Acessibilidade", "accessibility.html"),
     ("Web Performance", "web-performance.html"),
     ("Uso de IA", "ai-usage.html"),
     ("Referências e metodologia", "references.html"),
