@@ -1,0 +1,50 @@
+name: tmp-docs-reconcile
+
+on:
+  push:
+    branches:
+      - docs/reconcile-main-m22-provider-contracts
+
+jobs:
+  validate-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate local markdown links and contracts
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          root = Path('.')
+          failures = []
+          for path in root.rglob('*.md'):
+              text = path.read_text(encoding='utf-8')
+              for target in re.findall(r'\[[^\]]+\]\(([^)]+)\)', text):
+                  if target.startswith(('http://','https://','#','mailto:')):
+                      continue
+                  clean = target.split('#',1)[0]
+                  if not clean:
+                      continue
+                  resolved = (path.parent / clean).resolve()
+                  if not resolved.exists():
+                      failures.append(f'{path}: broken local link -> {target}')
+          readme = Path('README.md').read_text(encoding='utf-8')
+          ai = Path('docs/AI_GUIDE.md').read_text(encoding='utf-8')
+          ext = Path('docs/AI_PROVIDER_EXTENSIONS.md').read_text(encoding='utf-8')
+          spec = Path('docs/specification/00_SPEC_INDEX.md').read_text(encoding='utf-8')
+          required = {
+              'README M22 baseline': 'Baseline funcional atual: M22 + M21 + M20 + SCORE-GEO-002' in readme,
+              'README accessibility output': 'accessibility.html' in readme,
+              'README provider extension link': 'AI_PROVIDER_EXTENSIONS.md' in readme,
+              'AI AUTO legacy': 'OpenAI `gpt-5.6-terra` → DeepSeek `deepseek-v4-pro` → MiMo `mimo-v2.5-pro`' in ai,
+              'AI extensions provisional': 'PROVISIONAL / explicit-only' in ai,
+              'Extension pending credential': 'PENDING_EXTERNAL_CREDENTIAL' in ext,
+              'M22 normative domain spec': '22_DOMAIN_SEPARATED_WEB_QUALITY_DIAGNOSTICS.md' in spec,
+              'No provider spec collision': '22_SAFE_AI_PROVIDER_EXTENSIONS.md' not in spec,
+          }
+          for name, ok in required.items():
+              if not ok:
+                  failures.append(name)
+          if failures:
+              raise SystemExit('\n'.join(failures))
+          print('DOC_CONTRACT=PASS')
