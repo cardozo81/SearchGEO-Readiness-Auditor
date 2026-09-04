@@ -1,6 +1,7 @@
 """Terminal presentation helpers for the optional interactive console."""
 from __future__ import annotations
 
+from functools import lru_cache
 import os
 import sys
 
@@ -16,12 +17,30 @@ CYAN = "\033[36m"
 WHITE = "\033[37m"
 
 
+@lru_cache(maxsize=1)
+def _windows_vt_available() -> bool:
+    if os.name != "nt":
+        return True
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+        mode = ctypes.c_uint32()
+        if handle in (0, -1) or not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            return False
+        enable_virtual_terminal_processing = 0x0004
+        return bool(kernel32.SetConsoleMode(handle, mode.value | enable_virtual_terminal_processing))
+    except (AttributeError, OSError, ValueError):
+        return False
+
+
 def supports_color() -> bool:
     """Return whether ANSI presentation should be emitted."""
-    if os.environ.get("NO_COLOR") is not None:
+    if os.environ.get("NO_COLOR") is not None or not sys.stdout.isatty():
         return False
-    if not sys.stdout.isatty():
-        return False
+    if os.name == "nt":
+        return _windows_vt_available()
     return os.environ.get("TERM", "").casefold() != "dumb"
 
 
@@ -37,9 +56,14 @@ def clear_screen() -> None:
     """Redraw the interactive console as one logical screen instead of stacking menus."""
     if not sys.stdout.isatty():
         return
-    # ANSI clear + cursor home works in modern Windows Terminal/PowerShell and Unix terminals.
-    # A textual fallback is intentionally avoided because it would stack output instead of redrawing.
-    print("\033[2J\033[H", end="", flush=True)
+    if supports_color():
+        print("\033[2J\033[H", end="", flush=True)
+        return
+    if os.name == "nt":
+        os.system("cls")
+    else:
+        # ANSI color may be disabled by NO_COLOR while cursor control can still be used.
+        print("\033[2J\033[H", end="", flush=True)
 
 
 def status_color(status: str) -> str:
