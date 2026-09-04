@@ -13,6 +13,7 @@ dependencies = [
 
 [project.scripts]
 searchgeo = "searchgeo.cli:main"
+searchgeo-console = "searchgeo.interactive_console:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
