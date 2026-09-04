@@ -53,6 +53,9 @@ class InteractiveConsoleTests(unittest.TestCase):
         self.assertIn("OPENAI_API_KEY=[SET]", rendered)
         self.assertNotIn("secret-value", rendered)
         self.assertIn("SEARCHGEO_LOG_LEVEL=DEBUG", rendered)
+        custom = " | ".join(environment_summary({"SEARCHGEO_CUSTOM_API_KEY": "also-secret"}))
+        self.assertIn("SEARCHGEO_CUSTOM_API_KEY=[SET]", custom)
+        self.assertNotIn("also-secret", custom)
 
     def test_preflight_accepts_single_url(self) -> None:
         state = State(target="https://example.com/path")
@@ -77,8 +80,9 @@ class InteractiveConsoleTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             preflight(state, {})
         state.content_remediation = False
-        state.web_performance = True
         state.field_source = "crux"
+        self.assertEqual(preflight(state, {}), ("https://example.com/",))
+        state.web_performance = True
         with self.assertRaises(ValueError):
             preflight(state, {})
 
