@@ -10,13 +10,19 @@ from searchgeo.m23_apdex import SyntheticApdexConfig
 
 APDEX_ENABLED_ENV = "SEARCHGEO_SYNTHETIC_APDEX"
 APDEX_THRESHOLD_ENV = "SEARCHGEO_APDEX_THRESHOLD_SECONDS"
-APDEX_RUNS_ENV = "SEARCHGEO_APDEX_RUNS_PER_CONTEXT"
+APDEX_SAMPLES_ENV = "SEARCHGEO_APDEX_SAMPLES_PER_CONTEXT"
+APDEX_MAX_ATTEMPTS_ENV = "SEARCHGEO_APDEX_MAX_ATTEMPTS_PER_CONTEXT"
 APDEX_MAX_PAGES_ENV = "SEARCHGEO_APDEX_MAX_PAGES"
 APDEX_TIMEOUT_ENV = "SEARCHGEO_APDEX_TIMEOUT_SECONDS"
+APDEX_DELAY_ENV = "SEARCHGEO_APDEX_DELAY_SECONDS"
+APDEX_CONCURRENCY_ENV = "SEARCHGEO_APDEX_CONCURRENCY"
 
-DEFAULT_APDEX_RUNS_PER_CONTEXT = 10
+DEFAULT_APDEX_SAMPLES_PER_CONTEXT = 100
 DEFAULT_APDEX_MAX_PAGES = 1
 DEFAULT_APDEX_TIMEOUT_SECONDS = 45.0
+DEFAULT_APDEX_DELAY_SECONDS = 1.0
+DEFAULT_APDEX_CONCURRENCY = 1
+MAX_APDEX_CONCURRENCY = 2
 
 
 def register_apdex_arguments(audit_parser: argparse.ArgumentParser) -> None:
@@ -40,13 +46,23 @@ def register_apdex_arguments(audit_parser: argparse.ArgumentParser) -> None:
         ),
     )
     audit_parser.add_argument(
-        "--apdex-runs-per-context",
+        "--apdex-samples-per-context",
         type=int,
         default=None,
         help=(
-            "repeated cold-context navigation samples per page/device; "
-            f"default {DEFAULT_APDEX_RUNS_PER_CONTEXT} or {APDEX_RUNS_ENV}; "
-            "1-99 samples are reported as a small group (*)"
+            "target number of VALID cold-context samples per page/device; "
+            f"default {DEFAULT_APDEX_SAMPLES_PER_CONTEXT} or {APDEX_SAMPLES_ENV}. "
+            "Groups below 100 valid samples are marked small-group (*) and are not a normal final Apdex group"
+        ),
+    )
+    audit_parser.add_argument(
+        "--apdex-max-attempts-per-context",
+        type=int,
+        default=None,
+        help=(
+            "hard attempt budget used to replace invalid tool/profile samples; "
+            "default ceil(1.25 * target samples), or "
+            f"{APDEX_MAX_ATTEMPTS_ENV}"
         ),
     )
     audit_parser.add_argument(
@@ -66,6 +82,26 @@ def register_apdex_arguments(audit_parser: argparse.ArgumentParser) -> None:
             "navigation timeout for each synthetic sample; must be > 4*T. "
             "When omitted it is max(45s, 4*T+5s), or use "
             f"{APDEX_TIMEOUT_ENV}"
+        ),
+    )
+    audit_parser.add_argument(
+        "--apdex-delay-seconds",
+        type=float,
+        default=None,
+        help=(
+            "minimum delay between STARTS of synthetic navigation samples for the audited origin; "
+            f"default {DEFAULT_APDEX_DELAY_SECONDS:g}s or {APDEX_DELAY_ENV}. "
+            "No random jitter is added so runs remain reproducible"
+        ),
+    )
+    audit_parser.add_argument(
+        "--apdex-concurrency",
+        type=int,
+        default=None,
+        help=(
+            "parallel synthetic workers; default 1, maximum 2. Each worker uses its own Chromium gateway "
+            "and every sample uses a fresh browser context with cache disabled. Or "
+            f"{APDEX_CONCURRENCY_ENV}"
         ),
     )
 
@@ -91,12 +127,19 @@ def configured_apdex(args: Any, env: dict[str, str] | os._Environ[str] | None = 
             "Synthetic Apdex requires explicit T: use --apdex-threshold-seconds "
             f"or {APDEX_THRESHOLD_ENV}"
         )
-    runs = _positive_int(
-        getattr(args, "apdex_runs_per_context", None),
-        APDEX_RUNS_ENV,
-        DEFAULT_APDEX_RUNS_PER_CONTEXT,
+    samples = _positive_int(
+        getattr(args, "apdex_samples_per_context", None),
+        APDEX_SAMPLES_ENV,
+        DEFAULT_APDEX_SAMPLES_PER_CONTEXT,
         environment,
     )
+    max_attempts = _optional_positive_int(
+        getattr(args, "apdex_max_attempts_per_context", None),
+        APDEX_MAX_ATTEMPTS_ENV,
+        environment,
+    )
+    if max_attempts is None:
+        max_attempts = max(samples, int(math.ceil(samples * 1.25)))
     max_pages = _nonnegative_int(
         getattr(args, "apdex_max_pages", None),
         APDEX_MAX_PAGES_ENV,
@@ -110,13 +153,30 @@ def configured_apdex(args: Any, env: dict[str, str] | os._Environ[str] | None = 
     )
     if timeout is None:
         timeout = max(DEFAULT_APDEX_TIMEOUT_SECONDS, 4.0 * threshold + 5.0)
+    delay = _nonnegative_float(
+        getattr(args, "apdex_delay_seconds", None),
+        APDEX_DELAY_ENV,
+        DEFAULT_APDEX_DELAY_SECONDS,
+        environment,
+    )
+    concurrency = _positive_int(
+        getattr(args, "apdex_concurrency", None),
+        APDEX_CONCURRENCY_ENV,
+        DEFAULT_APDEX_CONCURRENCY,
+        environment,
+    )
+    if concurrency > MAX_APDEX_CONCURRENCY:
+        raise ValueError(f"Synthetic Apdex concurrency must be <= {MAX_APDEX_CONCURRENCY} to bound origin load")
 
     return SyntheticApdexConfig(
         enabled=True,
         threshold_seconds=threshold,
-        runs_per_context=runs,
+        target_valid_samples=samples,
+        max_attempts_per_context=max_attempts,
         max_pages=max_pages,
         timeout_seconds=timeout,
+        delay_seconds=delay,
+        concurrency=concurrency,
     ).validate()
 
 
@@ -159,18 +219,38 @@ def _optional_positive_float(
     return value
 
 
-def _positive_int(
+def _nonnegative_float(
+    cli_value: float | None,
+    env_name: str,
+    default: float,
+    env: dict[str, str] | os._Environ[str],
+) -> float:
+    if cli_value is not None:
+        value = float(cli_value)
+    else:
+        raw = (env.get(env_name) or "").strip()
+        if not raw:
+            return default
+        try:
+            value = float(raw)
+        except ValueError as exc:
+            raise ValueError(f"{env_name} must be a finite number >= 0") from exc
+    if not math.isfinite(value) or value < 0:
+        raise ValueError(f"{env_name} / CLI value must be a finite number >= 0")
+    return value
+
+
+def _optional_positive_int(
     cli_value: int | None,
     env_name: str,
-    default: int,
     env: dict[str, str] | os._Environ[str],
-) -> int:
+) -> int | None:
     if cli_value is not None:
         value = int(cli_value)
     else:
         raw = (env.get(env_name) or "").strip()
         if not raw:
-            return default
+            return None
         try:
             value = int(raw)
         except ValueError as exc:
@@ -178,6 +258,16 @@ def _positive_int(
     if value < 1:
         raise ValueError(f"{env_name} / CLI value must be >= 1")
     return value
+
+
+def _positive_int(
+    cli_value: int | None,
+    env_name: str,
+    default: int,
+    env: dict[str, str] | os._Environ[str],
+) -> int:
+    value = _optional_positive_int(cli_value, env_name, env)
+    return default if value is None else value
 
 
 def _nonnegative_int(
