@@ -35,6 +35,7 @@ from searchgeo.m18_persistence import persist_provider_runtime
 from searchgeo.m18_reporting import enrich_written_reports
 from searchgeo.m20 import execute_m20
 from searchgeo.m20_reporting import enrich_m20_report_site
+from searchgeo.operational_log import try_append_operational_event
 from searchgeo.persistence import AuditPersistence, AuditWorkspace
 from searchgeo.pre_scoring_rules import execute_pre_scoring_rules
 from searchgeo.report_site import materialize_report_site
@@ -106,6 +107,20 @@ def run_audit(
     audit_id = new_id("AUD")
     workspace = AuditWorkspace.create(Path(audits_root), audit_id)
     target_type = TargetType.URL_SET if explicit_url_set else _target_type(normalized_target)
+    try_append_operational_event(
+        workspace,
+        "AUDIT_STARTED",
+        audit_id=audit_id,
+        project_name=project,
+        target_type=target_type.value,
+        normalized_origin=origin,
+        supplied_targets=len(raw_targets),
+        normalized_targets=len(normalized_targets),
+        max_pages=max_pages,
+        content_remediation=content_remediation,
+        auditor_version=__version__,
+    )
+
     capabilities = [
         "filesystem",
         "sqlite",
@@ -170,6 +185,15 @@ def run_audit(
                 explicit_urls=(normalized_targets if target_type is TargetType.URL_SET else None),
             )
             m3 = execute_m3(m2, persistence, workspace, renderer=renderer)
+            rendered_contexts = sum(len(per_device) for per_device in m3.snapshot_ids.values())
+            try_append_operational_event(
+                workspace,
+                "RENDERING_COMPLETED",
+                audit_id=audit_id,
+                pages=len(m3.snapshot_ids),
+                contexts=rendered_contexts,
+                failures=len(m3.failures),
+            )
             m4 = execute_m4(m3, persistence, workspace)
             m5 = execute_m5(audit, audit_target, m2, m3, m4, persistence, workspace)
             m6 = execute_m6(
@@ -203,6 +227,13 @@ def run_audit(
                 audit_id=audit_id,
                 provider=runtime_provider,
                 workspace=workspace,
+                audit_mode=m7.audit_mode.value,
+            )
+            try_append_operational_event(
+                workspace,
+                "AI_RUNTIME_RECORDED",
+                audit_id=audit_id,
+                provider_class=type(runtime_provider).__name__,
                 audit_mode=m7.audit_mode.value,
             )
 
@@ -283,6 +314,12 @@ def run_audit(
                 report_id=m11.report_id,
             )
             enrich_m20_report_site(audit_id=audit_id, workspace=workspace)
+            try_append_operational_event(
+                workspace,
+                "REPORT_SITE_GENERATED",
+                audit_id=audit_id,
+                report_path=str(report_path.relative_to(workspace.root)),
+            )
 
             current = persistence.audits.get(audit_id)
             if current is None:
@@ -293,6 +330,15 @@ def run_audit(
                 else CompletionStatus.COMPLETE
             )
             persistence.audits.complete(audit_id, completion)
+            try_append_operational_event(
+                workspace,
+                "AUDIT_COMPLETED",
+                audit_id=audit_id,
+                completion_status=completion.value,
+                audited_pages=len(m2.page_ids),
+                findings=len(all_finding_ids),
+                recommendations=len(m10.recommendation_ids),
+            )
 
             return AuditRunResult(
                 audit_id=audit_id,
@@ -303,10 +349,18 @@ def run_audit(
                 finding_count=len(all_finding_ids),
                 recommendation_count=len(m10.recommendation_ids),
             )
-        except Exception:
+        except Exception as exc:
             current = persistence.audits.get(audit_id)
             if current is not None and current.status not in {AuditStatus.COMPLETED, AuditStatus.CANCELLED}:
                 persistence.audits.update(replace(current, status=AuditStatus.FAILED))
+            try_append_operational_event(
+                workspace,
+                "AUDIT_FAILED",
+                level="ERROR",
+                audit_id=audit_id,
+                error_type=type(exc).__name__,
+                error_message=str(exc)[:512],
+            )
             raise
 
 
