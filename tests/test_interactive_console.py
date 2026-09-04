@@ -13,7 +13,7 @@ from searchgeo.console_config import (
     provider_capabilities,
     validate_env_value,
 )
-from searchgeo.console_cost import actual_usage, estimate_exposure
+from searchgeo.console_cost import actual_usage, estimate_exposure, persist_execution_projection
 from searchgeo.console_help import current_cost_summary, environment_help, menu_cost_badges
 
 
@@ -252,10 +252,10 @@ class InteractiveConsoleTests(unittest.TestCase):
         self.assertEqual(estimate.level, "NENHUM")
         self.assertEqual((estimate.min_web_calls, estimate.max_web_calls), (1, 4))
 
-    def test_actual_usage_sums_m18_m20_tokens_cost_and_m21_calls(self) -> None:
+    def test_actual_usage_sums_existing_m18_m20_and_m21_database_telemetry(self) -> None:
         with TemporaryDirectory() as directory:
             workspace = Path(directory) / "AUD-USAGE"
-            (workspace / "logs").mkdir(parents=True)
+            workspace.mkdir(parents=True)
             database = workspace / "audit.db"
             connection = sqlite3.connect(database)
             try:
@@ -274,20 +274,14 @@ class InteractiveConsoleTests(unittest.TestCase):
                         )
                         """
                     )
-                connection.execute(
-                    "INSERT INTO ai_provider_attempts VALUES ('SUCCESS',100,20,50,10,150,0.01,'USD')"
-                )
-                connection.execute(
-                    "INSERT INTO content_remediation_attempts VALUES ('SUCCESS',200,0,100,20,300,0.02,'USD')"
-                )
+                connection.execute("CREATE TABLE web_performance_attempts (service TEXT)")
+                connection.execute("INSERT INTO ai_provider_attempts VALUES ('SUCCESS',100,20,50,10,150,0.01,'USD')")
+                connection.execute("INSERT INTO content_remediation_attempts VALUES ('SUCCESS',200,0,100,20,300,0.02,'USD')")
+                connection.execute("INSERT INTO web_performance_attempts VALUES ('PAGESPEED')")
+                connection.execute("INSERT INTO web_performance_attempts VALUES ('CRUX')")
                 connection.commit()
             finally:
                 connection.close()
-            (workspace / "logs" / "audit.log").write_text(
-                '{"event":"M21_EXTERNAL_ATTEMPT","service":"PAGESPEED"}\n'
-                '{"event":"M21_EXTERNAL_ATTEMPT","service":"CRUX"}\n',
-                encoding="utf-8",
-            )
             usage = actual_usage(workspace)
             self.assertIsNotNone(usage)
             assert usage is not None
@@ -299,6 +293,55 @@ class InteractiveConsoleTests(unittest.TestCase):
             self.assertEqual(usage.costs, (("USD", 0.03),))
             self.assertEqual(usage.web_external_calls, 2)
             self.assertEqual(dict(usage.web_services), {"CRUX": 1, "PAGESPEED": 1})
+
+    def test_projection_persistence_does_not_duplicate_actual_tokens_or_costs(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory) / "AUD-PROJECTION"
+            workspace.mkdir(parents=True)
+            database = workspace / "audit.db"
+            connection = sqlite3.connect(database)
+            try:
+                connection.execute("CREATE TABLE audits (audit_id TEXT PRIMARY KEY)")
+                connection.execute("INSERT INTO audits VALUES ('AUD-PROJECTION')")
+                connection.commit()
+            finally:
+                connection.close()
+            state = State(
+                audits_root=directory,
+                audit_id="AUD-PROJECTION",
+                target="https://example.com",
+                max_pages=2,
+                ai_provider="openai",
+                ai_model="gpt-5.6-terra",
+                web_performance=True,
+            )
+            estimate = estimate_exposure(state)
+            self.assertTrue(
+                persist_execution_projection(
+                    workspace,
+                    state,
+                    estimate,
+                    projected_at="2026-09-03T23:00:00-03:00",
+                    started_at="2026-09-03T23:00:01-03:00",
+                    finished_at="2026-09-03T23:01:01-03:00",
+                    duration_ms=60000,
+                )
+            )
+            connection = sqlite3.connect(database)
+            try:
+                columns = {
+                    row[1]
+                    for row in connection.execute("PRAGMA table_info(console_execution_projections)").fetchall()
+                }
+                row = connection.execute(
+                    "SELECT audit_id,exposure_level,duration_ms FROM console_execution_projections"
+                ).fetchone()
+            finally:
+                connection.close()
+            self.assertEqual(row, ("AUD-PROJECTION", estimate.level, 60000))
+            self.assertNotIn("input_tokens", columns)
+            self.assertNotIn("output_tokens", columns)
+            self.assertNotIn("estimated_cost", columns)
 
 
 if __name__ == "__main__":
