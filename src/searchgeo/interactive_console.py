@@ -19,20 +19,30 @@ from searchgeo.console_config import (
     provider_capabilities,
     validate_env_value,
 )
-from searchgeo.console_help import (
-    menu_cost_badges,
-    render_environment_help,
-    render_help,
-)
+from searchgeo.console_cost import actual_usage, estimate_exposure
+from searchgeo.console_help import menu_cost_badges, render_environment_help, render_help
 from searchgeo.console_runtime import render_header, run_audit_from_console
+from searchgeo.console_ui import (
+    CYAN,
+    DIM,
+    GREEN,
+    RED,
+    YELLOW,
+    availability_badge,
+    bool_badge,
+    cost_color,
+    paint,
+)
 
 
-def _select(title: str, options: list[tuple[str, bool, str]]) -> str | None:
+def _select(state: State, title: str, options: list[tuple[str, bool, str]]) -> str | None:
+    render_header(state)
     print(title)
     allowed: dict[str, str] = {}
     for index, (value, available, reason) in enumerate(options, 1):
-        marker = "OK" if available else "INDISPONÍVEL"
-        print(f" {index}. {value:<12} [{marker}] {reason}")
+        marker = availability_badge(available)
+        reason_text = paint(reason, CYAN if available else RED)
+        print(f" {index}. {value:<18} [{marker}] {reason_text}")
         if available:
             allowed[str(index)] = value
     print(" 0. cancelar")
@@ -42,20 +52,25 @@ def _select(title: str, options: list[tuple[str, bool, str]]) -> str | None:
             return None
         if raw in allowed:
             return allowed[raw]
-        print("Opção indisponível ou inválida.")
+        print(paint("Opção indisponível ou inválida.", RED, bold=True))
 
 
-def _environment_help_menu() -> None:
+def _environment_help_menu(state: State) -> None:
+    render_header(state)
+    print("AJUDA DE VARIÁVEIS — selecione uma variável ou 0 para todas\n")
+    for index, name in enumerate(ENV_NAMES, 1):
+        print(f"{index:2d}. {name}")
     try:
-        raw = input("Número da variável para ajuda [0=todas]: ").strip()
+        raw = input("\nNúmero [0=todas]: ").strip()
+        render_header(state)
+        print("AJUDA DE VARIÁVEIS\n")
         if raw == "0":
             for name in ENV_NAMES:
                 render_environment_help(name)
         else:
-            name = ENV_NAMES[int(raw) - 1]
-            render_environment_help(name)
+            render_environment_help(ENV_NAMES[int(raw) - 1])
     except (ValueError, IndexError):
-        print("Variável inválida.")
+        print(paint("Variável inválida.", RED, bold=True))
     input("\nENTER para voltar...")
 
 
@@ -65,21 +80,33 @@ def _environment_menu(state: State) -> None:
         print("Variáveis de ambiente — valores sensíveis nunca são exibidos\n")
         for index, name in enumerate(ENV_NAMES, 1):
             value = os.environ.get(name)
-            shown = "<não definida>" if not value else "[SET]" if is_secret(name) else value
+            if not value:
+                shown = paint("<não definida>", DIM)
+            elif is_secret(name):
+                shown = paint("[SET]", GREEN, bold=True)
+            elif value.strip().casefold() in {"true", "1", "yes", "on"}:
+                shown = paint(value, GREEN, bold=True)
+            elif value.strip().casefold() in {"false", "0", "no", "off"}:
+                shown = paint(value, DIM)
+            else:
+                shown = paint(value, CYAN)
             print(f"{index:2d}. {name:<44} {shown}")
         action = input("\nS=setar/alterar | R=remover | H=ajuda/custo | V=voltar: ").strip().upper()
         if action == "V":
             return
         if action == "H":
-            _environment_help_menu()
+            _environment_help_menu(state)
             continue
         if action not in {"S", "R"}:
             continue
         try:
-            name = ENV_NAMES[int(input("Número: ").strip()) - 1]
+            selected = int(input("Número: ").strip()) - 1
+            name = ENV_NAMES[selected]
         except (ValueError, IndexError):
             state.error = "variável inválida"
             continue
+        render_header(state)
+        print(f"Variável selecionada: {name}\n")
         if action == "R":
             os.environ.pop(name, None)
             state.error = ""
@@ -99,12 +126,16 @@ def _environment_menu(state: State) -> None:
 
 
 def _configure(state: State, choice: str) -> None:
+    render_header(state)
     if choice == "1":
         mode = _select(
+            state,
             "Fonte (default: URL única)",
-            [("url", True, "URL/domínio"), ("file", True, "TXT UTF-8, uma URL por linha")],
+            [("url", True, "URL/domínio; seed de crawl"), ("file", True, "TXT UTF-8; uma URL por linha")],
         )
         if mode:
+            render_header(state)
+            print(f"Entrada selecionada: {mode}\n")
             state.input_mode = mode
             state.target = input("URL/domínio: " if mode == "url" else "Caminho TXT: ").strip()
             state.current_url = state.target or "-"
@@ -112,15 +143,17 @@ def _configure(state: State, choice: str) -> None:
         state.project = input("Projeto (vazio=auto): ").strip()
     elif choice == "3":
         value = _select(
+            state,
             "Dispositivo",
-            [("mobile", True, "default público"), ("desktop", True, "somente desktop"), ("both", True, "mobile + desktop; pode aumentar consumo")],
+            [("mobile", True, "default"), ("desktop", True, "somente desktop"), ("both", True, "mobile + desktop; multiplica volume")],
         )
         if value:
             state.device, state.current_device = value, value.upper()
     elif choice == "4":
         capabilities = provider_capabilities(blocks=state.runtime_blocks)
         value = _select(
-            "Provider de IA — providers externos podem gerar custo por uso",
+            state,
+            "Provider de IA — providers externos podem gerar cobrança por uso",
             [(name, capabilities[name].available, capabilities[name].reason) for name in ("none", "openai", "deepseek", "mimo", "auto")],
         )
         if value:
@@ -131,8 +164,9 @@ def _configure(state: State, choice: str) -> None:
                 provider = PROVIDERS[value]
                 default = os.environ.get(MODEL_ENV[provider], DEFAULT_MODELS[provider])
                 chosen = _select(
-                    f"Modelo {provider} — modelos podem ter preços diferentes no provider",
-                    [(model, True, "default" if model == default else "") for model in SUPPORTED_MODELS[provider]],
+                    state,
+                    f"Modelo {provider} — preços podem variar por modelo",
+                    [(model, True, "default" if model == default else "suportado") for model in SUPPORTED_MODELS[provider]],
                 )
                 state.ai_model = chosen or default
     elif choice == "5":
@@ -140,22 +174,19 @@ def _configure(state: State, choice: str) -> None:
         if state.ai_provider == "none" or not capability.available:
             state.content_remediation, state.error = False, "remediação IA indisponível"
         else:
-            state.content_remediation = input(
-                "Remediação textual IA? Pode gerar chamadas/custo adicionais [s/N]: "
-            ).strip().casefold() == "s"
+            state.content_remediation = input("Remediação textual IA? Pode gerar chamadas/custo adicionais [s/N]: ").strip().casefold() == "s"
     elif choice == "6":
-        state.web_performance = input(
-            "Web Performance? Usa APIs/quota externa PageSpeed/CrUX [s/N]: "
-        ).strip().casefold() == "s"
+        state.web_performance = input("Web Performance? Usa API/quota externa PageSpeed/CrUX [s/N]: ").strip().casefold() == "s"
         if state.web_performance:
             crux_available = bool((os.environ.get("SEARCHGEO_CRUX_API_KEY") or "").strip())
             value = _select(
+                state,
                 "Field data",
                 [
-                    ("auto", True, "default; pode consultar fontes externas conforme disponibilidade"),
+                    ("auto", True, "PageSpeed + CrUX direto quando necessário/disponível"),
                     ("pagespeed", True, "PageSpeed"),
                     ("crux", crux_available, "exige SEARCHGEO_CRUX_API_KEY"),
-                    ("none", True, "somente Lighthouse lab"),
+                    ("none", True, "sem field data; Lighthouse lab permanece"),
                 ],
             )
             if value:
@@ -171,7 +202,7 @@ def _configure(state: State, choice: str) -> None:
             state.error = "max-pages inválido"
     elif choice == "8":
         try:
-            value = int(input("WebPerf max-pages (>=0; limita volume de API externa): "))
+            value = int(input("WebPerf max-pages (>=0; 0=todas as páginas auditadas): "))
             if value < 0:
                 raise ValueError
             state.web_max_pages = value
@@ -202,8 +233,40 @@ def _artifact_action(state: State, action: str) -> None:
         state.operation = "LOCAL:OPEN_REPORT"
     state.error = "" if ok else detail
     render_header(state)
-    print(("Aberto: " if ok else "Não foi possível abrir: ") + detail)
+    print((paint("Aberto: ", GREEN, bold=True) if ok else paint("Não foi possível abrir: ", RED, bold=True)) + detail)
     input("\nENTER para continuar...")
+
+
+def _render_actual_usage(state: State) -> None:
+    workspace, _ = artifact_status(state)
+    usage = actual_usage(workspace)
+    print("\nCONSUMO REAL / ESTIMADO PERSISTIDO")
+    print("-" * 100)
+    if usage is None:
+        print(paint("Telemetria de consumo indisponível para esta auditoria.", YELLOW))
+        return
+    print(f"Tentativas IA       : {usage.ai_attempts} (sucesso: {usage.ai_successes})")
+    print(f"Tokens input        : {usage.input_tokens:,}")
+    print(f"Tokens input cache  : {usage.cached_input_tokens:,}")
+    print(f"Tokens output       : {usage.output_tokens:,}")
+    print(f"Tokens reasoning    : {usage.reasoning_tokens:,}")
+    print(f"Tokens total        : {paint(f'{usage.total_tokens:,}', CYAN, bold=True)}")
+    if usage.costs:
+        rendered_costs = " | ".join(f"{currency} {amount:.8f}" for currency, amount in usage.costs)
+        print(f"Custo IA estimado   : {paint(rendered_costs, YELLOW, bold=True)}")
+    elif usage.ai_attempts:
+        print("Custo IA estimado   : não disponível com dados de pricing/tokens persistidos")
+    else:
+        print("Custo IA estimado   : 0 (nenhuma tentativa de IA persistida)")
+    if usage.unpriced_ai_attempts:
+        print(paint(f"Atenção: {usage.unpriced_ai_attempts} tentativa(s) IA possuem tokens mas não custo estimável persistido.", YELLOW, bold=True))
+    if usage.web_external_calls:
+        services = ", ".join(f"{service}={count}" for service, count in usage.web_services)
+        print(f"Chamadas M21        : {usage.web_external_calls} ({services})")
+        print("Custo M21 monetário : não presumido; o console contabiliza chamadas/quota sem inventar preço.")
+    else:
+        print("Chamadas M21        : 0")
+    print("Observação           : custos são estimativas técnicas dos adapters, não invoice do provider.")
 
 
 def _post_run_actions(state: State) -> bool:
@@ -213,9 +276,10 @@ def _post_run_actions(state: State) -> bool:
         workspace, report = artifact_status(state)
         if state.audit_id:
             print(f"Audit ID    : {state.audit_id}")
-        print("\nAções da auditoria desta sessão")
-        print(f" P. Abrir pasta da auditoria [{'OK' if workspace else 'INDISPONÍVEL'}]")
-        print(f" I. Abrir relatório HTML   [{'OK' if report else 'INDISPONÍVEL'}]")
+        _render_actual_usage(state)
+        print("\nAÇÕES DA AUDITORIA DESTA SESSÃO")
+        print(f" P. Abrir pasta da auditoria [{availability_badge(bool(workspace))}]")
+        print(f" I. Abrir relatório HTML   [{availability_badge(bool(report))}]")
         print(" M. Voltar ao menu")
         print(" Q. Sair")
         choice = input("Escolha: ").strip().upper()
@@ -235,25 +299,35 @@ def _menu(state: State) -> str:
     render_header(state)
     capability = provider_capabilities(blocks=state.runtime_blocks)[state.ai_provider]
     badges = menu_cost_badges(state)
+    estimate = estimate_exposure(state)
+    print("CONFIGURAÇÃO DA AUDITORIA\n")
+    print(f"Exposição financeira potencial: {paint(estimate.level, cost_color(estimate.level), bold=True)}")
+    if estimate.min_pages == estimate.max_pages:
+        print(f"Volume prévio: {estimate.min_pages} página(s) conhecida(s) × {estimate.device_contexts} contexto(s) de dispositivo")
+    else:
+        print(f"Volume prévio: {estimate.min_pages} página conhecida → teto {estimate.max_pages} × {estimate.device_contexts} contexto(s) de dispositivo")
+    if estimate.max_ai_attempts:
+        print(f"IA potencial: {estimate.min_ai_attempts}–{estimate.max_ai_attempts} tentativa(s)")
+    if estimate.max_web_calls:
+        print(f"APIs M21 potenciais: {estimate.min_web_calls}–{estimate.max_web_calls} chamada(s)")
+    print()
     print(f"1. Entrada               : {'URL única' if state.input_mode == 'url' else 'TXT'} | {state.target or '<não informada>'}")
     print(f"2. Projeto               : {state.project or '<auto>'}")
     print(f"3. Dispositivo           : {state.device}{badges['device']}")
-    print(f"4. IA                    : {state.ai_provider} [{'apto' if capability.available else 'indisponível'}] | {state.ai_model or '<default>'}{badges['ai']}")
-    print(f"5. Remediação textual IA : {'on' if state.content_remediation else 'off'}{badges['remediation']}")
-    print(f"6. Web Performance       : {'on' if state.web_performance else 'off'} | field={state.field_source}{badges['web']}")
+    print(f"4. IA                    : {state.ai_provider} [{availability_badge(capability.available)}] | {state.ai_model or '<default>'}{badges['ai']}")
+    print(f"5. Remediação textual IA : {bool_badge(state.content_remediation)}{badges['remediation']}")
+    print(f"6. Web Performance       : {bool_badge(state.web_performance)} | field={state.field_source}{badges['web']}")
     print(f"7. max-pages             : {state.max_pages}{badges['max_pages']}")
     print(f"8. WebPerf max-pages     : {state.web_max_pages}{badges['web_max_pages']}")
     print(f"9. Idioma / mercado      : {state.language} / {state.market}")
     print(f"10. Raiz auditorias      : {state.audits_root}")
     ready, reason = _execution_readiness(state)
-    marker = "APTO" if ready else "BLOQUEADO"
-    print(f"\nH. Ajuda / custos | E. Variáveis de ambiente | R. Executar [{marker}] {reason} | Q. Sair")
+    marker = availability_badge(ready)
+    reason_text = paint(reason, GREEN if ready else RED)
+    print(f"\nH. Ajuda / custos | E. Variáveis de ambiente | R. Executar [{marker}] {reason_text} | Q. Sair")
     workspace, report = artifact_status(state)
     if workspace or report:
-        print(
-            f"P. Abrir última pasta [{'OK' if workspace else 'INDISPONÍVEL'}] | "
-            f"I. Abrir último relatório [{'OK' if report else 'INDISPONÍVEL'}]"
-        )
+        print(f"P. Abrir última pasta [{availability_badge(bool(workspace))}] | I. Abrir último relatório [{availability_badge(bool(report))}]")
     return input("Escolha: ").strip().upper()
 
 
