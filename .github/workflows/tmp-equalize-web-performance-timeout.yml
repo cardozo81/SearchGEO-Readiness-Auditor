@@ -11,7 +11,6 @@ permissions:
 
 jobs:
   equalize:
-    if: github.event.head_commit.message == 'chore(ci): equalizar timeout Web Performance'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
