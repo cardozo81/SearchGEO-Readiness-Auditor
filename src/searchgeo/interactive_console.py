@@ -6,6 +6,7 @@ import math
 import os
 
 from searchgeo.console_artifacts import artifact_status, open_audit_folder, open_report
+from searchgeo.console_collection import load_collection_coverage
 from searchgeo.console_config import (
     DEFAULT_MODELS,
     ENV_NAMES as BASE_ENV_NAMES,
@@ -164,21 +165,16 @@ def _number(
 
 
 def _configure_apdex(state: State) -> None:
-    print("Synthetic Apdex M23 mede repetidamente a navegação real em Chromium e gera carga HTTP contra o alvo.")
+    print("Synthetic Apdex mede repetidamente a navegação real em Chromium e gera carga HTTP contra o alvo.")
     print("Cada parâmetro abaixo controla precisão, duração ou volume da medição.\n")
-    enabled = input("Synthetic Apdex M23? Gera navegações reais repetidas contra o site [s/N]: ").strip().casefold() == "s"
+    enabled = input("Synthetic Apdex? Gera navegações reais repetidas contra o site [s/N]: ").strip().casefold() == "s"
     if not enabled:
         state.synthetic_apdex = False
         state.apdex_threshold = None
         state.error = ""
         return
     try:
-        print(
-            paint(
-                "  Para que serve: T é o tempo-alvo da Task. <=T é Satisfied; >T até 4T é Tolerating; >4T é Frustrated.",
-                DIM,
-            )
-        )
+        print(paint("  Para que serve: T é o tempo-alvo da Task. <=T é Satisfied; >T até 4T é Tolerating; >4T é Frustrated.", DIM))
         threshold_raw = input(
             f"Threshold T em segundos [{state.apdex_threshold if state.apdex_threshold is not None else 'obrigatório'}]: "
         ).strip()
@@ -190,88 +186,76 @@ def _configure_apdex(state: State) -> None:
             raise ValueError("Synthetic Apdex exige threshold T explícito")
         state.synthetic_apdex = True
         state.apdex_threshold = threshold
-        state.apdex_samples = int(
-            _number(
-                "Amostras válidas por contexto",
-                state.apdex_samples,
-                minimum=1,
-                integer=True,
-                help_text=(
-                    "quantidade de navegações válidas exigidas para cada URL/dispositivo. "
-                    "1–99 é diagnóstico small-group (*); 100 é o grupo final normal da baseline M23."
-                ),
-            )
-        )
+        state.apdex_samples = int(_number(
+            "Amostras válidas por contexto",
+            state.apdex_samples,
+            minimum=1,
+            integer=True,
+            help_text=(
+                "quantidade de navegações válidas exigidas para cada URL/dispositivo. "
+                "1–99 é diagnóstico small-group (*); 100 é o grupo final normal da baseline atual."
+            ),
+        ))
         suggested_attempts = max(state.apdex_samples, int(math.ceil(state.apdex_samples * 1.25)))
         if state.apdex_max_attempts < state.apdex_samples:
             state.apdex_max_attempts = suggested_attempts
-        state.apdex_max_attempts = int(
-            _number(
-                "Máximo de tentativas por contexto",
-                state.apdex_max_attempts,
-                minimum=state.apdex_samples,
-                integer=True,
-                help_text=(
-                    "teto de navegações usadas para alcançar as amostras válidas, permitindo repor amostras inválidas. "
-                    "Quanto maior, maior a carga máxima no alvo."
-                ),
-            )
-        )
-        state.apdex_max_pages = int(
-            _number(
-                "Máximo de páginas M23 (0=todas)",
-                state.apdex_max_pages,
-                minimum=0,
-                integer=True,
-                help_text=(
-                    "limita quantas páginas já auditadas receberão Synthetic Apdex. "
-                    "0 usa todas as páginas disponíveis dentro do limite geral da auditoria."
-                ),
-            )
-        )
+        state.apdex_max_attempts = int(_number(
+            "Máximo de tentativas por contexto",
+            state.apdex_max_attempts,
+            minimum=state.apdex_samples,
+            integer=True,
+            help_text=(
+                "teto de navegações usadas para alcançar as amostras válidas, permitindo repor amostras inválidas. "
+                "Quanto maior, maior a carga máxima no alvo."
+            ),
+        ))
+        state.apdex_max_pages = int(_number(
+            "Máximo de páginas Synthetic Apdex (0=todas)",
+            state.apdex_max_pages,
+            minimum=0,
+            integer=True,
+            help_text=(
+                "limita quantas páginas já auditadas receberão Synthetic Apdex. "
+                "0 usa todas as páginas disponíveis dentro do limite geral da auditoria."
+            ),
+        ))
         minimum_timeout = 4.0 * threshold
         recommended_timeout = max(45.0, minimum_timeout + 5.0)
         if state.apdex_timeout <= minimum_timeout:
             state.apdex_timeout = recommended_timeout
-        state.apdex_timeout = float(
-            _number(
-                "Timeout por navegação (deve ser > 4T)",
-                state.apdex_timeout,
-                minimum=0.000001,
-                help_text=(
-                    "tempo máximo permitido para uma navegação. Deve ser maior que 4T para não truncar artificialmente "
-                    "a faixa Frustrated."
-                ),
-            )
-        )
-        state.apdex_delay = float(
-            _number(
-                "Delay mínimo entre inícios",
-                state.apdex_delay,
-                minimum=0.0,
-                help_text=(
-                    "intervalo mínimo, em segundos, entre inícios de navegação. Valores maiores reduzem a pressão "
-                    "sobre o site e aumentam a duração total."
-                ),
-            )
-        )
-        state.apdex_concurrency = int(
-            _number(
-                "Concorrência (1-2)",
-                state.apdex_concurrency,
-                minimum=1,
-                integer=True,
-                help_text=(
-                    "quantas navegações podem ocorrer simultaneamente. 1 é o modo mais conservador; "
-                    "2 reduz tempo, mas aumenta carga concorrente."
-                ),
-            )
-        )
+        state.apdex_timeout = float(_number(
+            "Timeout por navegação (deve ser > 4T)",
+            state.apdex_timeout,
+            minimum=0.000001,
+            help_text=(
+                "tempo máximo permitido para uma navegação. Deve ser maior que 4T para não truncar artificialmente "
+                "a faixa Frustrated."
+            ),
+        ))
+        state.apdex_delay = float(_number(
+            "Delay mínimo entre inícios",
+            state.apdex_delay,
+            minimum=0.0,
+            help_text=(
+                "intervalo mínimo, em segundos, entre inícios de navegação. Valores maiores reduzem a pressão "
+                "sobre o site e aumentam a duração total."
+            ),
+        ))
+        state.apdex_concurrency = int(_number(
+            "Concorrência (1-2)",
+            state.apdex_concurrency,
+            minimum=1,
+            integer=True,
+            help_text=(
+                "quantas navegações podem ocorrer simultaneamente. 1 é o modo mais conservador; "
+                "2 reduz tempo, mas aumenta carga concorrente."
+            ),
+        ))
         config_from_state(state)
         state.error = ""
         attempts, load = synthetic_load_summary(state)
         if attempts:
-            print(paint("\nCarga projetada M23: " + load, YELLOW, bold=True))
+            print(paint("\nCarga projetada Synthetic Apdex: " + load, YELLOW, bold=True))
     except (ValueError, OverflowError) as exc:
         state.error = str(exc)
 
@@ -279,11 +263,7 @@ def _configure_apdex(state: State) -> None:
 def _configure(state: State, choice: str) -> None:
     render_header(state)
     if choice == "1":
-        mode = _select(
-            state,
-            "Fonte (default: URL única)",
-            [("url", True, "URL/domínio; seed de crawl"), ("file", True, "TXT UTF-8; uma URL por linha")],
-        )
+        mode = _select(state, "Fonte (default: URL única)", [("url", True, "URL/domínio; seed de crawl"), ("file", True, "TXT UTF-8; uma URL por linha")])
         if mode:
             render_header(state)
             print(f"Entrada selecionada: {mode}\n")
@@ -293,11 +273,7 @@ def _configure(state: State, choice: str) -> None:
     elif choice == "2":
         state.project = input("Projeto (vazio=auto): ").strip()
     elif choice == "3":
-        value = _select(
-            state,
-            "Dispositivo",
-            [("mobile", True, "default"), ("desktop", True, "somente desktop"), ("both", True, "mobile + desktop; multiplica volume")],
-        )
+        value = _select(state, "Dispositivo", [("mobile", True, "default"), ("desktop", True, "somente desktop"), ("both", True, "mobile + desktop; multiplica volume")])
         if value:
             state.device, state.current_device = value, value.upper()
     elif choice == "4":
@@ -314,11 +290,7 @@ def _configure(state: State, choice: str) -> None:
             elif value in PROVIDERS:
                 provider = PROVIDERS[value]
                 default = os.environ.get(MODEL_ENV[provider], DEFAULT_MODELS[provider])
-                chosen = _select(
-                    state,
-                    f"Modelo {provider} — preços podem variar por modelo",
-                    [(model, True, "default" if model == default else "suportado") for model in SUPPORTED_MODELS[provider]],
-                )
+                chosen = _select(state, f"Modelo {provider} — preços podem variar por modelo", [(model, True, "default" if model == default else "suportado") for model in SUPPORTED_MODELS[provider]])
                 state.ai_model = chosen or default
     elif choice == "5":
         capability = provider_capabilities(blocks=state.runtime_blocks)[state.ai_provider]
@@ -332,34 +304,26 @@ def _configure(state: State, choice: str) -> None:
         state.web_performance = input("Web Performance? Usa API/quota externa PageSpeed/CrUX [s/N]: ").strip().casefold() == "s"
         if state.web_performance:
             crux_available = bool((os.environ.get("SEARCHGEO_CRUX_API_KEY") or "").strip())
-            value = _select(
-                state,
-                "Field data",
-                [
-                    ("auto", True, "PageSpeed + CrUX direto quando necessário/disponível"),
-                    ("pagespeed", True, "PageSpeed"),
-                    ("crux", crux_available, "exige SEARCHGEO_CRUX_API_KEY"),
-                    ("none", True, "sem field data; Lighthouse lab permanece"),
-                ],
-            )
+            value = _select(state, "Field data", [
+                ("auto", True, "PageSpeed + CrUX direto quando necessário/disponível"),
+                ("pagespeed", True, "PageSpeed"),
+                ("crux", crux_available, "exige SEARCHGEO_CRUX_API_KEY"),
+                ("none", True, "sem field data; Lighthouse lab permanece"),
+            ])
             if value:
                 state.field_source = value
     elif choice == "7":
         try:
             value = int(input("max-pages (>0; maior valor aumenta teto potencial de consumo): "))
-            if value <= 0:
-                raise ValueError
-            state.max_pages = value
-            state.error = ""
+            if value <= 0: raise ValueError
+            state.max_pages, state.error = value, ""
         except ValueError:
             state.error = "max-pages inválido"
     elif choice == "8":
         try:
             value = int(input("WebPerf max-pages (>=0; 0=todas as páginas auditadas): "))
-            if value < 0:
-                raise ValueError
-            state.web_max_pages = value
-            state.error = ""
+            if value < 0: raise ValueError
+            state.web_max_pages, state.error = value, ""
         except ValueError:
             state.error = "WebPerf max-pages inválido"
     elif choice == "9":
@@ -397,10 +361,11 @@ def _render_actual_usage(state: State) -> None:
     workspace, _ = artifact_status(state)
     usage = actual_usage(workspace)
     synthetic = actual_m23_usage(workspace)
-    print("\nCONSUMO REAL / ESTIMADO PERSISTIDO")
+    coverage = load_collection_coverage(workspace)
+    print("\nCONSUMO E COBERTURA REAL PERSISTIDOS")
     print("-" * 100)
     if usage is None:
-        print(paint("Telemetria IA/M21 indisponível para esta auditoria.", YELLOW))
+        print(paint("Telemetria IA/Web Performance indisponível para esta auditoria.", YELLOW))
     else:
         print(f"Tentativas IA       : {usage.ai_attempts} (sucesso: {usage.ai_successes})")
         print(f"Tokens input        : {usage.input_tokens:,}")
@@ -419,21 +384,28 @@ def _render_actual_usage(state: State) -> None:
             print(paint(f"Atenção: {usage.unpriced_ai_attempts} tentativa(s) IA possuem tokens mas não custo estimável persistido.", YELLOW, bold=True))
         if usage.web_external_calls:
             services = ", ".join(f"{service}={count}" for service, count in usage.web_services)
-            print(f"Chamadas M21        : {usage.web_external_calls} ({services})")
-            print("Custo M21 monetário : não presumido; o console contabiliza chamadas/quota sem inventar preço.")
+            print(f"Chamadas Web Perf.  : {usage.web_external_calls} ({services})")
+            print("Custo Web Perf.     : não presumido; o console contabiliza chamadas/quota sem inventar preço.")
         else:
-            print("Chamadas M21        : 0")
+            print("Chamadas Web Perf.  : 0")
+    if coverage is not None:
+        print(f"Web Performance     : {coverage.web_status} | PageSpeed {coverage.pagespeed_successes}/{coverage.pagespeed_attempts} | CrUX {coverage.crux_successes}/{coverage.crux_attempts}")
+        if coverage.web_reason:
+            print(f"Motivo Web Perf.    : {coverage.web_reason}")
+        a11y_state = "OBTIDA" if coverage.accessibility_contexts and coverage.accessibility_obtained == coverage.accessibility_contexts else ("PARCIAL" if coverage.accessibility_obtained else "NÃO OBTIDA")
+        print(f"Acessibilidade      : {a11y_state} | {coverage.accessibility_obtained}/{coverage.accessibility_contexts} contexto(s)")
+        print(f"Motivo Acessib.     : {coverage.accessibility_reason}")
     if synthetic is None:
-        print("Navegações M23      : telemetria não materializada")
+        print("Navegações Apdex    : telemetria não materializada")
     elif not synthetic.enabled:
-        print("Navegações M23      : 0 (Synthetic Apdex desabilitado)")
+        print("Navegações Apdex    : 0 (Synthetic Apdex desabilitado)")
     else:
         print(
-            f"Navegações M23      : {synthetic.attempted_samples} tentativa(s), "
+            f"Navegações Apdex    : {synthetic.attempted_samples} tentativa(s), "
             f"{synthetic.valid_samples} válidas, {synthetic.invalid_samples} inválidas, "
             f"contextos={synthetic.contexts}, status={synthetic.status}"
         )
-        print("Custo M23 monetário : sem API paga própria; há CPU/tempo local e tráfego HTTP real contra o alvo.")
+        print("Custo Synthetic     : sem API paga própria; há CPU/tempo local e tráfego HTTP real contra o alvo.")
     print("Observação           : custos são estimativas técnicas dos adapters, não invoice do provider.")
 
 
@@ -450,16 +422,11 @@ def _post_run_actions(state: State) -> bool:
         print(" M. Voltar ao menu")
         print(" Q. Sair")
         choice = input("Escolha: ").strip().upper()
-        if choice == "Q":
-            return True
-        if choice == "M":
-            return False
-        if choice == "P" and workspace:
-            _artifact_action(state, "P")
-        elif choice == "I" and report:
-            _artifact_action(state, "I")
-        elif choice in {"P", "I"}:
-            state.error = "artefato ainda não disponível para esta auditoria"
+        if choice == "Q": return True
+        if choice == "M": return False
+        if choice == "P" and workspace: _artifact_action(state, "P")
+        elif choice == "I" and report: _artifact_action(state, "I")
+        elif choice in {"P", "I"}: state.error = "artefato ainda não disponível para esta auditoria"
 
 
 def _menu(state: State) -> str:
@@ -478,25 +445,18 @@ def _menu(state: State) -> str:
     if estimate.max_ai_attempts:
         print(f"IA potencial: {estimate.min_ai_attempts}–{estimate.max_ai_attempts} tentativa(s)")
     if estimate.max_web_calls:
-        print(f"APIs M21 potenciais: {estimate.min_web_calls}–{estimate.max_web_calls} chamada(s)")
+        print(f"APIs Web Performance potenciais: {estimate.min_web_calls}–{estimate.max_web_calls} chamada(s)")
     if m23_attempts:
-        print(paint("Carga M23 potencial: " + m23_load, YELLOW, bold=True))
+        print(paint("Carga Synthetic Apdex potencial: " + m23_load, YELLOW, bold=True))
     print()
     print(f"1. Entrada               : {'URL única' if state.input_mode == 'url' else 'TXT'} | {state.target or '<não informada>'}")
     print(f"2. Projeto               : {state.project or '<auto>'}")
     print(f"3. Dispositivo           : {state.device}{badges['device']}")
     print(f"4. IA                    : {state.ai_provider} [{availability_badge(capability.available)}] | {state.ai_model or '<default>'}{badges['ai']}")
     if remediation_available:
-        print(
-            f"5. Remediação textual IA : {bool_badge(state.content_remediation)} "
-            f"[DISPONÍVEL — IA ativa no item 4]{badges['remediation']}"
-        )
+        print(f"5. Remediação textual IA : {bool_badge(state.content_remediation)} [DISPONÍVEL — IA ativa no item 4]{badges['remediation']}")
     else:
-        print(
-            "5. Remediação textual IA : "
-            + paint("INDISPONÍVEL", RED, bold=True)
-            + " [REQUER IA CONFIGURADA E ATIVA NO ITEM 4]"
-        )
+        print("5. Remediação textual IA : " + paint("INDISPONÍVEL", RED, bold=True) + " [REQUER IA CONFIGURADA E ATIVA NO ITEM 4]")
     print(f"6. Web Performance       : {bool_badge(state.web_performance)} | field={state.field_source}{badges['web']}")
     print(f"7. max-pages             : {state.max_pages}{badges['max_pages']}")
     print(f"8. WebPerf max-pages     : {state.web_max_pages}{badges['web_max_pages']}")
@@ -504,13 +464,13 @@ def _menu(state: State) -> str:
     print(f"10. Raiz auditorias      : {state.audits_root}")
     if state.synthetic_apdex:
         print(
-            f"11. Synthetic Apdex M23  : {bool_badge(True)} [CARGA SINTÉTICA] | "
+            f"11. Synthetic Apdex      : {bool_badge(True)} [CARGA SINTÉTICA] | "
             f"T={state.apdex_threshold}s | válidas={state.apdex_samples} | "
             f"tentativas={state.apdex_max_attempts} | páginas={state.apdex_max_pages} | "
             f"delay={state.apdex_delay:g}s | concorrência={state.apdex_concurrency}"
         )
     else:
-        print(f"11. Synthetic Apdex M23  : {bool_badge(False)} [SEM CUSTO API PRÓPRIO]")
+        print(f"11. Synthetic Apdex      : {bool_badge(False)} [SEM CUSTO API PRÓPRIO]")
     ready, reason = _execution_readiness(state)
     marker = availability_badge(ready)
     reason_text = paint(reason, GREEN if ready else RED)
@@ -528,8 +488,7 @@ def main() -> int:
     state.error = "; ".join(issues)
     while True:
         choice = _menu(state)
-        if choice == "Q":
-            return 0
+        if choice == "Q": return 0
         if choice == "H":
             render_help(state)
             render_m23_help(state)
@@ -547,8 +506,7 @@ def main() -> int:
                 state.status, state.operation, state.error = "PRECHECK_BLOCKED", "LOCAL:PRECHECK", reason
                 continue
             run_audit_from_console(state)
-            if _post_run_actions(state):
-                return 0
+            if _post_run_actions(state): return 0
             state.status, state.operation, state.error = "READY", "LOCAL:MENU", ""
             continue
         _configure(state, choice)
