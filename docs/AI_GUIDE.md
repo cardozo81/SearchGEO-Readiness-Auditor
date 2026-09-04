@@ -1,227 +1,226 @@
-# AI_GUIDE.md
+# Guia de IA
 
-Guia da análise semântica M18/M7 e da remediação textual opcional M20.
+O SearchGEO usa IA apenas em finalidades opcionais e evidence-bound. A auditoria principal continua capaz de executar sem IA.
 
-## Princípio
+## Finalidades
 
-IA externa é complementar. Falha, quota, timeout, credencial ausente ou provider indisponível é limitação operacional do auditor; **não é finding do website**.
+1. **análise semântica**: avalia somente as evidências fornecidas pelo SearchGEO e deve devolver saída estruturada compatível com o contrato local;
+2. **remediação textual opcional**: produz sugestões exatas somente para findings elegíveis e com evidência suficiente.
 
-Há duas finalidades distintas:
+Nenhuma dessas finalidades autoriza inventar fatos, credenciais, preços, datas, estatísticas ou evidências.
 
-1. **M18/M7:** análise semântica que pode materializar assessments/entidades/intents usados pelas regras;
-2. **M20:** remediação textual advisory, executada depois de findings/scoring e incapaz de alterar retroativamente a avaliação.
+## Providers
 
-A revisão/proposta JSON-LD de M20 é determinística e não depende de API externa.
-
-## Compatibilidade de produto, plano e credencial
-
-Compatibilidade = **provider + produto/plano de API + credencial + endpoint + modelo**.
-
-| Provider | Produto/plano | SearchGEO atual | Limitação principal |
-|---|---|---|---|
-| OpenAI | API Platform com API key da organização/projeto e billing/quota/model access | **Suportado / QUALIFIED** | billing de ChatGPT e API é separado |
-| OpenAI | ChatGPT Free/Go/Plus/Pro/Business/Enterprise/Edu e créditos do produto ChatGPT/Codex | **Não são saldo de API** | assinatura/crédito interativo não substitui billing da API |
-| DeepSeek | DeepSeek API com saldo disponível | **Suportado / PROVISIONAL** | key isolada não garante saldo/quota |
-| Xiaomi MiMo | PAYG, chave `sk-...`, `https://api.xiaomimimo.com/v1` | **Suportado / PROVISIONAL** | exige saldo PAYG e acesso ao modelo |
-| Xiaomi MiMo | Token Plan `tp-...`, Base URL `token-plan-...` | **Não suportado / não usar** | produto, endpoint e créditos independentes; termos/restrições próprios |
-| xAI / Grok | xAI API com key e modelo suportado | **PROVISIONAL / explicit-only** | disponibilidade no produto Grok não implica credencial/API compatível |
-| Alibaba Qwen | Model Studio/DashScope com key, região e endpoint compatíveis | **PROVISIONAL / explicit-only** | key e endpoint precisam pertencer à mesma região/workspace |
-| Google Gemini | Gemini API com key e endpoint/modelo suportados | **PROVISIONAL / explicit-only** | outras credenciais Google não são intercambiáveis automaticamente |
-| Anthropic Claude | Anthropic API com key e modelo suportado | **PROVISIONAL / explicit-only** | assinatura Claude não é saldo da API |
-
-Antes de habilitar um provider, confirme produto/plano, credencial, endpoint, saldo/quota/permissões e acesso ao modelo. Não altere endpoint/credencial para contornar restrições comerciais ou de uso.
-
-Os quatro providers adicionais permanecem fora de `AUTO` até qualificação humana com credenciais reais. Consulte [AI_PROVIDER_EXTENSIONS.md](AI_PROVIDER_EXTENSIONS.md) para endpoints, aliases, variáveis e gate de promoção.
-
-Fontes oficiais de plano/billing:
-
-- OpenAI: <https://help.openai.com/en/articles/9039756-managing-billing-settings-on-chatgpt-web-and-platform>
-- OpenAI API limits: <https://help.openai.com/en/articles/6614457>
-- DeepSeek pricing: <https://api-docs.deepseek.com/quick_start/pricing/>
-- DeepSeek balance: <https://api-docs.deepseek.com/api/get-user-balance/>
-- MiMo Token Plan: <https://mimo.mi.com/docs/en-US/tokenplan/Token%20Plan/subscription>
-- MiMo `tp-...` × `sk-...`: <https://mimo.mi.com/docs/en-US/tokenplan/Token%20Plan/quick-access>
-- MiMo errors: <https://mimo.mi.com/docs/en-US/api/guidance/error-codes>
-- xAI: <https://docs.x.ai/>
-- Alibaba Model Studio/Qwen: <https://www.alibabacloud.com/help/en/model-studio/>
-- Gemini API: <https://ai.google.dev/gemini-api/docs>
-- Anthropic API: <https://platform.claude.com/docs/>
-
-Planos/termos externos podem mudar; a documentação do provider prevalece.
-
-## Dispositivo e custo
-
-Default CLI: `mobile`. Valores: `mobile`, `desktop`, `both`.
-
-M7 e M20 só trabalham em snapshots materializados. Logo `mobile` não gera chamada Desktop e vice-versa; `both` pode gerar dois contextos por página/finalidade.
-
-## Sem IA
-
-```powershell
-searchgeo audit https://example.com --ai-provider none
-```
-
-Nenhuma chamada externa. Regras semânticas sem base suficiente podem ficar `UNKNOWN`; isso não vira FAIL. A revisão JSON-LD determinística continua em `report/content-suggestions.html`.
-
-## OpenAI
-
-```powershell
-$env:OPENAI_API_KEY = "<chave-da-API-Platform>"
-searchgeo audit https://example.com --ai-provider openai
-```
-
-Default: `gpt-5.6-terra` / `HIGH`. Modelos: `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`.
-
-Uma assinatura ChatGPT não transfere saldo para a API. Mesmo com billing ativo, a chamada pode falhar por saldo, limites da organização/projeto, rate limit ou ausência de acesso ao modelo.
-
-## DeepSeek
-
-```powershell
-$env:DEEPSEEK_API_KEY = "<chave-da-DeepSeek-API>"
-searchgeo audit https://example.com --ai-provider deepseek
-```
-
-Default `deepseek-v4-pro` / `HIGH`; `deepseek-v4-flash` também é aceito. Qualificação SearchGEO `PROVISIONAL`.
-
-## Xiaomi MiMo
-
-Modo suportado:
-
-```powershell
-$env:MIMO_API_KEY = "<chave-sk-PAYG>"
-searchgeo audit https://example.com --ai-provider mimo
-```
-
-Default `mimo-v2.5-pro` / `THINKING_ENABLED`; `mimo-v2.5` também é aceito. Endpoint atual: `https://api.xiaomimimo.com/v1/responses`.
-
-**Não use Token Plan `tp-...`.** Ele possui Base URL e créditos separados. `tp-...` no endpoint PAYG pode resultar em `401`; `sk-...` com saldo PAYG insuficiente pode resultar em `402`.
-
-## Providers adicionais — seleção explícita
-
-Os aliases e IDs aceitos são:
+Providers concretos no registry:
 
 ```text
-xai / grok
+openai
+deepseek
+mimo
+xai
 qwen
 gemini
-anthropic / claude
+anthropic
 ```
 
-Defaults atuais:
+Aliases:
 
 ```text
-XAI:       grok-4.6
-QWEN:      qwen3.8-max
-GEMINI:    gemini-3.8-flash
-ANTHROPIC: claude-sonnet-5
+grok   -> xai
+claude -> anthropic
 ```
 
-Variáveis de credencial:
+AUTO permanece:
 
 ```text
+OpenAI -> DeepSeek -> MiMo
+```
+
+xAI, Qwen, Gemini e Anthropic permanecem explicit-only enquanto não houver promoção formal de qualificação.
+
+## Credenciais
+
+```text
+OPENAI_API_KEY
+DEEPSEEK_API_KEY
+MIMO_API_KEY
 XAI_API_KEY
 DASHSCOPE_API_KEY
 GEMINI_API_KEY
 ANTHROPIC_API_KEY
 ```
 
-Provider adicional sem sua própria key termina como `NOT_CONFIGURED`, com zero chamada externa. Não existe fallback para OpenAI/DeepSeek/MiMo quando a seleção é explícita.
+A presença de uma key não garante saldo, quota, plano compatível ou acesso ao modelo.
 
-O caminho de sucesso real desses quatro adapters continua pendente quando não há credencial externa disponível. Isso não autoriza remover `PROVISIONAL` nem incluí-los em `AUTO`.
+MiMo PAYG usa credencial `sk-...` no adapter atual. Token Plan `tp-...` pertence a produto/endpoint diferente.
 
-Detalhamento completo: [AI_PROVIDER_EXTENSIONS.md](AI_PROVIDER_EXTENSIONS.md).
+## Defaults públicos
 
-## Isolamento de credenciais
+Quando o usuário não informa override, o produto privilegia menor custo/complexidade e o menor esforço suportado pelo adapter/modelo:
 
-Cada provider usa somente sua própria credencial. Ausência de `DEEPSEEK_API_KEY`, `MIMO_API_KEY`, `XAI_API_KEY`, `DASHSCOPE_API_KEY`, `GEMINI_API_KEY` ou `ANTHROPIC_API_KEY` nunca autoriza reutilizar a key de outro provider. O mesmo princípio vale para testes: fixtures de ausência de token neutralizam credenciais reais do ambiente para impedir chamadas pagas acidentais.
+| Provider | Modelo default | Esforço default |
+|---|---|---|
+| OpenAI | `gpt-5.6-luna` | `NONE` |
+| DeepSeek | `deepseek-v4-flash` | `NONE` |
+| MiMo | `mimo-v2.5` | `NONE` |
+| xAI | `grok-4.6` | `LOW` |
+| Qwen | `qwen3.8-flash` | `PROVIDER_DEFAULT` |
+| Gemini | `gemini-3.8-flash` | `LOW` |
+| Anthropic | `claude-sonnet-5` | `LOW` |
 
-## Provider explícito e AUTO
+Overrides explícitos continuam prevalecendo quando suportados.
 
-Provider explícito não faz cross-provider fallback. Uma falha qualificadora pode colocar o provider em `QUARANTINED_FOR_AUDIT`.
+### OpenAI
 
-`auto` cria uma cadeia imutável com providers elegíveis/configurados. O primeiro resultado válido encerra o contexto; provider falho pode ser quarantined. URL lock evita completar a mesma URL com provedores diferentes depois de pinning válido.
+Modelos aceitos pelo adapter atual:
 
-Preferência homologada: OpenAI `gpt-5.6-terra` → DeepSeek `deepseek-v4-pro` → MiMo `mimo-v2.5-pro`.
+```text
+gpt-5.6-sol
+gpt-5.6-terra
+gpt-5.6-luna
+```
 
-xAI, Qwen, Gemini e Anthropic/Claude são `explicit-only` e não entram nessa cadeia enquanto permanecerem `PROVISIONAL`.
+Default público: `gpt-5.6-luna` com esforço `NONE`.
+
+### DeepSeek
+
+Modelos:
+
+```text
+deepseek-v4-pro
+deepseek-v4-flash
+```
+
+Default público: `deepseek-v4-flash` com thinking desabilitado (`NONE`) quando não há override.
+
+### MiMo
+
+Modelos:
+
+```text
+mimo-v2.5-pro
+mimo-v2.5
+```
+
+Default público: `mimo-v2.5` com `NONE`.
+
+### xAI
+
+Modelo atual:
+
+```text
+grok-4.6
+```
+
+O modelo é reasoning-only no contrato atual; o menor esforço configurável usado como default é `LOW`.
+
+### Qwen
+
+Modelos:
+
+```text
+qwen3.8-max
+qwen3.8-flash
+```
+
+Default público: `qwen3.8-flash`. O adapter atual não expõe um parâmetro de reasoning validado, portanto usa `PROVIDER_DEFAULT`.
+
+### Gemini
+
+Modelo atual:
+
+```text
+gemini-3.8-flash
+```
+
+Default público de thinking: `LOW` na integração atual.
+
+### Anthropic
+
+Modelo atual:
+
+```text
+claude-sonnet-5
+```
+
+Default público de effort: `LOW`.
 
 ## Timeout
 
-`SEARCHGEO_AI_TIMEOUT_SECONDS`, default CLI `180`. Deve ser número finito > 0. Não há retry automático após timeout, evitando consumo potencialmente duplicado.
-
-## M20 — remediação textual opcional
-
-Default **OFF**.
-
-```powershell
-searchgeo audit https://example.com `
-  --ai-provider openai `
-  --ai-content-remediation
+```text
+SEARCHGEO_AI_TIMEOUT_SECONDS
 ```
 
-ou:
+Default público:
 
-```powershell
-$env:SEARCHGEO_AI_CONTENT_REMEDIATION = "true"
+```text
+180 segundos por tentativa
 ```
 
-Precedência: flag CLI → ambiente → `false`.
+O timeout limita cada chamada ao provider; não representa tempo máximo da auditoria completa.
 
-M20 recebe somente estado persistido da página/snapshot/device: URL, title, conteúdo principal limitado, findings contentuais/semânticos elegíveis, observed/expected e suas evidências.
+O console permite alterar o timeout diretamente na opção 4.
 
-`Confidence LOW` isolado **não é gatilho**.
+## Console interativo
 
-Uma sugestão aceita contém `finding_id`, objetivo, local sugerido, texto exato proposto, `evidence_ids`, confidence da sugestão, review note e provider/model.
+A opção 4 reúne:
 
-### Segurança factual
-
-O contrato proíbe keyword stuffing, word count arbitrário, reescrita só “para IA”, chunking artificial, fake freshness e claims/preços/datas/estatísticas/garantias/credenciais/experiência/fontes inventadas.
-
-A validação local rejeita finding/evidence IDs fora do universo fornecido e novos tokens numéricos não sustentados pelo conteúdo/evidência. Isso é contenção adicional; revisão humana continua obrigatória.
-
-Falha M20 não altera Score/findings e não invalida o audit. M20 não reativa provider quarantined.
-
-## JSON-LD por página
-
-### Ausente
-
-M20 pode propor um baseline conservador:
-
-```json
-{
-  "@context": "https://schema.org",
-  "@type": "WebPage",
-  "url": "<canonical-ou-url-normalizada>",
-  "inLanguage": "pt-BR",
-  "name": "<title-observado>",
-  "description": "<description-observada>"
-}
+```text
+provider
+modelo
+esforço/profundidade, quando suportado
+timeout por tentativa
 ```
 
-Campos sem evidência são omitidos. `mainEntity` só é usado quando sustentado de forma inequívoca.
+A opção 5, **Remediação textual IA**, só fica disponível com provider apto. Com IA=`none` ou provider indisponível, o console informa que a opção depende da configuração da opção 4.
 
-### Existente
+## Persistência de configuração e secrets
 
-Não há substituição destrutiva. A revisão pode apontar parse errors, blocos idênticos duplicados, ausência global de `@context`, nós sem `@type`, propriedades genéricas ausentes de `WebPage` quando seus valores já são conhecidos e necessidade de validar propriedades específicas do tipo.
+`searchgeo-console.ini` pode persistir provider, modelo, esforço, timeout e demais parâmetros não sensíveis.
 
-JSON-LD é **opcional/reforço**, não requisito universal GEO nem garantia de rich result. Structured Data deve corresponder ao conteúdo visível.
+API keys e outros secrets **não são gravados no INI**. O console permite inseri-los pelo menu de variáveis, usa entrada sem eco e mostra apenas `[SET]`.
 
-Referências: Google structured data policies/introduction, Schema.org e Google AI optimization guide.
+## AUTO e fallback
 
-## Confidence
+AUTO considera somente:
 
-Confidence do SCORE-GEO-002 é força da conclusão do auditor, não qualidade textual. Confidence de assessment do provider é outra grandeza. Nenhuma delas, sozinha, autoriza reescrita.
+```text
+OpenAI -> DeepSeek -> MiMo
+```
+
+Cada provider mantém sua própria configuração de modelo/esforço. O primeiro resultado válido encerra a cadeia para aquele contexto. Configurações ausentes ou inválidas são excluídas; erro operacional pode colocar o provider em quarantine para a auditoria.
 
 ## Telemetria
 
-`report/ai-usage.html` separa tentativas M18 e M20. Quando disponíveis mostra provider/model, URL/device, status, tokens, duração, custo estimado e erro sanitizado.
+Quando disponível, o SearchGEO persiste por tentativa:
 
-SQLite M18: `ai_audit_sessions`, `ai_provider_attempts`, `provider_pricing_catalog`.
+```text
+provider
+modelo
+reasoning profile
+status
+latência
+tokens input/cache/output/reasoning/total
+custo estimado
+versão de pricing
+diagnóstico sanitizado
+```
 
-SQLite M20: `content_remediation_runs`, `content_remediation_attempts`, `content_remediation_suggestions`, `jsonld_remediation_suggestions`.
-
-`ESTIMATED_COST` não é invoice.
+O custo é estimativa técnica local, não invoice do provider.
 
 ## Segurança
 
-Nunca persistir API key, Authorization ou erro bruto sensível. Presença da variável não prova compatibilidade do plano.
+- nunca copie uma key real para documentação, issue, report ou log;
+- não persista secrets no INI;
+- não reutilize credencial de um provider em outro endpoint;
+- não assuma que key configurada significa crédito disponível;
+- falha de provider não deve ser convertida em finding do website;
+- sugestão textual exige revisão humana antes de publicação.
+
+## Documentos relacionados
+
+- [CONFIGURATION.md](CONFIGURATION.md)
+- [INTERACTIVE_CONSOLE.md](INTERACTIVE_CONSOLE.md)
+- [AI_PROVIDER_EXTENSIONS.md](AI_PROVIDER_EXTENSIONS.md)
+- [PROVIDER_REGISTRY.md](PROVIDER_REGISTRY.md)
+- [OPENAI_PROVIDER_DIAGNOSTICS.md](OPENAI_PROVIDER_DIAGNOSTICS.md)
