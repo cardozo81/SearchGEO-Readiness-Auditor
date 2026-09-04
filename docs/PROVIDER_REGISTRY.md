@@ -1,70 +1,66 @@
-# Registry canônico de providers
+# Provider registry
 
-## Objetivo
+O registry canônico centraliza metadados usados por CLI, console e adapters para evitar listas divergentes de providers, modelos, credenciais e aliases.
 
-`src/searchgeo/provider_registry.py` é a interface canônica para qualquer superfície que precise descobrir providers, aliases, modelos, variáveis de ambiente, elegibilidade de AUTO ou restrições de configuração.
+Arquivo principal:
 
-A regra é deliberada: CLI, console interativo, help, preflight e novas integrações **não devem manter listas próprias de providers**.
+```text
+src/searchgeo/provider_registry.py
+```
 
-## Fontes preservadas
+## Providers concretos
 
-O registry não altera o comportamento homologado:
+```text
+openai
+deepseek
+mimo
+xai
+qwen
+gemini
+anthropic
+```
 
-- M18 continua sendo a fonte normativa de comportamento dos providers legados OpenAI, DeepSeek e MiMo e da cadeia `AUTO`;
-- `provider_extensions.py` continua encapsulando os adapters explicit-only xAI/Grok, Qwen, Gemini e Anthropic/Claude;
-- o registry normaliza essas fontes numa API pública única para consumidores.
+Aliases:
 
-Isso evita duplicar a lista de providers em cada camada sem reabrir o núcleo M18.
-
-## Metadados expostos
-
-Cada `ProviderRegistration` informa:
-
-- `id` canônico;
-- nome técnico e nome de exibição;
-- aliases CLI;
-- variável da API key;
-- variável de model override;
-- variável de endpoint override, quando aplicável;
-- variável e valores de reasoning, quando aplicável;
-- modelos suportados e modelo default;
-- qualification;
-- se é `explicit_only`;
-- se é elegível para `AUTO`;
-- restrições de prefixo de chave quando existentes.
-
-Nenhum valor de credencial é armazenado no registry.
+```text
+grok   -> xai
+claude -> anthropic
+```
 
 ## AUTO
 
-`auto_provider_ids()` deve permanecer:
+A cadeia automática permanece deliberadamente:
 
 ```text
-openai -> deepseek -> mimo
+OpenAI -> DeepSeek -> MiMo
 ```
 
-Providers de extensão permanecem fora de `AUTO` enquanto estiverem em qualificação provisória. Configurar `XAI_API_KEY`, `DASHSCOPE_API_KEY`, `GEMINI_API_KEY` ou `ANTHROPIC_API_KEY` não altera a cadeia AUTO.
+Providers adicionais permanecem `explicit-only` e não entram em AUTO enquanto a qualificação correspondente não for promovida.
 
-## CLI
+## Metadados
 
-`cli_extensions.py` obtém as opções explicit-only por `extension_cli_choices()`. Portanto, a CLI não possui mais uma segunda lista hardcoded dos novos providers.
+Cada registro pode expor:
 
-## Console interativo
-
-Após o merge seguro da expansão de providers, `feature/interactive-execution-console` deve ser sincronizada com `main` e substituir seu `PROVIDERS` hardcoded pelo registry.
-
-O console deverá derivar do registry, no mínimo:
-
-- menu de provider;
+- identificador e nome humano;
+- variável de credencial;
+- modelos suportados;
+- modelo default;
+- variável de modelo;
+- variável/valores de reasoning quando suportados;
+- endpoint override quando aplicável;
 - aliases;
-- disponibilidade por key;
-- modelos/defaults;
-- variáveis de ambiente editáveis;
-- regras de reasoning;
-- restrições específicas como MiMo PAYG `sk-...`;
-- indicação `explicit-only`/`AUTO`;
-- classificação/ajuda de configuração.
+- elegibilidade AUTO;
+- qualificação/reliability;
+- restrição de prefixo de credencial.
 
-## Dependência de timezone no Windows
+## Defaults públicos
 
-O SearchGEO usa `ZoneInfo("America/Sao_Paulo")` nos reports. Windows não fornece necessariamente a base IANA utilizada pelo Python. Por isso `tzdata>=2026.1` é dependência formal do package no `pyproject.toml`; uma instalação limpa com `python -m pip install -e .` deve disponibilizar essa timezone sem instalação manual adicional.
+A política pública atual privilegia o modelo mais simples e o menor esforço suportado quando não há override explícito. Essa política é aplicada acima dos adapters históricos para preservar compatibilidade interna.
+
+## MiMo
+
+O registro expõe a restrição de chave PAYG `sk-...` para impedir que Token Plan `tp-...` seja tratado como credencial compatível pelo adapter atual.
+
+## Fonte de verdade e identificadores históricos
+
+Os adapters e schemas existentes continuam sendo a fonte técnica de comportamento. Nomes internos de módulos/eventos podem preservar identificadores históricos para compatibilidade, mas consumidores públicos devem apresentar nomenclatura funcional.

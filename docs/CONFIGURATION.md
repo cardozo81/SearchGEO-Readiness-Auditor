@@ -1,66 +1,83 @@
-# CONFIGURATION.md
+# Configuração operacional
 
-Configuração operacional do SearchGEO Readiness Auditor.
+O SearchGEO pode ser configurado por CLI, console interativo, arquivo INI do console e variáveis de ambiente. Credenciais permanecem fora do arquivo INI.
 
-## Defaults
+## Prioridade prática
 
-| Configuração | Default |
-|---|---|
-| idioma | `pt-BR` |
-| mercado | `BR` |
-| `--max-pages` | `100` |
-| `--audits-root` | `audits` |
-| `--device-context` | `mobile` |
-| `--ai-provider` | `none` |
-| `--ai-content-remediation` | `false` |
-| timeout IA | `180` s |
-| `--web-performance` | `false` |
-| `--web-performance-max-pages` | `10` |
-| `--web-performance-timeout-seconds` | `60` s |
-| `--web-performance-field-source` | `auto` |
-| `--lighthouse-categories` | `performance,accessibility,best-practices,seo` |
-| `--synthetic-apdex` | `false` |
-| `--apdex-threshold-seconds` | nenhum; obrigatório quando M23 ON |
-| `--apdex-samples-per-context` | `100` quando M23 ON |
-| `--apdex-max-attempts-per-context` | `ceil(1.25 × alvo)` |
-| `--apdex-max-pages` | `1` |
-| `--apdex-timeout-seconds` | `max(45, 4T+5)` |
-| `--apdex-delay-seconds` | `1` s |
-| `--apdex-concurrency` | `1` |
+Para `searchgeo audit`, argumentos CLI explícitos prevalecem sobre defaults de ambiente quando o parâmetro possui equivalente CLI.
 
-## Device context
+Para `searchgeo-console`:
 
-`SEARCHGEO_DEVICE_CONTEXT`: `mobile`, `desktop`, `both`.
+1. o arquivo `searchgeo-console.ini` fornece os parâmetros persistidos não sensíveis;
+2. variáveis de ambiente continuam disponíveis para credenciais e overrides avançados;
+3. alterações feitas no menu valem para a sessão atual;
+4. `S. Salvar configuração INI` persiste apenas o estado não sensível.
 
-Precedência:
+O console nunca grava API keys, tokens, senhas ou credentials no INI.
+
+## Arquivo INI do console
+
+Arquivo padrão:
 
 ```text
-flag CLI -> ambiente -> mobile
+searchgeo-console.ini
 ```
 
-A seleção limita M3 e, por consequência, M7/M20 aos snapshots escolhidos. M21 e M23 também operam somente sobre contextos materializados.
+Se não existir, o console o cria com defaults. O arquivo armazena parâmetros como:
 
-## Antes de configurar IA
+```text
+entrada / arquivo de URLs
+projeto
+idioma / mercado
+max-pages
+raiz de auditorias
+dispositivo
+provider/modelo/esforço de IA
+timeout de IA
+remediação textual
+Web Performance
+WebPerf max-pages
+field source
+timeout PageSpeed/Lighthouse
+categorias Lighthouse
+Synthetic Apdex
+T / samples / attempts / páginas / timeout / delay / concorrência
+```
 
-Não trate “tenho plano/créditos” como “tenho API utilizável”. Valide produto/plano, tipo de credencial, endpoint, saldo/quota/permissão/model access e termos do workload automatizado.
+Não armazena:
 
-| Provider | Aceito | Não confundir |
-|---|---|---|
-| OpenAI | API key da API Platform com billing/quota | ChatGPT/Créditos ChatGPT, billing separado |
-| DeepSeek | DeepSeek API com saldo | chave sem saldo disponível |
-| MiMo | PAYG `sk-...` para `https://api.xiaomimimo.com/v1` | Token Plan `tp-...` com Base URL/créditos separados |
-| xAI | API key xAI compatível | acesso ao produto Grok sem credencial/API compatível |
-| Qwen | DashScope/Model Studio compatível | assinatura de produto final |
-| Gemini | Gemini API key compatível | credenciais Google de outros serviços |
-| Anthropic | Anthropic API key compatível | assinatura Claude |
+```text
+OPENAI_API_KEY
+DEEPSEEK_API_KEY
+MIMO_API_KEY
+XAI_API_KEY
+DASHSCOPE_API_KEY
+GEMINI_API_KEY
+ANTHROPIC_API_KEY
+SEARCHGEO_PAGESPEED_API_KEY
+SEARCHGEO_CRUX_API_KEY
+qualquer variável reconhecida como TOKEN / SECRET / PASSWORD / CREDENTIAL
+```
 
-Detalhes: [AI_GUIDE.md](AI_GUIDE.md) e [AI_PROVIDER_EXTENSIONS.md](AI_PROVIDER_EXTENSIONS.md).
+## Defaults gerais
 
-## Provider registry
+```text
+device                  = mobile
+ai-provider             = none
+ai-content-remediation  = off
+Web Performance         = off
+max-pages               = 100
+WebPerf max-pages       = 10
+Web Performance timeout = 120 s
+language                = pt-BR
+market                  = BR
+audits-root             = audits
+Synthetic Apdex         = off
+```
 
-O registry canônico define providers, aliases, envs, modelos, qualification e elegibilidade AUTO.
+## IA
 
-Providers concretos:
+Providers concretos suportados pelo registry:
 
 ```text
 openai
@@ -85,68 +102,9 @@ AUTO permanece:
 OpenAI -> DeepSeek -> MiMo
 ```
 
-xAI/Qwen/Gemini/Anthropic são `PROVISIONAL`, `explicit-only`, `auto_eligible=false`.
+Providers adicionais permanecem explicit-only até promoção formal de qualificação.
 
-## IA desabilitada
-
-```powershell
-searchgeo audit https://example.com --ai-provider none
-```
-
-Nenhuma chamada de IA externa. JSON-LD determinístico M20 continua disponível. M21 e M23 permanecem OFF por default.
-
-## Providers e modelos
-
-### OpenAI
-
-```powershell
-$env:OPENAI_API_KEY = "<chave-da-API-Platform>"
-searchgeo audit https://example.com --ai-provider openai
-```
-
-Default `gpt-5.6-terra`.
-
-### DeepSeek
-
-```powershell
-$env:DEEPSEEK_API_KEY = "<chave-da-DeepSeek-API>"
-searchgeo audit https://example.com --ai-provider deepseek
-```
-
-Default `deepseek-v4-pro`.
-
-### MiMo
-
-```powershell
-$env:MIMO_API_KEY = "<chave-sk-PAYG>"
-searchgeo audit https://example.com --ai-provider mimo
-```
-
-Default `mimo-v2.5-pro`; adapter PAYG. Não configure Token Plan `tp-...` para esse adapter.
-
-### Extensions explícitas
-
-```powershell
-$env:XAI_API_KEY = "<key>"
-searchgeo audit https://example.com --ai-provider xai
-
-$env:DASHSCOPE_API_KEY = "<key>"
-searchgeo audit https://example.com --ai-provider qwen
-
-$env:GEMINI_API_KEY = "<key>"
-searchgeo audit https://example.com --ai-provider gemini
-
-$env:ANTHROPIC_API_KEY = "<key>"
-searchgeo audit https://example.com --ai-provider anthropic
-```
-
-Esses providers não entram em AUTO enquanto `PROVISIONAL/explicit-only`.
-
-## Isolamento de credenciais
-
-Cada adapter usa exclusivamente a credencial do próprio provider. Uma key não preenche ausência de outra.
-
-IA:
+### Credenciais
 
 ```text
 OPENAI_API_KEY
@@ -158,133 +116,100 @@ GEMINI_API_KEY
 ANTHROPIC_API_KEY
 ```
 
-M21:
+A existência da variável não garante saldo, quota, plano compatível ou acesso ao modelo.
+
+### Modelos defaults públicos
+
+Quando não há override explícito, o SearchGEO privilegia o modelo mais simples disponível na integração atual:
 
 ```text
+OPENAI     gpt-5.6-luna
+DEEPSEEK   deepseek-v4-flash
+MIMO       mimo-v2.5
+XAI        grok-4.6
+QWEN       qwen3.8-flash
+GEMINI     gemini-3.8-flash
+ANTHROPIC  claude-sonnet-5
+```
+
+Os demais modelos declarados pelo registry continuam selecionáveis quando suportados pela conta/provider.
+
+### Esforço / profundidade
+
+Default público: menor nível efetivamente suportado pelo adapter/modelo.
+
+```text
+OPENAI     NONE
+DEEPSEEK   NONE
+MIMO       NONE
+XAI        LOW
+QWEN       PROVIDER_DEFAULT
+GEMINI     LOW
+ANTHROPIC  LOW
+```
+
+Variáveis existentes ou adicionadas pelo adapter continuam sendo respeitadas como overrides. O console expõe o esforço diretamente na opção 4 quando há controle validado para aquele provider.
+
+Qwen permanece `PROVIDER_DEFAULT` porque o adapter atual não expõe um controle de reasoning validado.
+
+### Timeout de IA
+
+```text
+SEARCHGEO_AI_TIMEOUT_SECONDS
+```
+
+Default público:
+
+```text
+180 s por tentativa
+```
+
+O timeout limita uma tentativa contra o provider. Não encerra a auditoria inteira.
+
+## Remediação textual por IA
+
+A remediação textual é OFF por padrão e só pode ser habilitada quando existe provider de IA apto.
+
+```text
+SEARCHGEO_AI_CONTENT_REMEDIATION
+```
+
+No console, a opção 5 informa explicitamente que depende da configuração da opção 4.
+
+## Web Performance, Lighthouse e CrUX
+
+```text
+SEARCHGEO_WEB_PERFORMANCE
+SEARCHGEO_WEB_PERFORMANCE_MAX_PAGES
+SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS
+SEARCHGEO_WEB_PERFORMANCE_FIELD_SOURCE
+SEARCHGEO_LIGHTHOUSE_CATEGORIES
 SEARCHGEO_PAGESPEED_API_KEY
 SEARCHGEO_CRUX_API_KEY
 ```
 
-M23 não exige API key própria.
-
-As chaves Google M21 não são credenciais de IA. Consulte [GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md).
-
-## Modelos
-
-```text
-OPENAI:    gpt-5.6-sol | gpt-5.6-terra | gpt-5.6-luna
-DEEPSEEK:  deepseek-v4-pro | deepseek-v4-flash
-MIMO:      mimo-v2.5-pro | mimo-v2.5
-XAI:       grok-4.6
-QWEN:      qwen3.8-max | qwen3.8-flash
-GEMINI:    gemini-3.8-flash
-ANTHROPIC: claude-sonnet-5
-```
-
-Model ID aceito não garante acesso da conta/plano.
-
-## Timeout IA
-
-`SEARCHGEO_AI_TIMEOUT_SECONDS`, default `180` s, número finito > 0. Sem retry automático. M20 reutiliza o timeout do provider.
-
-Esse timeout é independente de M21 e M23.
-
-## M20 textual
-
-`SEARCHGEO_AI_CONTENT_REMEDIATION`, default `false`; aceita `true/false`, `1/0`, `yes/no`, `on/off`.
-
-Precedência:
-
-```text
---ai-content-remediation / --no-ai-content-remediation
--> SEARCHGEO_AI_CONTENT_REMEDIATION
--> false
-```
-
-M20:
-
-- roda depois de findings/scoring;
-- não altera RuleExecution/Finding/Score/Coverage/Confidence;
-- não é disparado por Confidence LOW isolado;
-- usa apenas findings contentuais/semânticos elegíveis + evidências;
-- exige revisão humana;
-- não aplica/publica texto;
-- reutiliza provider/model/timeout e respeita quarantine.
-
-## JSON-LD
-
-Para cada snapshot auditado, M20 revisa Structured Data. Se ausente, pode propor `WebPage` com URL, idioma, title e description observados/persistidos. Se existente, aponta problemas verificáveis sem reescrever destrutivamente o graph.
-
-JSON-LD é opcional/reforço, não requisito universal GEO nem garantia de rich result.
-
-## M21 — Core Web Vitals e Lighthouse
-
-M21 é **evidência externa complementar** e não recalcula `SCORE-GEO-002`.
-
-Default:
-
-```text
-SEARCHGEO_WEB_PERFORMANCE=false
-```
-
-Ativação:
-
-```powershell
-searchgeo audit https://example.com --web-performance
-```
-
-Precedência:
-
-1. `--web-performance` / `--no-web-performance`;
-2. `SEARCHGEO_WEB_PERFORMANCE`;
-3. `false`.
-
-### Limite de páginas
-
-```text
-SEARCHGEO_WEB_PERFORMANCE_MAX_PAGES
-```
-
-Default `10`; `0` significa todas as páginas auditadas.
-
 ### Timeout
 
-```text
-SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS
-```
-
-Default `60` s por request externo; número finito > 0; sem retry automático.
-
-### Lighthouse categories
+Default operacional:
 
 ```text
-SEARCHGEO_LIGHTHOUSE_CATEGORIES
+SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS=120
 ```
 
-Valores suportados:
+Também pode ser configurado diretamente na opção 6 do console.
 
-```text
-performance
-accessibility
-best-practices
-seo
-```
+O valor é o limite de espera do cliente SearchGEO pela resposta externa PageSpeed/CrUX. A chamada PageSpeed executa Lighthouse remotamente; o endpoint usado pelo SearchGEO não fornece um parâmetro separado para configurar o timeout interno de carregamento da página dentro do Lighthouse.
 
-### PageSpeed / CrUX
+Um timeout PageSpeed pode deixar:
 
-PageSpeed key opcional:
+- Lighthouse lab indisponível;
+- Acessibilidade automatizada indisponível, pois usa a categoria `accessibility` do mesmo artifact;
+- CrUX direto ainda disponível quando configurado e bem-sucedido;
+- status de Web Performance `PARTIAL` em vez de fabricar dados ausentes.
 
-```powershell
-$env:SEARCHGEO_PAGESPEED_API_KEY = "<google-api-key>"
-```
+### Field source
 
-CrUX direto:
-
-```powershell
-$env:SEARCHGEO_CRUX_API_KEY = "<google-api-key>"
-```
-
-Fonte de field data:
+Valores:
 
 ```text
 auto
@@ -293,71 +218,21 @@ crux
 none
 ```
 
-`crux` exige `SEARCHGEO_CRUX_API_KEY`.
+`crux` direto exige `SEARCHGEO_CRUX_API_KEY`.
 
-### Status M21
+### Categorias Lighthouse
 
-```text
-DISABLED
-NO_CONTEXTS
-SUCCESS
-PARTIAL
-UNAVAILABLE
-```
-
-Esses estados qualificam a coleta; não são Finding e não alteram `SCORE-GEO-002`.
-
-### Core Web Vitals
+Default:
 
 ```text
-LCP <= 2500 ms
-INP <= 200 ms
-CLS <= 0.10
+performance,accessibility,best-practices,seo
 ```
 
-Estados:
+A ausência de uma categoria configurada deve aparecer como **não solicitada**, não como falha do website.
 
-```text
-PASS
-FAIL
-INCOMPLETE
-UNAVAILABLE
-```
+## Synthetic Apdex
 
-Ausência de amostra não vira `FAIL`.
-
-## M22 — domínios separados
-
-M22 reutiliza artifacts M21 para projetar:
-
-- `accessibility.html`;
-- diagnósticos técnicos em `web-performance.html`.
-
-M22 não faz segunda chamada Google, não inventa selector/snippet ausente e não declara conformidade WCAG com base apenas em Lighthouse.
-
-M22 também não calcula Apdex a partir de Lighthouse/CrUX. Após M23, essa fronteira continua válida: Apdex é calculado somente pelo domínio M23 quando explicitamente habilitado.
-
-## M23 — Synthetic Navigation Apdex
-
-M23 é default OFF e mede repetidamente uma Task explícita de navegação em Chromium.
-
-### Ativação
-
-```powershell
-searchgeo audit https://example.com `
-  --synthetic-apdex `
-  --apdex-threshold-seconds 1.5
-```
-
-`T` é obrigatório quando M23 está ON.
-
-Precedência:
-
-```text
-CLI -> ambiente -> defaults
-```
-
-### Variáveis
+Variáveis:
 
 ```text
 SEARCHGEO_SYNTHETIC_APDEX
@@ -370,103 +245,52 @@ SEARCHGEO_APDEX_DELAY_SECONDS
 SEARCHGEO_APDEX_CONCURRENCY
 ```
 
-### Defaults e validação
-
-| Item | Default | Validação |
-|---|---:|---|
-| enabled | OFF | opt-in |
-| `T` | nenhum | > 0 e explícito |
-| amostras válidas/contexto | `100` | >= 1 |
-| max attempts | `ceil(1.25 × alvo)` | >= alvo |
-| max pages | `1` | >= 0; `0` = todas |
-| timeout | `max(45, 4T+5)` | estritamente > `4T` |
-| delay | `1` s | >= 0 |
-| concurrency | `1` | 1–2 |
-
-### Task e profiles
+Quando habilitado:
 
 ```text
-NAVIGATION_LOAD
-início = imediatamente antes de page.goto
-fim    = conclusão de wait_until=load
+T                      = obrigatório
+amostras válidas       = 100
+máximo de tentativas   = ceil(1.25 × alvo)
+máximo de páginas      = 1
+timeout por navegação  = max(45 s, 4T + 5 s)
+delay                  = 1 s
+concorrência           = 1; máximo 2
 ```
 
-Cada amostra usa BrowserContext novo, cache desabilitado e profile CPU/rede determinístico/versionado.
+O timeout do Synthetic Apdex é distinto do timeout PageSpeed e do timeout de IA.
 
-### Fórmula
+## Dispositivo
 
 ```text
-Apdex = (Satisfied + 0.5 × Tolerating) / Total de amostras válidas
-
-Satisfied  <= T
-Tolerating > T e <= 4T
-Frustrated > 4T
+SEARCHGEO_DEVICE_CONTEXT
 ```
 
-Timeout/erro de navegação ou erro de aplicação/servidor é `FRUSTRATED` quando o profile foi aplicado. Falha da ferramenta/profile é amostra inválida fora do denominador.
-
-### Small group
-
-Grupo normal: >= 100 amostras válidas por URL/device. Grupos de 1–99 recebem `*` e são diagnósticos de grupo pequeno.
-
-Um smoke 5/5 pode terminar `PARTIAL` por small group sem significar falha operacional.
-
-### Carga e custo
-
-M23 produz:
+Valores:
 
 ```text
-0 chamadas LLM adicionais
-0 tokens IA
-0 chamadas PageSpeed/CrUX adicionais
+mobile
+desktop
+both
 ```
 
-Não há API paga própria no contrato atual. Porém há consumo local de CPU/RAM/tempo e **tráfego HTTP real contra o alvo**. Cada navegação pode carregar muitos subrecursos.
+Default: `mobile`.
 
-Antes de run de 100 amostras em produção, valide autorização, capacidade e janela operacional.
+## Segurança
 
-Detalhes: [SYNTHETIC_APDEX.md](SYNTHETIC_APDEX.md).
+- use variáveis de ambiente ou secret manager apropriado para credenciais;
+- o console permite inserir/remover credenciais, mas não as persiste no INI;
+- secrets são mascarados como `[SET]`;
+- logs e relatórios não devem registrar valores de segredo;
+- não assuma que uma credencial configurada implica crédito/quota.
 
-## Log operacional persistente
+## Identificadores internos
 
-Cada workspace pode materializar:
+Tabelas, eventos, módulos e documentação normativa podem manter identificadores históricos para compatibilidade e rastreabilidade. A documentação operacional e a interface pública devem preferir nomes funcionais como **Web Performance**, **Acessibilidade**, **Remediação textual** e **Synthetic Apdex**.
 
-```text
-audits/<AUD-ID>/logs/audit.log
-```
+## Documentos relacionados
 
-JSONL sanitizado e fail-open. Pode registrar ciclo principal, tentativas M21 e progresso M23. Chaves, Authorization headers, tokens e passwords não podem ser registrados.
-
-## Provider sem credencial
-
-Provider explícito sem key fica `NOT_CONFIGURED` e não chama API. AUTO exclui provider sem key. Extensions sem key ficam indisponíveis e não entram em AUTO.
-
-Credencial de produto incompatível não deve ser considerada operacionalmente válida só porque a variável existe.
-
-## Report
-
-```text
-report/
-├─ index.html
-├─ mobile.html
-├─ desktop.html
-├─ remediation.html
-├─ content-suggestions.html
-├─ accessibility.html
-├─ web-performance.html
-├─ apdex.html              # quando M23 materializado
-├─ ai-usage.html
-├─ references.html
-└─ css/site.css
-```
-
-- `web-performance.html`: M21/M22;
-- `accessibility.html`: M22;
-- `apdex.html`: M23;
-- `ai-usage.html`: M18/M20.
-
-## Fora do contrato público
-
-Sem web/backend, banco remoto, Docker daemon, execução distribuída, retry automático, publicação automática de conteúdo, criação automática de JSON-LD no website ou MiMo Token Plan `tp-...` no adapter PAYG atual.
-
-M23 não é RUM/APM de usuários reais e não deve ser apresentado como experiência real de produção. Para Apdex de usuários reais é necessária telemetria de aplicação/RUM/APM adequada.
+- [INTERACTIVE_CONSOLE.md](INTERACTIVE_CONSOLE.md)
+- [CLI_REFERENCE.md](CLI_REFERENCE.md)
+- [AI_GUIDE.md](AI_GUIDE.md)
+- [GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md)
+- [SYNTHETIC_APDEX.md](SYNTHETIC_APDEX.md)

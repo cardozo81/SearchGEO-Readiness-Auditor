@@ -1,103 +1,83 @@
-# INSTALLATION.md
+# Instalação
 
 ## Requisitos
 
-Windows/PowerShell, CPython 3.13.x, pip, filesystem local, Playwright `>=1.57,<2`, Chromium e HTTP/HTTPS. Egress adicional só é necessário para IA externa.
+- Windows/PowerShell como alvo operacional principal;
+- CPython `>=3.13,<3.14`;
+- pip;
+- filesystem local;
+- Playwright `>=1.57,<2`;
+- Chromium;
+- acesso HTTP/HTTPS às URLs auditadas;
+- egress adicional somente para integrações externas efetivamente habilitadas.
 
 ## Instalar
 
 ```powershell
+cd C:\IA-PROJETOS\github\SearchGEO-Readiness-Auditor
 py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
 python -m pip install -e .
 python -m playwright install chromium
 ```
 
-## Validar
+Validar:
 
 ```powershell
-python --version
 searchgeo --version
 searchgeo audit --help
+searchgeo-console
 ```
 
-## Primeiro smoke — Mobile, sem IA
+## Execução mínima
 
 ```powershell
-searchgeo audit https://example.com --project "Smoke" --max-pages 1
-```
-
-Esperado: `Contexto de dispositivo: MOBILE`, M20 textual `DESABILITADAS`, `report/index.html`, `report/mobile.html`, `report/remediation.html`, `report/content-suggestions.html`, `report/ai-usage.html`, `report/references.html` e `report/css/site.css`.
-
-`content-suggestions.html` deve existir mesmo sem IA porque a revisão JSON-LD é determinística.
-
-## IA opcional
-
-Antes de configurar credencial, valide produto/plano em [AI_GUIDE.md](AI_GUIDE.md).
-
-```powershell
-$env:OPENAI_API_KEY = "<chave-da-API-Platform>"
-searchgeo audit https://example.com --max-pages 1 --ai-provider openai
-```
-
-```powershell
-$env:DEEPSEEK_API_KEY = "<chave-da-DeepSeek-API>"
-searchgeo audit https://example.com --max-pages 1 --ai-provider deepseek
-```
-
-```powershell
-$env:MIMO_API_KEY = "<chave-sk-PAYG>"
-searchgeo audit https://example.com --max-pages 1 --ai-provider mimo
-```
-
-Não use MiMo Token Plan `tp-...`.
-
-## M20 textual
-
-```powershell
-$env:OPENAI_API_KEY = "<chave-da-API-Platform>"
 searchgeo audit https://example.com `
+  --project "Smoke" `
   --max-pages 1 `
-  --ai-provider openai `
-  --ai-content-remediation
+  --device-context mobile `
+  --ai-provider none `
+  --no-ai-content-remediation `
+  --no-web-performance
 ```
 
-A saída é advisory e exige revisão humana.
+A execução deve gerar `audit.db`, `logs/audit.log` e o mini-site em `report/`.
 
-## Timeout
+## Console interativo
 
 ```powershell
-$env:SEARCHGEO_AI_TIMEOUT_SECONDS = "240"
+searchgeo-console
 ```
 
-Default 180 s.
+Na primeira abertura, o console cria `searchgeo-console.ini` com defaults não sensíveis. O arquivo é ignorado pelo Git e não armazena API keys/tokens.
 
-## Dependências ausentes
+## Integrações opcionais
 
-Playwright package:
+Para IA, configure somente as credenciais dos providers que pretende usar. Não é obrigatório configurar todos.
+
+Para PageSpeed/CrUX, use as variáveis descritas em [GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md).
+
+## Atualização da instalação editável
+
+Após atualizar o repositório:
 
 ```powershell
-python -m pip install "playwright>=1.57,<2"
+git fetch origin --prune
+git switch main
+git pull --ff-only origin main
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e .
+python -m playwright install chromium
 ```
 
-Chromium:
+## Diagnóstico
+
+Se `searchgeo` não for reconhecido, confirme que a `.venv` está ativada e repita `python -m pip install -e .`.
+
+Se Chromium estiver ausente:
 
 ```powershell
 python -m playwright install chromium
 ```
 
-Linux CI:
-
-```bash
-python -m playwright install --with-deps chromium
-```
-
-## Suíte
-
-```powershell
-python -m compileall -q src tests
-python -m unittest discover -s tests -v
-```
-
-O projeto não requer Docker, database server, web server, daemon nem SDK específico de provider.
+Consulte [TROUBLESHOOTING.md](TROUBLESHOOTING.md) para falhas de provider, PageSpeed/Lighthouse, CrUX e artifacts.

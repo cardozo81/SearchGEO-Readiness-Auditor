@@ -1,41 +1,60 @@
-# Synthetic Apdex — M23
+# Synthetic Navigation Apdex
 
-Guia operacional do `Synthetic Navigation Apdex` do SearchGEO.
+Guia operacional do Synthetic Navigation Apdex do SearchGEO.
 
-> M23 é **default OFF**. Ele não altera `SCORE-GEO-002`, findings GEO, Coverage ou Confidence. O índice mede uma Task sintética de navegação e não deve ser confundido com RUM/APM de usuários reais.
+> A funcionalidade é **default OFF**. Ela não altera `SCORE-GEO-002`, findings GEO, Coverage ou Confidence. O índice mede uma Task sintética de navegação e não deve ser confundido com RUM/APM de usuários reais.
 
-## Execução mínima
+## Fórmula
 
-O threshold `T` é obrigatório quando M23 está habilitado:
+```text
+Apdex = (Satisfied + 0.5 × Tolerating) / Total de amostras válidas
 
-```powershell
-searchgeo audit https://example.com `
-  --ai-provider none `
-  --synthetic-apdex `
-  --apdex-threshold-seconds 1.5 `
-  --apdex-samples-per-context 5 `
-  --apdex-max-attempts-per-context 7 `
-  --apdex-max-pages 1 `
-  --apdex-delay-seconds 1 `
-  --apdex-concurrency 1
+Satisfied  <= T
+Tolerating > T e <= 4T
+Frustrated > 4T
 ```
 
-Esse exemplo usa somente cinco amostras válidas por contexto e, portanto, gera um **small group `*`**. Ele é apropriado para smoke funcional controlado; não é o grupo final normal de 100 amostras.
+`T` é configurado explicitamente pelo usuário.
 
-## Parâmetros
+## Task medida
 
-| Parâmetro | Default quando M23 ON | Regra |
-|---|---:|---|
-| `--synthetic-apdex` | OFF | habilita M23 |
-| `--apdex-threshold-seconds` | nenhum | `T` obrigatório, número > 0 |
-| `--apdex-samples-per-context` | `100` | alvo de amostras válidas por URL/device |
-| `--apdex-max-attempts-per-context` | `ceil(1.25 × alvo)` | deve ser >= alvo |
-| `--apdex-max-pages` | `1` | `0` significa todas as páginas auditadas |
-| `--apdex-timeout-seconds` | `max(45, 4T+5)` | deve ser estritamente > `4T` |
-| `--apdex-delay-seconds` | `1` | intervalo mínimo entre inícios; >= 0 |
-| `--apdex-concurrency` | `1` | máximo `2` |
+Cada amostra executa uma navegação real em Chromium até o evento de load previsto pela implementação, usando perfil sintético controlado, BrowserContext novo e cache desabilitado.
 
-Variáveis equivalentes:
+Uma amostra pode ser:
+
+- `SATISFIED`;
+- `TOLERATING`;
+- `FRUSTRATED`;
+- inválida/excluída quando a ferramenta/profile não conseguiu produzir uma medição válida.
+
+Timeout ou erro de navegação/aplicação conta como Frustrated quando o profile foi efetivamente aplicado e a amostra é observável como execução válida.
+
+## Grupos
+
+Default normal:
+
+```text
+100 amostras válidas por URL/device
+```
+
+Grupos entre 1 e 99 amostras válidas são diagnóstico small-group e recebem marcador `*`. O objetivo é impedir que um smoke curto pareça uma baseline final.
+
+## Configuração
+
+CLI:
+
+```text
+--synthetic-apdex
+--apdex-threshold-seconds
+--apdex-samples-per-context
+--apdex-max-attempts-per-context
+--apdex-max-pages
+--apdex-timeout-seconds
+--apdex-delay-seconds
+--apdex-concurrency
+```
+
+Variáveis:
 
 ```text
 SEARCHGEO_SYNTHETIC_APDEX
@@ -48,113 +67,77 @@ SEARCHGEO_APDEX_DELAY_SECONDS
 SEARCHGEO_APDEX_CONCURRENCY
 ```
 
-Precedência: CLI > ambiente > defaults.
-
-## Fórmula
+Defaults quando habilitado:
 
 ```text
-Apdex = (Satisfied + 0.5 × Tolerating) / Total de amostras válidas
-
-Satisfied  <= T
-Tolerating > T e <= 4T
-Frustrated > 4T
+T                      = obrigatório
+amostras válidas       = 100
+max attempts           = ceil(1.25 × alvo)
+max pages              = 1
+timeout por navegação  = max(45 s, 4T + 5 s)
+delay                   = 1 s
+concorrência            = 1; máximo 2
 ```
-
-Timeout/erro de navegação ou erro de aplicação/servidor é `FRUSTRATED` quando o profile sintético foi efetivamente aplicado. Falha do browser/ferramenta ao materializar o profile é amostra inválida e fica fora do denominador.
-
-## Task e cache
-
-Task medida:
-
-```text
-NAVIGATION_LOAD
-início: imediatamente antes de page.goto
-fim: conclusão de wait_until=load
-```
-
-Cada amostra usa BrowserContext novo e cache do browser desabilitado. Profiles de CPU/rede são determinísticos e versionados para favorecer reprodutibilidade.
-
-## Carga e custo
-
-M23 produz:
-
-- `0` chamadas LLM adicionais;
-- `0` chamadas PageSpeed/CrUX adicionais;
-- `0` tokens de IA;
-- nenhum preço de API próprio conhecido.
-
-Entretanto, produz **tráfego HTTP real contra o site** e consumo local de CPU/RAM/tempo. Uma navegação pode carregar dezenas ou centenas de subrecursos, portanto 100 amostras não significam apenas 100 requests.
-
-Antes de um run de 100 amostras em produção, valide autorização, capacidade e janela operacional do alvo.
 
 ## Console interativo
 
-`searchgeo-console` possui o item:
+Item:
 
 ```text
-11. Synthetic Apdex M23
+11. Synthetic Apdex
 ```
 
-O console mostra separadamente:
+O console explica a finalidade de cada valor antes da entrada e mostra a carga máxima projetada em quantidade de navegações iniciadas.
 
-- exposição financeira de IA/M21;
-- carga sintética potencial M23;
-- `T`;
-- alvo de válidas;
-- máximo de tentativas;
-- páginas;
-- timeout;
-- delay;
-- concorrência;
-- navegações reais persistidas no resumo final.
+O timeout de Apdex é independente do timeout de IA e do timeout PageSpeed/Lighthouse.
 
-M23 não muda a faixa `NENHUM/BAIXO/MÉDIO/ALTO/EXCESSIVO` de custo financeiro porque essa faixa não representa CPU local/tráfego do alvo.
+## Carga operacional
 
-## Report
+Synthetic Apdex não possui API paga própria e não chama LLM/PageSpeed/CrUX, mas gera:
 
-Quando habilitado, M23 materializa:
+- CPU/tempo local;
+- Chromium;
+- tráfego HTTP real contra a URL alvo;
+- múltiplos requests de subrecursos por navegação.
+
+Não interprete `100 amostras` como `100 requests HTTP`. Cada navegação pode carregar muitos recursos.
+
+Para smoke, prefira 1 URL, 1 device, 3–5 amostras, concorrência 1 e alvo controlado. Não execute volume relevante contra produção sem autorização.
+
+## Persistência
+
+Dados são persistidos em tabelas dedicadas e o relatório é materializado em:
 
 ```text
 report/apdex.html
 ```
 
-A página apresenta Apdex, S/T/F, distribuição, p75/p90/p95/p99, estabilidade/tendência, profile sintético, host executor e rastreabilidade Lighthouse quando `lighthouseResult.configSettings` estiver disponível em artifacts M21.
-
-O menu inclui `Apdex` somente quando `apdex.html` existe.
+Os identificadores internos históricos de tabela/evento podem permanecer por compatibilidade de schema; a UI e a documentação operacional usam nomenclatura funcional.
 
 ## Relação com Lighthouse e CrUX
 
-M23 não calcula Apdex a partir de Lighthouse/CrUX. Quando M21 já coletou um artifact PageSpeed, M23 apenas extrai e persiste a configuração efetiva Lighthouse para comparação auditável. Campos ausentes não são inferidos.
-
-O tempo total do Lighthouse não entra na fórmula Apdex.
-
-## Smoke recomendado
-
-Primeiro smoke humano:
+Apdex não é inferido de:
 
 ```text
-1 URL autorizada
-mobile
-T explícito
-3–5 amostras válidas
-max attempts = 5–7
-max pages = 1
-delay >= 1 s
-concurrency = 1
-IA = none
+LCP
+INP
+CLS
+FCP
+TBT
+Speed Index
+duração da chamada PageSpeed
 ```
 
-Esperado:
+Lighthouse/CrUX e Synthetic Apdex medem fenômenos distintos e permanecem em páginas separadas do report.
 
-- audit principal conclui;
-- M23 `PARTIAL` por small group, não por erro;
-- `small_group=*` visível;
-- `audit.db` contém samples/summaries;
-- `report/apdex.html` existe;
-- menu consistente em todas as páginas;
-- Score GEO permanece idêntico ao audit sem M23;
-- nenhuma chamada LLM/PageSpeed/CrUX causada por M23.
+## Rastreamento de Lighthouse
 
-## Referência normativa
+Quando um artifact Lighthouse existe, o SearchGEO pode extrair metadados de perfil para rastreabilidade. Ausência do artifact não invalida as navegações Synthetic Apdex; apenas impede essa comparação documental.
 
-Consulte `docs/specification/23_SYNTHETIC_APDEX_LIGHTHOUSE_TRACEABILITY.md`.
+## Segurança metodológica
+
+- falha de ferramenta fica fora do denominador quando não há amostra válida;
+- erro observável da aplicação/navegação não é mascarado como falha da ferramenta;
+- grupo pequeno é marcado explicitamente;
+- nenhum resultado é adicionado matematicamente ao Score GEO;
+- não há promessa de experiência real de usuários finais.
