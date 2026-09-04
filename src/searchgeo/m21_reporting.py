@@ -9,6 +9,7 @@ import sqlite3
 from typing import Any
 
 from searchgeo.persistence import AuditWorkspace
+from searchgeo.report_navigation import normalize_report_navigation, render_report_navigation
 
 PERFORMANCE_FILE = "web-performance.html"
 
@@ -32,13 +33,13 @@ def enrich_m21_report_site(*, audit_id: str, workspace: AuditWorkspace) -> Path:
         if html_path.name == PERFORMANCE_FILE:
             continue
         html = html_path.read_text(encoding="utf-8")
-        if f"href='{PERFORMANCE_FILE}'" not in html and f'href="{PERFORMANCE_FILE}"' not in html:
-            html = html.replace("</nav>", f"<a href='{PERFORMANCE_FILE}'>Web Performance</a></nav>", 1)
         if html_path.name == "index.html" and "m21-performance-summary" not in html:
             html = html.replace("</header>", "</header>" + _index_summary(data), 1)
         if html_path.name == "references.html" and "m21-performance-methodology" not in html:
             html = html.replace("</main>", _references_section() + "</main>", 1)
         html_path.write_text(html, encoding="utf-8", newline="\n")
+
+    normalize_report_navigation(report_dir)
     return path
 
 
@@ -122,12 +123,7 @@ def _references_section() -> str:
 
 
 def _nav(report_dir: Path) -> str:
-    links = [("Visão geral", "index.html")]
-    if (report_dir / "mobile.html").is_file(): links.append(("Relatório Mobile", "mobile.html"))
-    if (report_dir / "desktop.html").is_file(): links.append(("Relatório Desktop", "desktop.html"))
-    links.extend([("Remediações", "remediation.html"), ("Conteúdo e JSON-LD", "content-suggestions.html"), ("Web Performance", PERFORMANCE_FILE), ("Uso de IA", "ai-usage.html"), ("Referências e metodologia", "references.html")])
-    rendered = "".join(f"<a class='{'active' if filename == PERFORMANCE_FILE else ''}' href='{filename}'>{escape(label)}</a>" for label, filename in links if (report_dir / filename).is_file() or filename == PERFORMANCE_FILE)
-    return f"<aside class='app-nav' aria-label='Navegação do relatório'><div class='brand'><small>SearchGEO Auditor</small><strong>Relatório da auditoria</strong></div><nav>{rendered}</nav></aside>"
+    return render_report_navigation(report_dir, PERFORMANCE_FILE)
 
 
 def _cwv_explanation(row: sqlite3.Row) -> str:
