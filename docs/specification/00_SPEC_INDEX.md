@@ -1,6 +1,6 @@
 # SearchGEO Readiness Auditor — Specification Index
 
-**Status:** APPROVED BASELINE + M14/M15/M16/M17/M18/M20/M21/M22 + SCORE-GEO-002 + REPORT-SITE-GEO-001  
+**Status:** APPROVED BASELINE + M14/M15/M16/M17/M18/M20/M21/M22 + M23 CANDIDATE + SCORE-GEO-002 + REPORT-SITE-GEO-001  
 **Baseline:** MVP Functional Specification  
 **Idioma normativo:** Português, preservando identificadores e termos técnicos quando necessário.
 
@@ -37,6 +37,7 @@ Os documentos presentes neste diretório prevalecem sobre interpretações infor
 21. `20_AI_CONTENT_REMEDIATION.md`
 22. `21_EXTERNAL_WEB_PERFORMANCE_EVIDENCE.md`
 23. `22_DOMAIN_SEPARATED_WEB_QUALITY_DIAGNOSTICS.md`
+24. `23_SYNTHETIC_APDEX_LIGHTHOUSE_TRACEABILITY.md`
 
 ## 3. Precedência documental
 
@@ -74,16 +75,16 @@ Score, Coverage, Confidence, Consolidation, aplicabilidade e agregações. Basel
 Severity, Impact, Effort, Confidence e Priority.
 
 ### `07_FUNCTIONAL_REQUIREMENTS.md`
-Requisitos `FR-GEO-*` e `NFR-GEO-*`. Inclui device context, report site, contrato M20 de remediação opcional, expansão M21 de evidência externa de Web Performance e fronteiras de domínio formalizadas pelo M22.
+Requisitos `FR-GEO-*` e `NFR-GEO-*`. Inclui device context, report site, contrato M20 de remediação opcional, expansão M21 de evidência externa de Web Performance, fronteiras M22 e medição sintética M23 sem alterar scoring GEO.
 
 ### `08_TECHNICAL_ARCHITECTURE.md`
-Arquitetura local/modular, seleção de dispositivo, finalização do report site, etapa M20 downstream de scoring/findings, enriquecimento M21 externo não-scoring e projeção M22 sem chamada externa adicional.
+Arquitetura local/modular, seleção de dispositivo, finalização do report site, etapa M20 downstream de scoring/findings, enriquecimento M21 externo não-scoring, projeção M22 e camada M23 de Synthetic Navigation Apdex/rastreabilidade Lighthouse.
 
 ### `09_IMPLEMENTATION_PLAN.md`
 Baseline de marcos e evoluções formalizadas. Quando descrição histórica de output conflitar com `FR-GEO-046`/REPORT-SITE-GEO-001, prevalece o contrato final `report/`.
 
 ### `10_DECISIONS.md`
-Decisões humanas consolidadas e pendências corporativas. D-037 formaliza `SCORE-GEO-002`; M21/M22 não o substituem nem recalibram implicitamente.
+Decisões humanas consolidadas e pendências corporativas. D-037 formaliza `SCORE-GEO-002`; M21/M22/M23 não o substituem nem recalibram implicitamente.
 
 ### `11_REPORTING_LANGUAGE_GLOSSARY.md`
 Linguagem e apresentação do relatório.
@@ -121,9 +122,12 @@ M21: coleta opcional e controlada de Lighthouse via PageSpeed Insights e Core We
 ### `22_DOMAIN_SEPARATED_WEB_QUALITY_DIAGNOSTICS.md`
 M22: projeção separada de Acessibilidade e Web Performance a partir dos artifacts M21, `report/accessibility.html`, diagnóstico de recursos/primeira renderização, regra de não inferência de Apdex e zero alteração do Score GEO.
 
+### `23_SYNTHETIC_APDEX_LIGHTHOUSE_TRACEABILITY.md`
+M23 candidate: Synthetic Navigation Apdex com Task/`T`/amostras explícitas, profiles determinísticos, pacing/concorrência limitados, `report/apdex.html`, rastreabilidade de `lighthouseResult.configSettings` e separação rígida de `SCORE-GEO-002`.
+
 ## 5. REPORT-SITE-GEO-001
 
-A evolução de apresentação está formalizada por `FR-GEO-046`, `FR-GEO-047`, `FR-GEO-063`, `FR-GEO-070`, `FR-GEO-073..079` e pelos requisitos M20/M21/M22, além de `08_TECHNICAL_ARCHITECTURE.md`, `15_ERROR_CENTRIC_REPORT_UX.md`, `20_AI_CONTENT_REMEDIATION.md`, `21_EXTERNAL_WEB_PERFORMANCE_EVIDENCE.md` e `22_DOMAIN_SEPARATED_WEB_QUALITY_DIAGNOSTICS.md`.
+A evolução de apresentação está formalizada pelos requisitos de report site e pelos marcos M20/M21/M22/M23. O contrato final continua condicional por existência do arquivo.
 
 Contrato público:
 
@@ -133,8 +137,9 @@ Contrato público:
 <AUD-ID>/report/desktop.html             # condicional
 <AUD-ID>/report/remediation.html
 <AUD-ID>/report/content-suggestions.html
-<AUD-ID>/report/accessibility.html
+<AUD-ID>/report/accessibility.html       # M22
 <AUD-ID>/report/web-performance.html
+<AUD-ID>/report/apdex.html               # condicional; M23 habilitado
 <AUD-ID>/report/ai-usage.html
 <AUD-ID>/report/references.html
 <AUD-ID>/report/css/site.css
@@ -152,13 +157,15 @@ Structured Data/JSON-LD é reforço opcional, não requisito universal de GEO. Q
 
 M21 introduz métricas externas documentadas para fenômenos específicos. Lighthouse e Core Web Vitals não devem ser apresentados como homologação do `SCORE-GEO-002`, nem combinados silenciosamente com ele. `SCORE-GEO-002` permanece índice interno heurístico/reprodutível; M21 permanece evidência externa complementar.
 
-M22 mantém Acessibilidade e Web Performance como domínios independentes do GEO. Acessibilidade automatizada Lighthouse não equivale a conformidade WCAG. Apdex não é inferido de Lighthouse/CrUX sem população de tempos de resposta transacionais e threshold `T` explícito.
+M22 mantém Acessibilidade e Web Performance como domínios independentes do GEO. Acessibilidade automatizada Lighthouse não equivale a conformidade WCAG.
+
+M23 resolve a lacuna de Apdex sem inferi-lo de Lighthouse/CrUX: usa Task de navegação, `T` explícito e tempos sintéticos repetidos. Synthetic Apdex continua sendo evidência de Web Performance separada do Score GEO e não equivale a RUM/APM de usuários reais.
 
 Heurísticas BR-GEO sem equivalente normativo devem permanecer identificadas como heurísticas/baseline interna.
 
 ## 7. Regra de mudança
 
-Mudanças que afetem escopo, Business Rules, scoring, priorização, interpretação do relatório, device context público, conteúdo sugerido por IA, consumo externo M21, fronteiras M22 ou requisitos corporativos devem ser reconciliadas nesta baseline antes da conclusão do merge.
+Mudanças que afetem escopo, Business Rules, scoring, priorização, interpretação do relatório, device context público, conteúdo sugerido por IA, consumo externo M21, fronteiras M22, carga sintética M23 ou requisitos corporativos devem ser reconciliadas nesta baseline antes da conclusão do merge.
 
 Decisões puramente internas de implementação podem ser tomadas sem aprovação humana quando não alterarem comportamento funcional.
 
@@ -183,7 +190,7 @@ M21:
 - é default OFF para evitar consumo externo não solicitado;
 - usa PageSpeed Insights/Lighthouse e CrUX quando habilitado/configurado;
 - possui limite de páginas, timeout e política de field data configuráveis;
-- adiciona zero chamadas de OpenAI/DeepSeek/MiMo;
+- adiciona zero chamadas de LLM;
 - persiste telemetria e raw response artifacts próprios;
 - cria `report/web-performance.html`;
 - não altera RuleExecution, Finding, Recommendation, Score, Coverage, Confidence, Consolidation ou `SCORE-GEO-002`.
@@ -201,5 +208,25 @@ M22:
 - projeta selector/snippet/URL/savings somente quando fornecidos pela fonte;
 - não inventa selector ausente;
 - não declara conformidade WCAG a partir de Lighthouse;
-- mantém Apdex `NÃO CALCULADO` sem amostras transacionais + `T` explícito;
+- não calcula Apdex sem Task/amostras/`T`;
 - não altera `BR-GEO-*`, RuleExecution, Finding GEO, Recommendation GEO ou `SCORE-GEO-002`.
+
+## M23 — Synthetic Navigation Apdex + Lighthouse Traceability
+
+Fonte normativa específica: `23_SYNTHETIC_APDEX_LIGHTHOUSE_TRACEABILITY.md`.
+
+M23:
+
+- é default OFF;
+- exige threshold `T` explícito quando habilitado;
+- mede `NAVIGATION_LOAD` em BrowserContext frio por amostra;
+- usa profiles CPU/rede determinísticos e versionados;
+- limita concorrência a 2 e possui pacing configurável;
+- usa 100 amostras válidas por contexto como grupo final normal default;
+- marca grupos 1–99 com `small_group=*`;
+- persiste runs, samples, summaries e configuração Lighthouse observada;
+- não chama LLM, PageSpeed ou CrUX por si só;
+- cria `report/apdex.html` quando habilitado;
+- é fail-open em relação à auditoria principal;
+- não altera `BR-GEO-*`, RuleExecution, Finding GEO, Recommendation GEO ou `SCORE-GEO-002`;
+- exige smoke humano pequeno antes de merge e autorização específica antes de carga grande em produção.
