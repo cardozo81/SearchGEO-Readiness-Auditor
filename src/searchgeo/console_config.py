@@ -63,6 +63,92 @@ class State:
     runtime_blocks: dict[str, str] = field(default_factory=dict)
 
 
+def apply_environment_defaults(
+    state: State,
+    env: Mapping[str, str] | None = None,
+    names: set[str] | None = None,
+) -> tuple[str, ...]:
+    """Apply CLI-equivalent environment defaults to console state.
+
+    ``names`` limits synchronization to variables just edited in the console.
+    Invalid pre-existing values are reported but do not make the console itself
+    unusable; the user can correct/remove them from the environment menu.
+    """
+    environment = env if env is not None else os.environ
+    issues: list[str] = []
+
+    def active(name: str) -> bool:
+        return names is None or name in names
+
+    def boolean(name: str, default: bool) -> bool:
+        raw = (environment.get(name) or "").strip()
+        if not raw:
+            return default
+        normalized = raw.casefold()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+        issues.append(f"{name}: booleano inválido")
+        return default
+
+    if active("SEARCHGEO_DEVICE_CONTEXT"):
+        raw_device = (environment.get("SEARCHGEO_DEVICE_CONTEXT") or "").strip().casefold()
+        if not raw_device:
+            state.device, state.current_device = "mobile", "MOBILE"
+        elif raw_device in {"mobile", "desktop", "both"}:
+            state.device = raw_device
+            state.current_device = raw_device.upper()
+        else:
+            issues.append("SEARCHGEO_DEVICE_CONTEXT: use mobile, desktop ou both")
+
+    if active("SEARCHGEO_AI_CONTENT_REMEDIATION"):
+        state.content_remediation = boolean("SEARCHGEO_AI_CONTENT_REMEDIATION", False)
+    if active("SEARCHGEO_WEB_PERFORMANCE"):
+        state.web_performance = boolean("SEARCHGEO_WEB_PERFORMANCE", False)
+
+    if active("SEARCHGEO_WEB_PERFORMANCE_MAX_PAGES"):
+        raw_max = (environment.get("SEARCHGEO_WEB_PERFORMANCE_MAX_PAGES") or "").strip()
+        if not raw_max:
+            state.web_max_pages = 10
+        else:
+            try:
+                parsed = int(raw_max)
+                if parsed < 0:
+                    raise ValueError
+                state.web_max_pages = parsed
+            except ValueError:
+                issues.append("SEARCHGEO_WEB_PERFORMANCE_MAX_PAGES: use inteiro >= 0")
+
+    if active("SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS"):
+        raw_timeout = (environment.get("SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS") or "").strip()
+        if not raw_timeout:
+            state.web_timeout = 60.0
+        else:
+            try:
+                parsed_timeout = float(raw_timeout)
+                if parsed_timeout <= 0:
+                    raise ValueError
+                state.web_timeout = parsed_timeout
+            except ValueError:
+                issues.append("SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS: use número > 0")
+
+    if active("SEARCHGEO_WEB_PERFORMANCE_FIELD_SOURCE"):
+        raw_field = (environment.get("SEARCHGEO_WEB_PERFORMANCE_FIELD_SOURCE") or "").strip().casefold()
+        if not raw_field:
+            state.field_source = "auto"
+        elif raw_field in {"auto", "pagespeed", "crux", "none"}:
+            state.field_source = raw_field
+        else:
+            issues.append("SEARCHGEO_WEB_PERFORMANCE_FIELD_SOURCE: valor inválido")
+
+    if active("SEARCHGEO_LIGHTHOUSE_CATEGORIES"):
+        raw_categories = (environment.get("SEARCHGEO_LIGHTHOUSE_CATEGORIES") or "").strip()
+        state.lighthouse_categories = raw_categories or "performance,accessibility,best-practices,seo"
+
+    return tuple(issues)
+
+
 def is_secret(name: str) -> bool:
     upper = name.upper()
     return name in SECRET_NAMES or any(token in upper for token in ("API_KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL"))
