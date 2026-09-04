@@ -1,0 +1,19 @@
+name: Temporary navigation validation
+
+on:
+  push:
+    branches:
+      - fix-canonical-report-navigation
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Compile changed reporting modules
+        run: PYTHONPATH=src python -m py_compile src/searchgeo/report_navigation.py src/searchgeo/m20_reporting.py src/searchgeo/m21_reporting.py
+      - name: Run focused regression tests
+        run: PYTHONPATH=src python -m unittest tests.test_report_navigation tests.test_m20_content_remediation tests.test_m21_web_performance
