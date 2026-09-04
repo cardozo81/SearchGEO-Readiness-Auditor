@@ -45,7 +45,44 @@ Sem IA:
 searchgeo audit https://example.com --ai-provider none
 ```
 
-OpenAI usa API Platform; ChatGPT não é saldo de API. DeepSeek usa a DeepSeek API. MiMo atual usa PAYG `sk-...`; não use Token Plan `tp-...`.
+Providers disponíveis:
+
+| CLI | Provider | Default | Observação |
+|---|---|---|---|
+| `openai` | OpenAI | `gpt-5.6-terra` | API Platform |
+| `deepseek` | DeepSeek | `deepseek-v4-pro` | baseline M18 |
+| `mimo` | Xiaomi MiMo | `mimo-v2.5-pro` | somente PAYG `sk-...` |
+| `auto` | routing M18 | — | somente OpenAI -> DeepSeek -> MiMo |
+| `xai` / `grok` | xAI / Grok | `grok-4.6` | `PROVISIONAL`, explicit-only |
+| `qwen` | Alibaba Qwen | `qwen3.8-max` | `PROVISIONAL`, explicit-only |
+| `gemini` | Google Gemini | `gemini-3.8-flash` | `PROVISIONAL`, explicit-only |
+| `anthropic` / `claude` | Anthropic Claude | `claude-sonnet-5` | `PROVISIONAL`, explicit-only |
+
+Os quatro providers novos não participam de `auto`, mesmo que suas keys estejam configuradas.
+
+### Exemplos
+
+```powershell
+$env:XAI_API_KEY = "<api-key>"
+searchgeo audit https://example.com --ai-provider xai
+```
+
+```powershell
+$env:DASHSCOPE_API_KEY = "<api-key>"
+searchgeo audit https://example.com --ai-provider qwen
+```
+
+```powershell
+$env:GEMINI_API_KEY = "<api-key>"
+searchgeo audit https://example.com --ai-provider gemini
+```
+
+```powershell
+$env:ANTHROPIC_API_KEY = "<api-key>"
+searchgeo audit https://example.com --ai-provider anthropic
+```
+
+Qwen pode exigir `SEARCHGEO_QWEN_ENDPOINT` compatível com a região/workspace da key. Consulte [AI_PROVIDER_EXTENSIONS.md](AI_PROVIDER_EXTENSIONS.md).
 
 ## M20 textual
 
@@ -56,7 +93,16 @@ searchgeo audit https://example.com `
   --ai-content-remediation
 ```
 
-M20 só tenta sugerir texto para findings elegíveis/evidence-backed. `Confidence LOW` sozinho não aciona M20. Sugestões exigem revisão humana e nunca são aplicadas automaticamente.
+Os providers de extensão também suportam M20 quando explicitamente selecionados. Exemplo:
+
+```powershell
+$env:ANTHROPIC_API_KEY = "<api-key>"
+searchgeo audit https://example.com `
+  --ai-provider anthropic `
+  --ai-content-remediation
+```
+
+M20 só tenta sugerir texto para findings elegíveis/evidence-backed. `Confidence LOW` sozinho não aciona M20. Sugestões exigem revisão humana e nunca são aplicadas automaticamente. Provider quarantined no M7 não é reativado para M20.
 
 ## JSON-LD
 
@@ -69,6 +115,7 @@ report/index.html
 report/mobile.html ou desktop.html
 report/remediation.html
 report/content-suggestions.html
+report/web-performance.html
 report/ai-usage.html
 report/references.html
 ```
@@ -87,7 +134,9 @@ Leia Score, Coverage, Confidence e Consolidation separadamente. Confidence LOW �
 
 ### IA
 
-`ai-usage.html`: tentativas M18/M20, tokens, duração, custo estimado e erros sanitizados. Erro de provider não é finding do site.
+`ai-usage.html`: tentativas M18/M20, tokens, duração, custo estimado quando disponível e erros sanitizados. Erro de provider não é finding do site.
+
+Providers novos podem ter `estimated_cost` indisponível enquanto `PROVISIONAL`; isso evita estimativa incorreta antes da qualificação de preço por região/tier/cache.
 
 ### Referências
 
@@ -95,8 +144,12 @@ Leia Score, Coverage, Confidence e Consolidation separadamente. Confidence LOW �
 
 ## Segurança
 
-Nunca salve chaves em Git/HTML/scripts compartilhados. Presença de variável não prova compatibilidade do plano e nenhuma credencial deve ser reutilizada implicitamente por outro provider.
+Nunca salve chaves em Git/HTML/scripts compartilhados. Cada provider usa sua própria credencial. A ausência da key selecionada resulta em `NOT_CONFIGURED`; outra key disponível no ambiente não a substitui.
+
+## Smoke dos providers novos
+
+Antes de qualquer promoção para `AUTO`/`QUALIFIED`, execute o roteiro humano de [AI_PROVIDER_EXTENSIONS.md](AI_PROVIDER_EXTENSIONS.md) e [SMOKE_TEST.md](SMOKE_TEST.md), incluindo regressão explícita de OpenAI, DeepSeek e MiMo.
 
 ## Próximas leituras
 
-[CLI_REFERENCE.md](CLI_REFERENCE.md), [CONFIGURATION.md](CONFIGURATION.md), [REPORT_GUIDE.md](REPORT_GUIDE.md), [AI_GUIDE.md](AI_GUIDE.md), [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+[CLI_REFERENCE.md](CLI_REFERENCE.md), [CONFIGURATION.md](CONFIGURATION.md), [AI_PROVIDER_EXTENSIONS.md](AI_PROVIDER_EXTENSIONS.md), [REPORT_GUIDE.md](REPORT_GUIDE.md), [AI_GUIDE.md](AI_GUIDE.md), [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
