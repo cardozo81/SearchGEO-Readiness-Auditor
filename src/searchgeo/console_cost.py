@@ -344,7 +344,7 @@ def persist_execution_projection(
                 connection.execute(
                     """
                     INSERT OR REPLACE INTO console_execution_projections VALUES (
-                        ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+                        ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
                     )
                     """,
                     (
