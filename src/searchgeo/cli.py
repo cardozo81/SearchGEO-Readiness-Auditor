@@ -398,7 +398,7 @@ def main(argv: list[str] | None = None) -> int:
                             audit_id=result.audit_id,
                             report_path=str(web_report_path.relative_to(workspace.root)),
                         )
-                    except (OSError, ValueError, RuntimeError) as exc:
+                    except Exception as exc:
                         web_runtime_failed = True
                         if workspace is not None:
                             try_append_operational_event(
