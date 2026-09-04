@@ -35,6 +35,20 @@ from searchgeo.console_m23 import (
     validate_m23_state,
 )
 from searchgeo.console_runtime import render_header
+from searchgeo.console_session import (
+    get_config_path,
+    has_volatile_secrets,
+    is_dirty,
+    mark_dirty,
+    mark_secret_volatile,
+    set_config_path,
+)
+from searchgeo.console_settings import (
+    configuration_fingerprint,
+    load_console_config,
+    save_console_config,
+    sync_nonsecret_runtime_environment,
+)
 from searchgeo.console_ui import (
     CYAN,
     DIM,
@@ -104,7 +118,7 @@ def _environment_help_menu(state: State) -> None:
 def _environment_menu(state: State) -> None:
     while True:
         render_header(state)
-        print("Variáveis de ambiente — valores sensíveis nunca são exibidos\n")
+        print("Variáveis de ambiente — valores sensíveis nunca são exibidos nem gravados no INI.\n")
         for index, name in enumerate(ENV_NAMES, 1):
             value = os.environ.get(name)
             if not value:
@@ -134,17 +148,20 @@ def _environment_menu(state: State) -> None:
             continue
         render_header(state)
         print(f"Variável selecionada: {name}\n")
+        secret = is_secret(name)
         if action == "R":
             os.environ.pop(name, None)
             state.error = ""
         else:
-            raw = getpass(f"{name}: ") if is_secret(name) else input(f"{name}: ")
+            raw = getpass(f"{name}: ") if secret else input(f"{name}: ")
             try:
                 os.environ[name] = validate_env_value(name, raw)
                 state.error = ""
             except (ValueError, OverflowError) as exc:
                 state.error = str(exc)
                 continue
+        if secret:
+            mark_secret_volatile(state)
         issues = list(apply_environment_defaults(state, names={name}))
         issues.extend(apply_m23_environment_defaults(state, names={name}))
         state.error = "; ".join(issues)
@@ -242,7 +259,7 @@ def _configure(state: State, choice: str) -> None:
                     state.ai_reasoning = effort or effort_default
                     apply_console_reasoning_environment(provider, state.ai_reasoning)
             else:
-                print(paint("AUTO usa configuração própria de esforço de OpenAI/DeepSeek/MiMo; na ausência de override, todos usam o menor nível suportado.", DIM))
+                print(paint("AUTO usa OpenAI/DeepSeek/MiMo; sem override explícito cada provider usa seu modelo mais simples e o menor esforço suportado.", DIM))
             state.ai_timeout = float(_number("Timeout por tentativa de IA", state.ai_timeout, minimum=1, help_text="limite de espera de cada chamada ao provider. Não é o tempo máximo da auditoria inteira."))
             os.environ[AI_TIMEOUT_ENV] = f"{state.ai_timeout:g}"
             state.error = ""
@@ -261,7 +278,7 @@ def _configure(state: State, choice: str) -> None:
             value = _select(state, "Field data", [("auto", True, "PageSpeed + CrUX direto quando necessário/disponível"), ("pagespeed", True, "PageSpeed"), ("crux", crux_available, "exige SEARCHGEO_CRUX_API_KEY"), ("none", True, "sem field data; Lighthouse lab permanece")])
             if value:
                 state.field_source = value
-            state.web_timeout = float(_number("Timeout PageSpeed/Lighthouse por URL", state.web_timeout, minimum=1, help_text="limite de espera da resposta completa da API PageSpeed/CrUX. O PageSpeed executa o Lighthouse remotamente; não existe neste endpoint um parâmetro separado para controlar o timeout interno de carregamento da página pelo Lighthouse."))
+            state.web_timeout = float(_number("Timeout PageSpeed/Lighthouse por URL", state.web_timeout, minimum=1, help_text="limite de espera da resposta completa da API PageSpeed/CrUX. PageSpeed executa Lighthouse remotamente; a API pública não expõe um parâmetro separado para o timeout interno de carregamento da página."))
             os.environ[WEB_PERFORMANCE_TIMEOUT_ENV] = f"{state.web_timeout:g}"
             state.error = ""
     elif choice == "7":
@@ -294,6 +311,58 @@ def _execution_readiness(state: State) -> tuple[bool, str]:
     except (OSError, ValueError, UnicodeError) as exc:
         return False, str(exc)
     return True, "configuração válida"
+
+
+def _save_configuration(state: State) -> bool:
+    try:
+        path = save_console_config(state, get_config_path(state))
+        set_config_path(state, path)
+        mark_dirty(state, False)
+        sync_nonsecret_runtime_environment(state)
+        state.operation = "LOCAL:SAVE_CONFIG"
+        state.error = ""
+        render_header(state)
+        print(paint(f"Configuração salva em: {path}", GREEN, bold=True))
+        print(paint("Chaves/API tokens não são gravados no INI por segurança.", YELLOW))
+        input("\nENTER para continuar...")
+        return True
+    except (OSError, UnicodeError, ValueError) as exc:
+        state.error = f"falha ao salvar configuração: {type(exc).__name__}: {exc}"
+        return False
+
+
+def _confirm_exit(state: State) -> bool:
+    dirty = is_dirty(state)
+    volatile = has_volatile_secrets(state)
+    if not dirty and not volatile:
+        return True
+    while True:
+        render_header(state)
+        print("ENCERRAR CONSOLE\n")
+        if dirty:
+            print(paint("Há alterações de configuração ainda não salvas no arquivo INI.", YELLOW, bold=True))
+        if volatile:
+            print(paint("Uma ou mais chaves/credenciais foram alteradas nesta sessão. Por segurança elas nunca são gravadas no INI e serão perdidas ao encerrar o processo.", YELLOW, bold=True))
+        if dirty:
+            print("\nS. Salvar parâmetros não sensíveis e sair")
+            print("D. Sair descartando alterações não salvas")
+            print("C. Cancelar")
+            choice = input("Escolha: ").strip().upper()
+            if choice == "S":
+                if _save_configuration(state):
+                    return True
+            elif choice == "D":
+                return True
+            elif choice == "C":
+                return False
+        else:
+            print("\nQ. Confirmar saída (credenciais da sessão serão descartadas)")
+            print("C. Cancelar")
+            choice = input("Escolha: ").strip().upper()
+            if choice == "Q":
+                return True
+            if choice == "C":
+                return False
 
 
 def _artifact_action(state: State, action: str) -> None:
@@ -370,7 +439,10 @@ def _post_run_actions(state: State) -> bool:
         print(" M. Voltar ao menu")
         print(" Q. Sair")
         choice = input("Escolha: ").strip().upper()
-        if choice == "Q": return True
+        if choice == "Q":
+            if _confirm_exit(state):
+                return True
+            continue
         if choice == "M": return False
         if choice == "P" and workspace: _artifact_action(state, "P")
         elif choice == "I" and report: _artifact_action(state, "I")
@@ -384,7 +456,10 @@ def _menu(state: State) -> str:
     badges = menu_cost_badges(state)
     estimate = estimate_exposure(state)
     m23_attempts, m23_load = synthetic_load_summary(state)
+    path = get_config_path(state)
+    config_state = paint("ALTERAÇÕES NÃO SALVAS", YELLOW, bold=True) if is_dirty(state) else paint("SALVO", GREEN, bold=True)
     print("CONFIGURAÇÃO DA AUDITORIA\n")
+    print(f"Arquivo INI: {path or '<não resolvido>'} | {config_state} | credenciais não são persistidas")
     print("Exposição financeira potencial: " + paint(estimate.level, cost_color(estimate.level), bold=True))
     if estimate.min_pages == estimate.max_pages:
         print(f"Volume prévio: {estimate.min_pages} página(s) conhecida(s) × {estimate.device_contexts} contexto(s) de dispositivo")
@@ -418,7 +493,8 @@ def _menu(state: State) -> str:
     ready, reason = _execution_readiness(state)
     marker = availability_badge(ready)
     reason_text = paint(reason, GREEN if ready else RED)
-    print(f"\nH. Ajuda / custos | E. Variáveis de ambiente | R. Executar [{marker}] {reason_text} | Q. Sair")
+    print(f"\nS. Salvar configuração INI [SEM CHAVES] | H. Ajuda / custos | E. Variáveis de ambiente")
+    print(f"R. Executar [{marker}] {reason_text} | Q. Sair")
     workspace, report = artifact_status(state)
     if workspace or report:
         print(f"P. Abrir última pasta [{availability_badge(bool(workspace))}] | I. Abrir último relatório [{availability_badge(bool(report))}]")
@@ -427,19 +503,35 @@ def _menu(state: State) -> str:
 
 def main() -> int:
     state = State()
-    issues = list(apply_environment_defaults(state))
-    issues.extend(apply_m23_environment_defaults(state))
+    loaded = load_console_config(state)
+    set_config_path(state, loaded.path)
+    present_env = {name for name in ENV_NAMES if (os.environ.get(name) or "").strip()}
+    issues = list(loaded.warnings)
+    issues.extend(apply_environment_defaults(state, names=present_env))
+    issues.extend(apply_m23_environment_defaults(state, names=present_env))
+    sync_nonsecret_runtime_environment(state)
+    mark_dirty(state, False)
     state.error = "; ".join(issues)
     while True:
         choice = _menu(state)
-        if choice == "Q": return 0
+        if choice == "Q":
+            if _confirm_exit(state):
+                return 0
+            continue
+        if choice == "S":
+            _save_configuration(state)
+            continue
         if choice == "H":
             render_help(state)
             render_m23_help(state)
             input("\nENTER para voltar ao menu...")
             continue
         if choice == "E":
+            before = configuration_fingerprint(state)
             _environment_menu(state)
+            sync_nonsecret_runtime_environment(state)
+            if configuration_fingerprint(state) != before:
+                mark_dirty(state)
             continue
         if choice in {"P", "I"}:
             _artifact_action(state, choice)
@@ -449,11 +541,16 @@ def main() -> int:
             if not ready:
                 state.status, state.operation, state.error = "PRECHECK_BLOCKED", "LOCAL:PRECHECK", reason
                 continue
+            sync_nonsecret_runtime_environment(state)
             run_audit_from_console(state)
             if _post_run_actions(state): return 0
             state.status, state.operation, state.error = "READY", "LOCAL:MENU", ""
             continue
+        before = configuration_fingerprint(state)
         _configure(state, choice)
+        sync_nonsecret_runtime_environment(state)
+        if configuration_fingerprint(state) != before:
+            mark_dirty(state)
 
 
 if __name__ == "__main__":
