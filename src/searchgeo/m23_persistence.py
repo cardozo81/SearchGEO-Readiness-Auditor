@@ -1,4 +1,4 @@
-"""Persistence for M23 synthetic Apdex and Lighthouse execution traceability."""
+"""Persistência do M23: Synthetic Apdex e rastreabilidade Lighthouse."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -78,11 +78,26 @@ class SyntheticApdexSummary:
     satisfied_count: int
     tolerating_count: int
     frustrated_count: int
+    success_count: int
+    application_error_count: int
+    timeout_count: int
+    navigation_error_count: int
     apdex_score: float | None
     small_group: bool
+    final_group: bool
+    min_ms: float | None
+    max_ms: float | None
+    mean_ms: float | None
     median_ms: float | None
+    stddev_ms: float | None
+    coefficient_of_variation: float | None
     p75_ms: float | None
+    p90_ms: float | None
     p95_ms: float | None
+    p99_ms: float | None
+    first_half_mean_ms: float | None
+    second_half_mean_ms: float | None
+    trend_percent: float | None
     calculated_at: str
 
 
@@ -199,11 +214,26 @@ class M23Persistence:
                     satisfied_count INTEGER NOT NULL,
                     tolerating_count INTEGER NOT NULL,
                     frustrated_count INTEGER NOT NULL,
+                    success_count INTEGER NOT NULL,
+                    application_error_count INTEGER NOT NULL,
+                    timeout_count INTEGER NOT NULL,
+                    navigation_error_count INTEGER NOT NULL,
                     apdex_score REAL,
                     small_group INTEGER NOT NULL,
+                    final_group INTEGER NOT NULL,
+                    min_ms REAL,
+                    max_ms REAL,
+                    mean_ms REAL,
                     median_ms REAL,
+                    stddev_ms REAL,
+                    coefficient_of_variation REAL,
                     p75_ms REAL,
+                    p90_ms REAL,
                     p95_ms REAL,
+                    p99_ms REAL,
+                    first_half_mean_ms REAL,
+                    second_half_mean_ms REAL,
+                    trend_percent REAL,
                     calculated_at TEXT NOT NULL,
                     UNIQUE(audit_id,page_id,device)
                 );
@@ -249,31 +279,22 @@ class M23Persistence:
     def upsert_run(self, item: SyntheticApdexRun) -> None:
         with self.connection:
             self.connection.execute(
-                """
-                INSERT OR REPLACE INTO synthetic_apdex_runs VALUES (
-                    ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
-                )
-                """,
+                "INSERT OR REPLACE INTO synthetic_apdex_runs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
-                    item.audit_id, 1 if item.enabled else 0, item.status, item.task_id,
+                    item.audit_id, int(item.enabled), item.status, item.task_id,
                     item.threshold_seconds, item.frustration_seconds,
                     item.target_valid_samples, item.max_attempts_per_context,
                     item.page_limit, item.pages_considered, item.contexts_considered,
                     item.attempted_samples, item.valid_samples, item.invalid_samples,
-                    item.delay_seconds, item.concurrency,
-                    _dump(item.configuration), _dump(item.host_environment), item.reason,
-                    item.updated_at,
+                    item.delay_seconds, item.concurrency, _dump(item.configuration),
+                    _dump(item.host_environment), item.reason, item.updated_at,
                 ),
             )
 
     def add_sample(self, item: SyntheticApdexSample) -> None:
         with self.connection:
             self.connection.execute(
-                """
-                INSERT OR REPLACE INTO synthetic_apdex_samples VALUES (
-                    ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
-                )
-                """,
+                "INSERT OR REPLACE INTO synthetic_apdex_samples VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     item.sample_id, item.audit_id, item.page_id, item.snapshot_id,
                     item.device, item.url, item.run_index, item.task_id, item.profile_id,
@@ -286,18 +307,18 @@ class M23Persistence:
     def upsert_summary(self, item: SyntheticApdexSummary) -> None:
         with self.connection:
             self.connection.execute(
-                """
-                INSERT OR REPLACE INTO synthetic_apdex_summaries VALUES (
-                    ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
-                )
-                """,
+                "INSERT OR REPLACE INTO synthetic_apdex_summaries VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     item.summary_id, item.audit_id, item.page_id, item.device, item.url,
-                    item.task_id, item.profile_id, item.threshold_seconds,
-                    item.frustration_seconds, item.valid_samples, item.invalid_samples,
-                    item.satisfied_count, item.tolerating_count, item.frustrated_count,
-                    item.apdex_score, 1 if item.small_group else 0, item.median_ms,
-                    item.p75_ms, item.p95_ms, item.calculated_at,
+                    item.task_id, item.profile_id, item.threshold_seconds, item.frustration_seconds,
+                    item.valid_samples, item.invalid_samples, item.satisfied_count,
+                    item.tolerating_count, item.frustrated_count, item.success_count,
+                    item.application_error_count, item.timeout_count, item.navigation_error_count,
+                    item.apdex_score, int(item.small_group), int(item.final_group), item.min_ms,
+                    item.max_ms, item.mean_ms, item.median_ms, item.stddev_ms,
+                    item.coefficient_of_variation, item.p75_ms, item.p90_ms, item.p95_ms,
+                    item.p99_ms, item.first_half_mean_ms, item.second_half_mean_ms,
+                    item.trend_percent, item.calculated_at,
                 ),
             )
 
@@ -317,10 +338,6 @@ class M23Persistence:
         )
         with self.connection:
             self.connection.execute(
-                """
-                INSERT OR REPLACE INTO lighthouse_execution_profiles VALUES (
-                    ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
-                )
-                """,
+                "INSERT OR REPLACE INTO lighthouse_execution_profiles VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 values,
             )
