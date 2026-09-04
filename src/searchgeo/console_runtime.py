@@ -15,6 +15,7 @@ import time
 
 from searchgeo import __version__
 from searchgeo.console_config import State, build_command, environment_summary, preflight, PROVIDERS
+from searchgeo.console_cost import estimate_exposure, persist_execution_projection
 from searchgeo.console_ui import (
     BLUE,
     CYAN,
@@ -150,9 +151,7 @@ def observe_workspace(workspace: Path, state: State) -> None:
             connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True, timeout=0.2)
             connection.row_factory = sqlite3.Row
             try:
-                row = connection.execute(
-                    "SELECT audit_id,status FROM audits ORDER BY created_at DESC LIMIT 1"
-                ).fetchone()
+                row = connection.execute("SELECT audit_id,status FROM audits ORDER BY created_at DESC LIMIT 1").fetchone()
                 if row:
                     state.audit_id = str(row["audit_id"])
                     state.status = str(row["status"])
@@ -168,9 +167,7 @@ def observe_workspace(workspace: Path, state: State) -> None:
                     state.current_device = str(snapshot["device"])
                 if state.status.upper() == "ANALYZING":
                     try:
-                        ai_attempt = connection.execute(
-                            "SELECT provider,url,device FROM ai_provider_attempts ORDER BY started_at DESC LIMIT 1"
-                        ).fetchone()
+                        ai_attempt = connection.execute("SELECT provider,url,device FROM ai_provider_attempts ORDER BY started_at DESC LIMIT 1").fetchone()
                     except sqlite3.Error:
                         ai_attempt = None
                     if ai_attempt:
@@ -217,9 +214,7 @@ def apply_runtime_provider_blocks(workspace: Path, state: State) -> None:
         connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True, timeout=0.2)
         connection.row_factory = sqlite3.Row
         try:
-            row = connection.execute(
-                "SELECT provider_states FROM ai_audit_sessions ORDER BY rowid DESC LIMIT 1"
-            ).fetchone()
+            row = connection.execute("SELECT provider_states FROM ai_audit_sessions ORDER BY rowid DESC LIMIT 1").fetchone()
             states = json.loads(str(row["provider_states"])) if row else {}
             if not isinstance(states, dict):
                 return
@@ -266,6 +261,8 @@ def run_audit_from_console(state: State) -> int:
         state.status, state.operation, state.error = "PRECHECK_FAILED", "LOCAL:PRECHECK", str(exc)
         return 2
 
+    projection = estimate_exposure(state)
+    projected_at = datetime.now().astimezone().isoformat()
     state.current_url = targets[0] if len(targets) == 1 else f"{targets[0]} (+{len(targets)-1})"
     state.current_device = state.device.upper()
     state.status, state.operation = "STARTING", "LOCAL:PRECHECK_OK"
@@ -331,6 +328,17 @@ def run_audit_from_console(state: State) -> int:
     if code and state.output:
         state.error = state.output[-1]
     _finish_timing(state)
+    timing = _RUN_TIMINGS.get(id(state))
+    if workspace and timing and timing.finished_at is not None and timing.duration_seconds is not None:
+        persist_execution_projection(
+            workspace,
+            state,
+            projection,
+            projected_at=projected_at,
+            started_at=timing.started_at.isoformat(),
+            finished_at=timing.finished_at.isoformat(),
+            duration_ms=max(int(round(timing.duration_seconds * 1000)), 0),
+        )
     render_header(state)
     if state.audit_id:
         print(f"Audit ID    : {state.audit_id}")
