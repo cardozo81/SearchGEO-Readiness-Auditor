@@ -83,6 +83,8 @@ searchgeo-console
 
 Esse console não substitui nem altera `searchgeo audit`. Ele oferece menu, preflight de combinações, edição de variáveis somente para a sessão, cabeçalho de acompanhamento e bloqueio transitório de providers que terminem `QUARANTINED_FOR_AUDIT`. URL única é o default; TXT precisa ser selecionado explicitamente. Credenciais aparecem apenas como `[SET]`.
 
+O menu inclui `H. Ajuda / custos`, com explicação clara da finalidade de cada parâmetro e marcadores para custo externo potencial, quota de API e multiplicadores de volume. O submenu de variáveis de ambiente também possui ajuda por variável sem revelar secrets. Ao término de uma auditoria, `I` abre diretamente `report/index.html` no navegador padrão e `P` abre a pasta `audits/<AUD-ID>/` da própria sessão; os atalhos permanecem disponíveis ao voltar ao menu.
+
 Detalhes e smoke humano: [docs/INTERACTIVE_CONSOLE.md](docs/INTERACTIVE_CONSOLE.md).
 
 ## Execução rápida
