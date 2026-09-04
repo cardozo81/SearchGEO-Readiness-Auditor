@@ -40,9 +40,13 @@ M21 usa documentação oficial de PageSpeed Insights, Chrome UX Report, Lighthou
 | Playwright `>=1.57,<2` | obrigatório |
 | Chromium | obrigatório para rendering real |
 | SQLite | embarcado/local |
-| OpenAI | opcional; OpenAI API Platform |
+| OpenAI | opcional; OpenAI API Platform; `QUALIFIED` |
 | DeepSeek | opcional; DeepSeek API; qualificação SearchGEO `PROVISIONAL` |
 | Xiaomi MiMo | opcional; **Pay-as-you-go `sk-...`**; qualificação `PROVISIONAL` |
+| xAI / Grok | opcional; `PROVISIONAL`, somente seleção explícita |
+| Alibaba Qwen | opcional; `PROVISIONAL`, somente seleção explícita |
+| Google Gemini | opcional; `PROVISIONAL`, somente seleção explícita |
+| Anthropic Claude | opcional; `PROVISIONAL`, somente seleção explícita |
 | PageSpeed Insights | opcional M21; pode operar sem chave em uso ad hoc, chave recomendada para automação frequente |
 | Chrome UX Report API | opcional M21; chave Google necessária para API direta |
 | Docker / web server | não requeridos |
@@ -56,10 +60,16 @@ A compatibilidade depende de **provider + produto/plano + credencial + endpoint 
 | OpenAI | API Platform com API key, billing/quota e acesso ao modelo | assinatura/créditos do ChatGPT não são saldo da API |
 | DeepSeek | DeepSeek API com saldo disponível | API key isolada não garante saldo/quota |
 | Xiaomi MiMo | PAYG `sk-...` em `https://api.xiaomimimo.com/v1` | Token Plan `tp-...`, com Base URL/créditos separados e fora do adapter atual |
+| xAI | API key xAI e modelo suportado | disponibilidade no produto Grok não implica credencial/API compatível |
+| Qwen | DashScope/Model Studio com key, região e endpoint compatíveis | assinatura de produto final não substitui a API |
+| Gemini | Gemini API com key e endpoint/modelo suportados | outras credenciais Google não são intercambiáveis automaticamente |
+| Anthropic | Anthropic API com key e modelo suportado | assinatura Claude não é saldo da API |
+
+Os quatro providers novos permanecem `PROVISIONAL`, `explicit-only` e **fora de `AUTO`** até qualificação real. A cadeia homologada continua `OpenAI -> DeepSeek -> MiMo`.
 
 As chaves Google de M21 são independentes das chaves dos providers de IA. O SearchGEO não envia uma credencial de um provider/serviço para endpoint de outro. Testes também isolam credenciais do ambiente para evitar chamadas externas acidentais.
 
-Detalhes: [docs/AI_GUIDE.md](docs/AI_GUIDE.md), [docs/CONFIGURATION.md](docs/CONFIGURATION.md) e [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
+Detalhes: [docs/AI_GUIDE.md](docs/AI_GUIDE.md), [docs/CONFIGURATION.md](docs/CONFIGURATION.md), [docs/GOOGLE_API_KEYS.md](docs/GOOGLE_API_KEYS.md), [docs/PROVIDER_REGISTRY.md](docs/PROVIDER_REGISTRY.md) e [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
 
 ## Instalação rápida — PowerShell
 
@@ -71,7 +81,7 @@ python -m playwright install chromium
 searchgeo --version
 ```
 
-M21 não adiciona dependência Python nova: os clients HTTP PageSpeed/CrUX usam a biblioteca padrão do Python.
+`tzdata` é dependência formal do package para garantir `ZoneInfo("America/Sao_Paulo")` também em instalações Windows sem base IANA do sistema. M21 não exige client HTTP Python adicional: PageSpeed/CrUX usam a biblioteca padrão.
 
 ### Console interativo opcional
 
@@ -83,11 +93,13 @@ searchgeo-console
 
 Esse console não substitui nem altera `searchgeo audit`. Ele oferece navegação em tela única, preflight de combinações, edição de variáveis somente para a sessão, cabeçalho de acompanhamento, classificação de exposição financeira potencial, cronômetro, resumo final de tokens/custo e bloqueio transitório de providers que terminem `QUARANTINED_FOR_AUDIT`. URL única é o default; TXT precisa ser selecionado explicitamente. Credenciais aparecem apenas como `[SET]`.
 
+A seleção de IA do console é derivada do registry canônico, não de uma lista independente. Providers `PROVISIONAL` sem key aparecem indisponíveis; configurá-los permite seleção explícita, mas não os inclui em `AUTO`.
+
 O menu inclui `H. Ajuda / custos`, com explicação da finalidade de cada parâmetro e marcadores para custo externo potencial, quota de API e multiplicadores de volume. A projeção considera URLs conhecidas/teto de crawl, dispositivos, IA/M20 e M21. Ao término, tokens/custo IA são consolidados das tabelas M18/M20 já existentes e chamadas M21 vêm de `web_performance_attempts`, sem duplicar telemetria. Apenas projeção prévia e timing, que não existiam no pipeline, são persistidos em `console_execution_projections`.
 
 Ao término de uma auditoria, `I` abre diretamente `report/index.html` no navegador padrão e `P` abre a pasta `audits/<AUD-ID>/` da própria sessão; os atalhos permanecem disponíveis ao voltar ao menu.
 
-Detalhes: [docs/INTERACTIVE_CONSOLE.md](docs/INTERACTIVE_CONSOLE.md) e [docs/CONSOLE_COST_AND_USAGE.md](docs/CONSOLE_COST_AND_USAGE.md).
+Detalhes: [docs/INTERACTIVE_CONSOLE.md](docs/INTERACTIVE_CONSOLE.md), [docs/CONSOLE_COST_AND_USAGE.md](docs/CONSOLE_COST_AND_USAGE.md) e [docs/PROVIDER_REGISTRY.md](docs/PROVIDER_REGISTRY.md).
 
 ## Execução rápida
 
@@ -141,7 +153,7 @@ searchgeo audit https://example.com `
   --web-performance
 ```
 
-`--web-performance` também é **OFF por padrão**. M21 adiciona zero chamadas de OpenAI/DeepSeek/MiMo. O consumo externo adicional é apenas PageSpeed/CrUX.
+`--web-performance` também é **OFF por padrão**. M21 adiciona zero chamadas de LLM. O consumo externo adicional é apenas PageSpeed/CrUX.
 
 Para controlar volume:
 
@@ -162,6 +174,8 @@ searchgeo audit https://example.com `
   --web-performance `
   --web-performance-field-source crux
 ```
+
+Para criar e restringir corretamente as chaves Google usadas pelo M21, consulte [docs/GOOGLE_API_KEYS.md](docs/GOOGLE_API_KEYS.md).
 
 ## Contexto de dispositivo
 
@@ -217,17 +231,23 @@ CLS <= 0.10
 
 M21 usa `PASS` somente quando as três métricas existem e atendem aos thresholds. Dado faltante produz `INCOMPLETE`/`UNAVAILABLE`, nunca FAIL artificial.
 
-## IA e planos
+## IA, providers e planos
 
 OpenAI usa API Platform; ChatGPT e API possuem billing separado. DeepSeek exige saldo da API. MiMo atual usa PAYG `sk-...`; não use Token Plan `tp-...` no endpoint PAYG.
 
-Modelos aceitos:
+Modelos aceitos atualmente:
 
 ```text
-OPENAI:   gpt-5.6-sol | gpt-5.6-terra | gpt-5.6-luna
-DEEPSEEK: deepseek-v4-pro | deepseek-v4-flash
-MIMO:     mimo-v2.5-pro | mimo-v2.5
+OPENAI:    gpt-5.6-sol | gpt-5.6-terra | gpt-5.6-luna
+DEEPSEEK:  deepseek-v4-pro | deepseek-v4-flash
+MIMO:      mimo-v2.5-pro | mimo-v2.5
+XAI:       grok-4.6
+QWEN:      qwen3.8-max | qwen3.8-flash
+GEMINI:    gemini-3.8-flash
+ANTHROPIC: claude-sonnet-5
 ```
+
+Aliases CLI: `grok -> xai` e `claude -> anthropic`. xAI/Qwen/Gemini/Anthropic permanecem `PROVISIONAL`, somente explícitos e fora do `AUTO`.
 
 Timeout default IA: 180 s por chamada externa (`SEARCHGEO_AI_TIMEOUT_SECONDS`).
 
@@ -263,6 +283,10 @@ Não versionar/persistir API keys ou Authorization. Presença de variável não 
 Test-Path Env:OPENAI_API_KEY
 Test-Path Env:DEEPSEEK_API_KEY
 Test-Path Env:MIMO_API_KEY
+Test-Path Env:XAI_API_KEY
+Test-Path Env:DASHSCOPE_API_KEY
+Test-Path Env:GEMINI_API_KEY
+Test-Path Env:ANTHROPIC_API_KEY
 Test-Path Env:SEARCHGEO_PAGESPEED_API_KEY
 Test-Path Env:SEARCHGEO_CRUX_API_KEY
 ```
@@ -272,10 +296,12 @@ Test-Path Env:SEARCHGEO_CRUX_API_KEY
 - [CLI](docs/CLI_REFERENCE.md)
 - [Console interativo](docs/INTERACTIVE_CONSOLE.md)
 - [Console — custo e telemetria](docs/CONSOLE_COST_AND_USAGE.md)
+- [Provider registry canônico](docs/PROVIDER_REGISTRY.md)
 - [Compatibilidade](docs/COMPATIBILITY.md)
 - [Instalação](docs/INSTALLATION.md)
 - [Guia do usuário](docs/USER_GUIDE.md)
 - [Configuração](docs/CONFIGURATION.md)
+- [Chaves Google — PageSpeed e CrUX](docs/GOOGLE_API_KEYS.md)
 - [Report](docs/REPORT_GUIDE.md)
 - [Scoring](docs/SCORING_GUIDE.md)
 - [Validação de scoring](docs/SCORING_VALIDATION.md)
