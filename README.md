@@ -73,6 +73,18 @@ searchgeo --version
 
 M21 não adiciona dependência Python nova: os clients HTTP PageSpeed/CrUX usam a biblioteca padrão do Python.
 
+### Console interativo opcional
+
+A instalação também registra:
+
+```powershell
+searchgeo-console
+```
+
+Esse console não substitui nem altera `searchgeo audit`. Ele oferece menu, preflight de combinações, edição de variáveis somente para a sessão, cabeçalho de acompanhamento e bloqueio transitório de providers que terminem `QUARANTINED_FOR_AUDIT`. URL única é o default; TXT precisa ser selecionado explicitamente. Credenciais aparecem apenas como `[SET]`.
+
+Detalhes e smoke humano: [docs/INTERACTIVE_CONSOLE.md](docs/INTERACTIVE_CONSOLE.md).
+
 ## Execução rápida
 
 ### Mobile, sem IA e sem Web Performance externo — defaults
@@ -254,6 +266,7 @@ Test-Path Env:SEARCHGEO_CRUX_API_KEY
 ## Documentação
 
 - [CLI](docs/CLI_REFERENCE.md)
+- [Console interativo](docs/INTERACTIVE_CONSOLE.md)
 - [Compatibilidade](docs/COMPATIBILITY.md)
 - [Instalação](docs/INSTALLATION.md)
 - [Guia do usuário](docs/USER_GUIDE.md)
