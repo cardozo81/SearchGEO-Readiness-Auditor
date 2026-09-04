@@ -38,11 +38,74 @@ class _RunTiming:
     duration_seconds: float | None = None
 
 
+@dataclass(slots=True)
+class _RunProgress:
+    label: str
+    percent: float | None
+    detail: str = ""
+    exact: bool = False
+
+
 _RUN_TIMINGS: dict[int, _RunTiming] = {}
+_RUN_PROGRESS: dict[int, _RunProgress] = {}
+
+_PHASE_PROGRESS: dict[str, tuple[str, float]] = {
+    "STARTING": ("Preparação da execução", 2.0),
+    "INITIALIZING": ("Inicialização da auditoria", 5.0),
+    "DISCOVERING": ("Discovery de URLs e recursos", 10.0),
+    "ACQUIRING": ("Aquisição HTTP e rendering", 22.0),
+    "ANALYZING": ("Extração, regras e análise semântica", 42.0),
+    "COMPARING": ("Comparação de contextos/dispositivos", 56.0),
+    "SCORING": ("Cálculo de score e confiabilidade", 66.0),
+    "RECOMMENDING": ("Priorização e recomendações", 74.0),
+    "REPORTING": ("Geração do relatório base", 82.0),
+    "WEB_PERFORMANCE": ("Web Performance externo M21", 88.0),
+    "SYNTHETIC_APDEX": ("Synthetic Apdex M23", 92.0),
+    "FINALIZING": ("Enriquecimentos e finalização", 97.0),
+    "COMPLETE": ("Concluído", 100.0),
+    "FAILED": ("Falha de execução", 100.0),
+}
+
+
+def set_runtime_progress(
+    state: State,
+    label: str,
+    percent: float | None,
+    *,
+    detail: str = "",
+    exact: bool = False,
+) -> None:
+    bounded = None if percent is None else min(max(float(percent), 0.0), 100.0)
+    _RUN_PROGRESS[id(state)] = _RunProgress(label=label, percent=bounded, detail=detail, exact=exact)
+
+
+def clear_runtime_progress(state: State) -> None:
+    _RUN_PROGRESS.pop(id(state), None)
+
+
+def runtime_progress_summary(state: State) -> _RunProgress | None:
+    progress = _RUN_PROGRESS.get(id(state))
+    if progress is not None:
+        return progress
+    phase = _PHASE_PROGRESS.get(state.status.upper())
+    if phase is None:
+        return None
+    label, percent = phase
+    return _RunProgress(label=label, percent=percent, exact=False)
+
+
+def _set_phase_progress(state: State, *, detail: str = "") -> None:
+    phase = _PHASE_PROGRESS.get(state.status.upper())
+    if phase is None:
+        return
+    label, percent = phase
+    set_runtime_progress(state, label, percent, detail=detail, exact=False)
 
 
 def _start_timing(state: State) -> None:
     _RUN_TIMINGS[id(state)] = _RunTiming(datetime.now().astimezone(), time.monotonic())
+    clear_runtime_progress(state)
+    set_runtime_progress(state, "Preparação da execução", 2.0, exact=False)
 
 
 def _finish_timing(state: State) -> None:
@@ -112,6 +175,15 @@ def render_header(state: State) -> None:
         print(f"Início      : {started}")
         print(f"Fim         : {finished}")
         print(f"Duração     : {paint(duration, CYAN, bold=True)}")
+    progress = runtime_progress_summary(state)
+    if progress:
+        print(f"Etapa       : {paint(progress.label, CYAN, bold=True)}")
+        if progress.percent is not None:
+            prefix = "" if progress.exact else "~"
+            qualifier = "medido" if progress.exact else "estimativa por etapa"
+            print(f"Progresso   : {paint(f'{prefix}{progress.percent:.0f}%', GREEN if progress.exact else CYAN, bold=True)} [{qualifier}]")
+        if progress.detail:
+            print(f"Detalhe     : {progress.detail}")
     if state.error:
         print(f"Erro        : {paint(state.error, RED, bold=True)}")
     print("=" * 100)
@@ -126,15 +198,28 @@ def _new_workspace(root: Path, before: set[Path]) -> Path | None:
     return max(found, key=lambda path: path.stat().st_mtime_ns) if found else None
 
 
+def _tail_text_lines(path: Path, *, max_bytes: int = 32768) -> list[str]:
+    try:
+        with path.open("rb") as stream:
+            stream.seek(0, os.SEEK_END)
+            size = stream.tell()
+            start = max(size - max_bytes, 0)
+            stream.seek(start)
+            payload = stream.read()
+    except OSError:
+        return []
+    text = payload.decode("utf-8", errors="replace")
+    lines = text.splitlines()
+    if start and lines:
+        lines = lines[1:]
+    return lines
+
+
 def _last_log_event(workspace: Path) -> dict[str, object] | None:
     path = workspace / "logs" / "audit.log"
     if not path.is_file():
         return None
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return None
-    for line in reversed(lines[-20:]):
+    for line in reversed(_tail_text_lines(path)[-40:]):
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
@@ -146,6 +231,7 @@ def _last_log_event(workspace: Path) -> dict[str, object] | None:
 
 def observe_workspace(workspace: Path, state: State) -> None:
     database = workspace / "audit.db"
+    progress_detail = ""
     if database.is_file():
         try:
             connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True, timeout=0.2)
@@ -165,6 +251,12 @@ def observe_workspace(workspace: Path, state: State) -> None:
                 if snapshot:
                     state.current_url = str(snapshot["normalized_url"])
                     state.current_device = str(snapshot["device"])
+                try:
+                    page_count = int(connection.execute("SELECT COUNT(*) FROM pages").fetchone()[0])
+                    snapshot_count = int(connection.execute("SELECT COUNT(*) FROM page_snapshots").fetchone()[0])
+                    progress_detail = f"{page_count} página(s) materializada(s); {snapshot_count} snapshot(s)"
+                except sqlite3.Error:
+                    progress_detail = ""
                 if state.status.upper() == "ANALYZING":
                     try:
                         ai_attempt = connection.execute("SELECT provider,url,device FROM ai_provider_attempts ORDER BY started_at DESC LIMIT 1").fetchone()
@@ -188,6 +280,7 @@ def observe_workspace(workspace: Path, state: State) -> None:
         state.operation = "LOCAL:RULES/SCORE"
     elif status == "REPORTING":
         state.operation = "LOCAL:REPORT"
+    _set_phase_progress(state, detail=progress_detail)
 
     event = _last_log_event(workspace)
     if not event:
@@ -195,15 +288,20 @@ def observe_workspace(workspace: Path, state: State) -> None:
     name = str(event.get("event") or "")
     if name == "M21_STARTED" and event.get("enabled"):
         state.status, state.operation = "WEB_PERFORMANCE", "API:PAGESPEED/CRUX"
+        set_runtime_progress(state, "Web Performance externo M21", 88.0, detail="coleta externa PageSpeed/CrUX", exact=False)
     elif name == "M21_EXTERNAL_ATTEMPT":
         state.status = "WEB_PERFORMANCE"
         state.operation = f"API:{event.get('service', 'EXTERNAL')}"
         state.current_url = str(event.get("url") or state.current_url)
         state.current_device = str(event.get("device") or state.current_device)
+        service = str(event.get("service") or "EXTERNAL")
+        set_runtime_progress(state, "Web Performance externo M21", 88.0, detail=f"chamada {service} em {state.current_device}", exact=False)
     elif name == "M21_COMPLETED":
         state.status, state.operation = "FINALIZING", "LOCAL:REPORT_ENRICHMENT"
+        set_runtime_progress(state, "Enriquecimentos e finalização", 97.0, exact=False)
     elif name == "AUDIT_FAILED":
         state.status, state.operation = "FAILED", "LOCAL:ERROR"
+        set_runtime_progress(state, "Falha de execução", 100.0, exact=True)
 
 
 def apply_runtime_provider_blocks(workspace: Path, state: State) -> None:
@@ -308,7 +406,7 @@ def run_audit_from_console(state: State) -> int:
             print("\nSaída recente:")
             for line in state.output:
                 print("  " + line)
-        time.sleep(0.4)
+        time.sleep(1.0)
 
     thread.join(timeout=1)
     while True:
@@ -327,6 +425,13 @@ def run_audit_from_console(state: State) -> int:
     state.status, state.operation = ("COMPLETE", "LOCAL:DONE") if code == 0 else ("FAILED", "LOCAL:ERROR")
     if code and state.output:
         state.error = state.output[-1]
+    set_runtime_progress(
+        state,
+        "Concluído" if code == 0 else "Falha de execução",
+        100.0,
+        detail="processo finalizado",
+        exact=True,
+    )
     _finish_timing(state)
     timing = _RUN_TIMINGS.get(id(state))
     if workspace and timing and timing.finished_at is not None and timing.duration_seconds is not None:
