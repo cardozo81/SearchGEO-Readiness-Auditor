@@ -4,6 +4,7 @@ import unittest
 
 from searchgeo.console_config import (
     State,
+    apply_environment_defaults,
     build_command,
     environment_summary,
     preflight,
@@ -20,6 +21,36 @@ class InteractiveConsoleTests(unittest.TestCase):
         self.assertEqual(state.ai_provider, "none")
         self.assertFalse(state.content_remediation)
         self.assertFalse(state.web_performance)
+
+    def test_environment_defaults_are_reflected_in_console_state(self) -> None:
+        state = State()
+        issues = apply_environment_defaults(state, {
+            "SEARCHGEO_DEVICE_CONTEXT": "desktop",
+            "SEARCHGEO_AI_CONTENT_REMEDIATION": "true",
+            "SEARCHGEO_WEB_PERFORMANCE": "true",
+            "SEARCHGEO_WEB_PERFORMANCE_MAX_PAGES": "4",
+            "SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS": "30",
+            "SEARCHGEO_WEB_PERFORMANCE_FIELD_SOURCE": "pagespeed",
+        })
+        self.assertEqual(issues, ())
+        self.assertEqual(state.device, "desktop")
+        self.assertTrue(state.content_remediation)
+        self.assertTrue(state.web_performance)
+        self.assertEqual(state.web_max_pages, 4)
+        self.assertEqual(state.web_timeout, 30.0)
+        self.assertEqual(state.field_source, "pagespeed")
+
+    def test_environment_edit_sync_can_be_scoped_without_resetting_menu_choices(self) -> None:
+        state = State(device="both", web_performance=True)
+        issues = apply_environment_defaults(
+            state,
+            {"SEARCHGEO_WEB_PERFORMANCE_MAX_PAGES": "3"},
+            names={"SEARCHGEO_WEB_PERFORMANCE_MAX_PAGES"},
+        )
+        self.assertEqual(issues, ())
+        self.assertEqual(state.web_max_pages, 3)
+        self.assertEqual(state.device, "both")
+        self.assertTrue(state.web_performance)
 
     def test_only_configured_valid_providers_are_available(self) -> None:
         caps = provider_capabilities({})
