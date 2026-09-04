@@ -146,7 +146,16 @@ def _environment_menu(state: State) -> None:
                 state.runtime_blocks.pop(selection, None)
 
 
-def _number(prompt: str, current: float, *, minimum: float = 0.0, integer: bool = False) -> float | int:
+def _number(
+    prompt: str,
+    current: float,
+    *,
+    minimum: float = 0.0,
+    integer: bool = False,
+    help_text: str = "",
+) -> float | int:
+    if help_text:
+        print(paint(f"  Para que serve: {help_text}", DIM))
     raw = input(f"{prompt} [{current:g}]: ").strip()
     value = current if not raw else (int(raw) if integer else float(raw))
     if value < minimum:
@@ -155,6 +164,8 @@ def _number(prompt: str, current: float, *, minimum: float = 0.0, integer: bool 
 
 
 def _configure_apdex(state: State) -> None:
+    print("Synthetic Apdex M23 mede repetidamente a navegação real em Chromium e gera carga HTTP contra o alvo.")
+    print("Cada parâmetro abaixo controla precisão, duração ou volume da medição.\n")
     enabled = input("Synthetic Apdex M23? Gera navegações reais repetidas contra o site [s/N]: ").strip().casefold() == "s"
     if not enabled:
         state.synthetic_apdex = False
@@ -162,6 +173,12 @@ def _configure_apdex(state: State) -> None:
         state.error = ""
         return
     try:
+        print(
+            paint(
+                "  Para que serve: T é o tempo-alvo da Task. <=T é Satisfied; >T até 4T é Tolerating; >4T é Frustrated.",
+                DIM,
+            )
+        )
         threshold_raw = input(
             f"Threshold T em segundos [{state.apdex_threshold if state.apdex_threshold is not None else 'obrigatório'}]: "
         ).strip()
@@ -173,21 +190,88 @@ def _configure_apdex(state: State) -> None:
             raise ValueError("Synthetic Apdex exige threshold T explícito")
         state.synthetic_apdex = True
         state.apdex_threshold = threshold
-        state.apdex_samples = int(_number("Amostras válidas por contexto", state.apdex_samples, minimum=1, integer=True))
+        state.apdex_samples = int(
+            _number(
+                "Amostras válidas por contexto",
+                state.apdex_samples,
+                minimum=1,
+                integer=True,
+                help_text=(
+                    "quantidade de navegações válidas exigidas para cada URL/dispositivo. "
+                    "1–99 é diagnóstico small-group (*); 100 é o grupo final normal da baseline M23."
+                ),
+            )
+        )
         suggested_attempts = max(state.apdex_samples, int(math.ceil(state.apdex_samples * 1.25)))
         if state.apdex_max_attempts < state.apdex_samples:
             state.apdex_max_attempts = suggested_attempts
-        state.apdex_max_attempts = int(_number("Máximo de tentativas por contexto", state.apdex_max_attempts, minimum=state.apdex_samples, integer=True))
-        state.apdex_max_pages = int(_number("Máximo de páginas M23 (0=todas)", state.apdex_max_pages, minimum=0, integer=True))
+        state.apdex_max_attempts = int(
+            _number(
+                "Máximo de tentativas por contexto",
+                state.apdex_max_attempts,
+                minimum=state.apdex_samples,
+                integer=True,
+                help_text=(
+                    "teto de navegações usadas para alcançar as amostras válidas, permitindo repor amostras inválidas. "
+                    "Quanto maior, maior a carga máxima no alvo."
+                ),
+            )
+        )
+        state.apdex_max_pages = int(
+            _number(
+                "Máximo de páginas M23 (0=todas)",
+                state.apdex_max_pages,
+                minimum=0,
+                integer=True,
+                help_text=(
+                    "limita quantas páginas já auditadas receberão Synthetic Apdex. "
+                    "0 usa todas as páginas disponíveis dentro do limite geral da auditoria."
+                ),
+            )
+        )
         minimum_timeout = 4.0 * threshold
         recommended_timeout = max(45.0, minimum_timeout + 5.0)
         if state.apdex_timeout <= minimum_timeout:
             state.apdex_timeout = recommended_timeout
-        state.apdex_timeout = float(_number("Timeout por navegação (deve ser > 4T)", state.apdex_timeout, minimum=0.000001))
-        state.apdex_delay = float(_number("Delay mínimo entre inícios", state.apdex_delay, minimum=0.0))
-        state.apdex_concurrency = int(_number("Concorrência (1-2)", state.apdex_concurrency, minimum=1, integer=True))
+        state.apdex_timeout = float(
+            _number(
+                "Timeout por navegação (deve ser > 4T)",
+                state.apdex_timeout,
+                minimum=0.000001,
+                help_text=(
+                    "tempo máximo permitido para uma navegação. Deve ser maior que 4T para não truncar artificialmente "
+                    "a faixa Frustrated."
+                ),
+            )
+        )
+        state.apdex_delay = float(
+            _number(
+                "Delay mínimo entre inícios",
+                state.apdex_delay,
+                minimum=0.0,
+                help_text=(
+                    "intervalo mínimo, em segundos, entre inícios de navegação. Valores maiores reduzem a pressão "
+                    "sobre o site e aumentam a duração total."
+                ),
+            )
+        )
+        state.apdex_concurrency = int(
+            _number(
+                "Concorrência (1-2)",
+                state.apdex_concurrency,
+                minimum=1,
+                integer=True,
+                help_text=(
+                    "quantas navegações podem ocorrer simultaneamente. 1 é o modo mais conservador; "
+                    "2 reduz tempo, mas aumenta carga concorrente."
+                ),
+            )
+        )
         config_from_state(state)
         state.error = ""
+        attempts, load = synthetic_load_summary(state)
+        if attempts:
+            print(paint("\nCarga projetada M23: " + load, YELLOW, bold=True))
     except (ValueError, OverflowError) as exc:
         state.error = str(exc)
 
@@ -239,9 +323,11 @@ def _configure(state: State, choice: str) -> None:
     elif choice == "5":
         capability = provider_capabilities(blocks=state.runtime_blocks)[state.ai_provider]
         if state.ai_provider == "none" or not capability.available:
-            state.content_remediation, state.error = False, "remediação IA indisponível"
+            state.content_remediation = False
+            state.error = "opção 5 requer uma IA configurada e ativa no item 4"
         else:
             state.content_remediation = input("Remediação textual IA? Pode gerar chamadas/custo adicionais [s/N]: ").strip().casefold() == "s"
+            state.error = ""
     elif choice == "6":
         state.web_performance = input("Web Performance? Usa API/quota externa PageSpeed/CrUX [s/N]: ").strip().casefold() == "s"
         if state.web_performance:
@@ -379,6 +465,7 @@ def _post_run_actions(state: State) -> bool:
 def _menu(state: State) -> str:
     render_header(state)
     capability = provider_capabilities(blocks=state.runtime_blocks)[state.ai_provider]
+    remediation_available = state.ai_provider != "none" and capability.available
     badges = menu_cost_badges(state)
     estimate = estimate_exposure(state)
     m23_attempts, m23_load = synthetic_load_summary(state)
@@ -399,7 +486,17 @@ def _menu(state: State) -> str:
     print(f"2. Projeto               : {state.project or '<auto>'}")
     print(f"3. Dispositivo           : {state.device}{badges['device']}")
     print(f"4. IA                    : {state.ai_provider} [{availability_badge(capability.available)}] | {state.ai_model or '<default>'}{badges['ai']}")
-    print(f"5. Remediação textual IA : {bool_badge(state.content_remediation)}{badges['remediation']}")
+    if remediation_available:
+        print(
+            f"5. Remediação textual IA : {bool_badge(state.content_remediation)} "
+            f"[DISPONÍVEL — IA ativa no item 4]{badges['remediation']}"
+        )
+    else:
+        print(
+            "5. Remediação textual IA : "
+            + paint("INDISPONÍVEL", RED, bold=True)
+            + " [REQUER IA CONFIGURADA E ATIVA NO ITEM 4]"
+        )
     print(f"6. Web Performance       : {bool_badge(state.web_performance)} | field={state.field_source}{badges['web']}")
     print(f"7. max-pages             : {state.max_pages}{badges['max_pages']}")
     print(f"8. WebPerf max-pages     : {state.web_max_pages}{badges['web_max_pages']}")
