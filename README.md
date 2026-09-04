@@ -22,7 +22,17 @@ Capacidades integradas:
 
 > O Score SearchGEO é um modelo interno de readiness. Lighthouse, Core Web Vitals, Acessibilidade automatizada e Apdex possuem metodologias próprias e são exibidos separadamente.
 
-## Instalação rápida — Windows/PowerShell
+## Instalação rápida — Windows
+
+A forma recomendada é executar, por duplo clique ou pelo terminal, o launcher da raiz:
+
+```cmd
+iniciar.cmd
+```
+
+O launcher valida/prepara CPython 3.13, `.venv`, dependências do `pyproject.toml` e Chromium do Playwright apenas quando necessário; ao concluir, abre diretamente a primeira tela do console interativo. Se Python 3.13 estiver ausente, ele tenta instalá-lo via `winget`.
+
+Fluxo manual de fallback:
 
 ```powershell
 py -3.13 -m venv .venv
@@ -36,7 +46,7 @@ Compatibilidade principal:
 
 | Item | Estado |
 |---|---|
-| Windows + PowerShell | alvo operacional principal |
+| Windows + PowerShell/CMD | alvo operacional principal |
 | CPython 3.13.x | obrigatório; `>=3.13,<3.14` |
 | Playwright | obrigatório |
 | Chromium | obrigatório para rendering e Synthetic Apdex |
@@ -44,7 +54,17 @@ Compatibilidade principal:
 | IA externa | opcional |
 | PageSpeed/CrUX | opcional |
 
+Detalhes do bootstrap e fallback manual: [docs/INSTALLATION.md](docs/INSTALLATION.md).
+
 ## Console interativo
+
+Forma recomendada no Windows:
+
+```cmd
+iniciar.cmd
+```
+
+Quando o ambiente já estiver preparado/ativado, o entrypoint direto permanece:
 
 ```powershell
 searchgeo-console
