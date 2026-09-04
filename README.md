@@ -94,6 +94,8 @@ R. Executar
 Q. Sair
 ```
 
+A opção `E` não exibe mais uma lista plana. Ela agrupa as variáveis por **Aplicação**, **Credenciais IA**, **Modelos/reasoning**, **Endpoints avançados**, **Web Performance/Google**, **Synthetic Apdex** e **Browser/Playwright**. Cada variável mostra finalidade, domínio aceito, default efetivo, dependências, custo/impacto e referência; `D` abre diretamente a documentação detalhada. Veja [docs/ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md).
+
 ### Configuração persistente
 
 O console usa:
@@ -109,6 +111,8 @@ Se não existir, é criado com defaults. Parâmetros não sensíveis podem ser s
 Para cada secret, o console indica a origem do valor efetivamente usado, por exemplo `SO:USER`, `SO:MACHINE`, `SESSÃO` ou `SESSÃO | SO:USER existente`. Se um valor é alterado dentro do console, o valor da **sessão atual prevalece** durante aquela execução; a variável persistida no Windows funciona como valor herdado por novos processos.
 
 O console nunca exibe o valor da chave em claro. Variáveis de ambiente do Windows não são um cofre de segredos: processos executados sob o mesmo usuário e ferramentas com acesso ao perfil podem lê-las.
+
+Quando uma variável opcional possui default seguro, o menu mostra `<default efetivo: ...>` sem criar um override redundante no sistema operacional. Dessa forma, uma instalação nova continua utilizável sem preencher dezenas de variáveis.
 
 O console marca alterações não salvas e alerta antes de sair.
 
@@ -198,7 +202,7 @@ SEARCHGEO_PAGESPEED_API_KEY
 SEARCHGEO_CRUX_API_KEY
 ```
 
-Credencial configurada não garante saldo, quota, plano ou acesso ao modelo.
+Credencial configurada não garante saldo, quota, plano ou acesso ao modelo. O passo a passo para obtenção de cada chave está em [docs/ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md); PageSpeed e CrUX possuem orientação adicional em [docs/GOOGLE_API_KEYS.md](docs/GOOGLE_API_KEYS.md).
 
 MiMo PAYG usa credencial `sk-...` no adapter atual. Token Plan `tp-...` pertence a produto/endpoint diferente.
 
@@ -354,9 +358,8 @@ Nomes internos de módulos, tabelas, eventos e documentos normativos podem mante
 - [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
 - [docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md)
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md)
+- [docs/ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md)
 - [docs/INTERACTIVE_CONSOLE.md](docs/INTERACTIVE_CONSOLE.md)
 - [docs/AI_GUIDE.md](docs/AI_GUIDE.md)
 - [docs/GOOGLE_API_KEYS.md](docs/GOOGLE_API_KEYS.md)
 - [docs/REPORT_GUIDE.md](docs/REPORT_GUIDE.md)
-- [docs/OUTPUTS_AND_ARTIFACTS.md](docs/OUTPUTS_AND_ARTIFACTS.md)
-- [docs/SYNTHETIC_APDEX.md](docs/SYNTHETIC_APDEX.md)
