@@ -11,9 +11,7 @@ import unittest
 
 from searchgeo.cli_extensions import main
 
-
 _HTML = b"""<!doctype html><html lang='pt-BR'><head><title>M23 local</title><meta name='description' content='fixture local'><link rel='canonical' href='/'></head><body><header><nav><a href='/'>Inicio</a></nav></header><main><h1>Fixture M23</h1><p>Conteudo controlado para validar Synthetic Navigation Apdex sem trafego externo de API.</p></main></body></html>"""
-
 
 class _Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
@@ -32,7 +30,6 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: object) -> None:
         return
 
-
 class M23LocalE2ETests(unittest.TestCase):
     def test_cli_materializes_apdex_report_and_keeps_external_apis_off(self) -> None:
         server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
@@ -44,26 +41,7 @@ class M23LocalE2ETests(unittest.TestCase):
                 stdout = io.StringIO()
                 stderr = io.StringIO()
                 with redirect_stdout(stdout), redirect_stderr(stderr):
-                    code = main(
-                        [
-                            "audit", target,
-                            "--audits-root", directory,
-                            "--project", "M23 Local E2E",
-                            "--max-pages", "1",
-                            "--device-context", "mobile",
-                            "--ai-provider", "none",
-                            "--no-ai-content-remediation",
-                            "--no-web-performance",
-                            "--synthetic-apdex",
-                            "--apdex-threshold-seconds", "2",
-                            "--apdex-samples-per-context", "3",
-                            "--apdex-max-attempts-per-context", "3",
-                            "--apdex-max-pages", "1",
-                            "--apdex-timeout-seconds", "10",
-                            "--apdex-delay-seconds", "0",
-                            "--apdex-concurrency", "1",
-                        ]
-                    )
+                    code = main(["audit", target, "--audits-root", directory, "--project", "M23 Local E2E", "--max-pages", "1", "--device-context", "mobile", "--ai-provider", "none", "--no-ai-content-remediation", "--no-web-performance", "--synthetic-apdex", "--apdex-threshold-seconds", "2", "--apdex-samples-per-context", "3", "--apdex-max-attempts-per-context", "3", "--apdex-max-pages", "1", "--apdex-timeout-seconds", "10", "--apdex-delay-seconds", "0", "--apdex-concurrency", "1"])
                 self.assertEqual(code, 0, stderr.getvalue())
                 roots = [path for path in Path(directory).iterdir() if path.is_dir() and path.name.startswith("AUD-")]
                 self.assertEqual(len(roots), 1)
@@ -75,15 +53,10 @@ class M23LocalE2ETests(unittest.TestCase):
                 self.assertIn("grupo pequeno", html)
                 index = (workspace / "report" / "index.html").read_text(encoding="utf-8")
                 self.assertIn("apdex.html", index)
-
                 connection = sqlite3.connect(workspace / "audit.db")
                 try:
-                    run = connection.execute(
-                        "SELECT status,attempted_samples,valid_samples,invalid_samples FROM synthetic_apdex_runs"
-                    ).fetchone()
-                    summary = connection.execute(
-                        "SELECT valid_samples,small_group,final_group,apdex_score FROM synthetic_apdex_summaries"
-                    ).fetchone()
+                    run = connection.execute("SELECT status,attempted_samples,valid_samples,invalid_samples FROM synthetic_apdex_runs").fetchone()
+                    summary = connection.execute("SELECT valid_samples,small_group,final_group,apdex_score FROM synthetic_apdex_summaries").fetchone()
                     ai_attempts = connection.execute("SELECT COUNT(*) FROM ai_provider_attempts").fetchone()[0]
                     web_attempts = connection.execute("SELECT COUNT(*) FROM web_performance_attempts").fetchone()[0]
                 finally:
@@ -93,12 +66,11 @@ class M23LocalE2ETests(unittest.TestCase):
                 self.assertIsNotNone(summary[3])
                 self.assertEqual(ai_attempts, 0)
                 self.assertEqual(web_attempts, 0)
-                self.assertIn("Synthetic Apdex M23: HABILITADO", stdout.getvalue())
+                self.assertIn("Synthetic Apdex: HABILITADO", stdout.getvalue())
         finally:
             server.shutdown()
             server.server_close()
             thread.join(timeout=2)
-
 
 if __name__ == "__main__":
     unittest.main()
