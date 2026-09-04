@@ -1,4 +1,5 @@
 from pathlib import Path
+import sqlite3
 from tempfile import TemporaryDirectory
 import unittest
 
@@ -12,6 +13,7 @@ from searchgeo.console_config import (
     provider_capabilities,
     validate_env_value,
 )
+from searchgeo.console_cost import actual_usage, estimate_exposure
 from searchgeo.console_help import current_cost_summary, environment_help, menu_cost_badges
 
 
@@ -143,17 +145,19 @@ class InteractiveConsoleTests(unittest.TestCase):
 
     def test_cost_help_surfaces_external_cost_and_volume_multipliers(self) -> None:
         state = State(
+            target="https://example.com",
+            max_pages=3,
             ai_provider="openai",
+            ai_model="gpt-5.6-terra",
             content_remediation=True,
             device="both",
             web_performance=True,
             web_max_pages=3,
         )
         summary = " ".join(current_cost_summary(state))
-        self.assertIn("cobrança por uso", summary)
-        self.assertIn("acrescentar chamadas de IA", summary)
-        self.assertIn("BOTH", summary)
-        self.assertIn("até 3 página(s)", summary)
+        self.assertIn("Exposição financeira potencial", summary)
+        self.assertIn("tentativa(s) potenciais", summary)
+        self.assertIn("PageSpeed/CrUX", summary)
         badges = menu_cost_badges(state)
         self.assertEqual(badges["ai"], " [CUSTO EXTERNO]")
         self.assertEqual(badges["remediation"], " [CUSTO IA ADICIONAL]")
@@ -195,6 +199,106 @@ class InteractiveConsoleTests(unittest.TestCase):
             current = workspace / "report" / "index.html"
             current.write_text("current", encoding="utf-8")
             self.assertEqual(report_entrypoint(workspace), current.resolve())
+
+    def test_exposure_uses_exact_txt_urls_devices_m20_and_m21(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "urls.txt"
+            path.write_text(
+                "https://example.com/a\nhttps://example.com/b\nhttps://example.com/c\n",
+                encoding="utf-8",
+            )
+            state = State(
+                input_mode="file",
+                target=str(path),
+                max_pages=3,
+                device="both",
+                ai_provider="openai",
+                ai_model="gpt-5.6-terra",
+                content_remediation=True,
+                web_performance=True,
+                web_max_pages=2,
+                field_source="auto",
+            )
+            estimate = estimate_exposure(state)
+            self.assertEqual((estimate.min_pages, estimate.max_pages), (3, 3))
+            self.assertEqual(estimate.device_contexts, 2)
+            self.assertEqual((estimate.min_ai_attempts, estimate.max_ai_attempts), (6, 12))
+            self.assertEqual((estimate.min_web_calls, estimate.max_web_calls), (4, 8))
+            self.assertEqual(estimate.level, "MÉDIO")
+            self.assertTrue(any("USD" in line for line in estimate.pricing_lines))
+
+    def test_url_seed_uses_max_pages_as_projection_ceiling(self) -> None:
+        state = State(
+            target="https://example.com",
+            max_pages=5,
+            ai_provider="openai",
+            ai_model="gpt-5.6-luna",
+        )
+        estimate = estimate_exposure(state)
+        self.assertEqual((estimate.min_pages, estimate.max_pages), (1, 5))
+        self.assertEqual((estimate.min_ai_attempts, estimate.max_ai_attempts), (1, 5))
+        self.assertEqual(estimate.level, "BAIXO")
+
+    def test_web_only_tracks_quota_without_inventing_monetary_cost(self) -> None:
+        state = State(
+            target="https://example.com",
+            max_pages=2,
+            ai_provider="none",
+            web_performance=True,
+            web_max_pages=2,
+            field_source="auto",
+        )
+        estimate = estimate_exposure(state)
+        self.assertEqual(estimate.level, "NENHUM")
+        self.assertEqual((estimate.min_web_calls, estimate.max_web_calls), (1, 4))
+
+    def test_actual_usage_sums_m18_m20_tokens_cost_and_m21_calls(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory) / "AUD-USAGE"
+            (workspace / "logs").mkdir(parents=True)
+            database = workspace / "audit.db"
+            connection = sqlite3.connect(database)
+            try:
+                for table in ("ai_provider_attempts", "content_remediation_attempts"):
+                    connection.execute(
+                        f"""
+                        CREATE TABLE {table} (
+                            status TEXT,
+                            input_tokens INTEGER,
+                            cached_input_tokens INTEGER,
+                            output_tokens INTEGER,
+                            reasoning_tokens INTEGER,
+                            total_tokens INTEGER,
+                            estimated_cost REAL,
+                            cost_currency TEXT
+                        )
+                        """
+                    )
+                connection.execute(
+                    "INSERT INTO ai_provider_attempts VALUES ('SUCCESS',100,20,50,10,150,0.01,'USD')"
+                )
+                connection.execute(
+                    "INSERT INTO content_remediation_attempts VALUES ('SUCCESS',200,0,100,20,300,0.02,'USD')"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            (workspace / "logs" / "audit.log").write_text(
+                '{"event":"M21_EXTERNAL_ATTEMPT","service":"PAGESPEED"}\n'
+                '{"event":"M21_EXTERNAL_ATTEMPT","service":"CRUX"}\n',
+                encoding="utf-8",
+            )
+            usage = actual_usage(workspace)
+            self.assertIsNotNone(usage)
+            assert usage is not None
+            self.assertEqual(usage.ai_attempts, 2)
+            self.assertEqual(usage.ai_successes, 2)
+            self.assertEqual(usage.input_tokens, 300)
+            self.assertEqual(usage.output_tokens, 150)
+            self.assertEqual(usage.total_tokens, 450)
+            self.assertEqual(usage.costs, (("USD", 0.03),))
+            self.assertEqual(usage.web_external_calls, 2)
+            self.assertEqual(dict(usage.web_services), {"CRUX": 1, "PAGESPEED": 1})
 
 
 if __name__ == "__main__":
