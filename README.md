@@ -4,22 +4,23 @@ Auditor local de **Search/GEO Readiness** com evidência persistida, scoring rep
 
 ## Status atual
 
-**Baseline funcional atual: M21 + M20 + SCORE-GEO-002.**  
-**Capacidades integradas:** `REPORT-SITE-GEO-001`, seleção configurável de dispositivo, `M20` para sugestões textuais opcionais + revisão/proposta determinística de JSON-LD e `M21` para Lighthouse/Core Web Vitals externos, default OFF e sem alterar scoring.
+**Baseline funcional atual: M22 + M21 + M20 + SCORE-GEO-002.**  
+**Capacidades integradas:** `REPORT-SITE-GEO-001`, seleção configurável de dispositivo, console interativo, provider registry canônico, `M20` para sugestões textuais opcionais + revisão/proposta determinística de JSON-LD, `M21` para Lighthouse/Core Web Vitals externos e `M22` para projeção separada de Acessibilidade e diagnósticos de Web Performance, sem alterar o scoring GEO.
 
 A aplicação:
 
-- executa auditoria ponta a ponta por CLI;
+- executa auditoria ponta a ponta por CLI ou console interativo;
 - usa **Mobile como contexto padrão**;
 - permite `mobile`, `desktop` ou `both`;
 - persiste `audit.db` + `artifacts/`;
 - gera mini-site estático em `report/` com CSS externo compartilhado;
-- separa visão geral, Mobile, Desktop, remediações, conteúdo/JSON-LD, Web Performance, telemetria de IA e referências;
+- separa visão geral, Mobile, Desktop, remediações, conteúdo/JSON-LD, Acessibilidade, Web Performance, telemetria de IA e referências;
 - suporta execução sem IA, provider explícito ou `auto`;
 - mantém Score, Coverage e Confidence distintos;
 - preserva rastreabilidade Evidence → RuleExecution → Finding → Priority → Remediation → Report;
 - mantém sugestões M20 advisory: não alteram automaticamente site, score ou findings;
-- mantém M21 como evidência externa aditiva: Lighthouse/CrUX não substituem, recalculam nem homologam `SCORE-GEO-002`.
+- mantém M21 como evidência externa aditiva: Lighthouse/CrUX não substituem, recalculam nem homologam `SCORE-GEO-002`;
+- mantém M22 como projeção de domínio: Acessibilidade e Web Performance não viram Score GEO nem findings GEO automaticamente.
 
 > O Score SearchGEO é um modelo interno de readiness. Não existe um score GEO/AEO normativo universal publicado por Google, OpenAI, Schema.org, WHATWG ou IETF. Lighthouse e Core Web Vitals possuem metodologia externa para seus fenômenos específicos e são exibidos separadamente.
 
@@ -29,7 +30,7 @@ A aplicação:
 
 JSON-LD é tratado como **opcional/reforço**. Quando ausente, M20 pode propor um baseline conservador baseado apenas em dados observados. Quando existente, aponta melhorias sem substituição destrutiva.
 
-M21 usa documentação oficial de PageSpeed Insights, Chrome UX Report, Lighthouse e Core Web Vitals. Essas métricas complementam o diagnóstico técnico, mas não são convertidas automaticamente em Score GEO nem em probabilidade de citação.
+M21 usa documentação oficial de PageSpeed Insights, Chrome UX Report, Lighthouse e Core Web Vitals. M22 reutiliza esses artifacts para separar Acessibilidade e diagnósticos de Performance sem nova chamada externa. Essas métricas complementam o diagnóstico técnico, mas não são convertidas automaticamente em Score GEO nem em probabilidade de citação.
 
 ## Compatibilidade
 
@@ -69,7 +70,7 @@ Os quatro providers novos permanecem `PROVISIONAL`, `explicit-only` e **fora de 
 
 As chaves Google de M21 são independentes das chaves dos providers de IA. O SearchGEO não envia uma credencial de um provider/serviço para endpoint de outro. Testes também isolam credenciais do ambiente para evitar chamadas externas acidentais.
 
-Detalhes: [docs/AI_GUIDE.md](docs/AI_GUIDE.md), [docs/CONFIGURATION.md](docs/CONFIGURATION.md), [docs/GOOGLE_API_KEYS.md](docs/GOOGLE_API_KEYS.md), [docs/PROVIDER_REGISTRY.md](docs/PROVIDER_REGISTRY.md) e [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
+Detalhes: [docs/AI_GUIDE.md](docs/AI_GUIDE.md), [docs/AI_PROVIDER_EXTENSIONS.md](docs/AI_PROVIDER_EXTENSIONS.md), [docs/CONFIGURATION.md](docs/CONFIGURATION.md), [docs/GOOGLE_API_KEYS.md](docs/GOOGLE_API_KEYS.md), [docs/PROVIDER_REGISTRY.md](docs/PROVIDER_REGISTRY.md) e [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
 
 ## Instalação rápida — PowerShell
 
@@ -198,6 +199,7 @@ audits/<AUD-ID>/
    ├─ desktop.html             # condicional
    ├─ remediation.html
    ├─ content-suggestions.html
+   ├─ accessibility.html       # quando M22 materializa a projeção
    ├─ web-performance.html
    ├─ ai-usage.html
    ├─ references.html
@@ -213,11 +215,12 @@ audits/<AUD-ID>/
 - **Confidence:** força da conclusão do auditor;
 - **Consolidation:** se há base suficiente para publicar a dimensão/Overall;
 - **Lighthouse:** medição de laboratório com metodologia externa do Chrome;
-- **Core Web Vitals/CrUX:** experiência real agregada no p75 quando existe amostra suficiente.
+- **Core Web Vitals/CrUX:** experiência real agregada no p75 quando existe amostra suficiente;
+- **Acessibilidade M22:** projeção separada dos diagnostics Lighthouse quando disponíveis, sem declarar conformidade WCAG.
 
 **Confidence LOW não significa texto ruim ou não-GEO.** Uma sugestão de conteúdo exige finding/evidência específica.
 
-Da mesma forma, Lighthouse/CWV não são adicionados matematicamente ao Overall SearchGEO e não significam chance de citação.
+Da mesma forma, Lighthouse/CWV/Acessibilidade não são adicionados matematicamente ao Overall SearchGEO e não significam chance de citação.
 
 ## Core Web Vitals M21
 
@@ -257,7 +260,7 @@ M21 tem timeout separado, default 60 s (`SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECON
 
 `report/ai-usage.html` separa telemetria M18 e M20. `report/content-suggestions.html` contém propostas textuais advisory e revisão/proposta JSON-LD.
 
-`report/web-performance.html` contém PageSpeed/Lighthouse/CrUX, field/lab data, status operacional e referências a artifacts. Esses serviços não são tratados como uso de LLM.
+`report/web-performance.html` contém PageSpeed/Lighthouse/CrUX, field/lab data, status operacional e referências a artifacts. `report/accessibility.html` apresenta Acessibilidade como domínio separado quando a projeção M22 existe. Esses serviços não são tratados como uso de LLM.
 
 A sugestão M20:
 
@@ -267,13 +270,14 @@ A sugestão M20:
 - não pode inventar autor, preço, data, rating, estatística, garantia ou claim;
 - exige revisão humana.
 
-M21:
+M21/M22:
 
-- não altera Score/RuleExecution/Finding;
-- não chama SemanticProvider;
-- não persiste API keys;
-- não transforma falha/quota/sem amostra em finding do website;
-- preserva raw response JSON quando a chamada retorna payload válido.
+- não alteram Score/RuleExecution/Finding;
+- M21 não chama SemanticProvider;
+- M22 não cria chamada externa adicional;
+- não persistem API keys;
+- não transformam falha/quota/sem amostra em finding do website;
+- preservam a separação entre evidência externa e `SCORE-GEO-002`.
 
 ## Segurança
 
@@ -297,12 +301,14 @@ Test-Path Env:SEARCHGEO_CRUX_API_KEY
 - [Console interativo](docs/INTERACTIVE_CONSOLE.md)
 - [Console — custo e telemetria](docs/CONSOLE_COST_AND_USAGE.md)
 - [Provider registry canônico](docs/PROVIDER_REGISTRY.md)
+- [Providers adicionais](docs/AI_PROVIDER_EXTENSIONS.md)
 - [Compatibilidade](docs/COMPATIBILITY.md)
 - [Instalação](docs/INSTALLATION.md)
 - [Guia do usuário](docs/USER_GUIDE.md)
 - [Configuração](docs/CONFIGURATION.md)
 - [Chaves Google — PageSpeed e CrUX](docs/GOOGLE_API_KEYS.md)
 - [Report](docs/REPORT_GUIDE.md)
+- [Acessibilidade e Performance](docs/ACCESSIBILITY_PERFORMANCE_DOMAINS.md)
 - [Scoring](docs/SCORING_GUIDE.md)
 - [Validação de scoring](docs/SCORING_VALIDATION.md)
 - [IA e M20](docs/AI_GUIDE.md)
@@ -312,3 +318,4 @@ Test-Path Env:SEARCHGEO_CRUX_API_KEY
 - [Smoke](docs/SMOKE_TEST.md)
 - [Especificações](docs/specification/00_SPEC_INDEX.md)
 - [M21 — Web Performance externo](docs/specification/21_EXTERNAL_WEB_PERFORMANCE_EVIDENCE.md)
+- [M22 — diagnósticos separados por domínio](docs/specification/22_DOMAIN_SEPARATED_WEB_QUALITY_DIAGNOSTICS.md)

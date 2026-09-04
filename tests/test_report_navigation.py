@@ -64,6 +64,7 @@ class ReportNavigationTests(unittest.TestCase):
             )
             self.assertNotIn("desktop.html", hrefs)
             self.assertNotIn("content-suggestions.html", hrefs)
+            self.assertNotIn("accessibility.html", hrefs)
             self.assertNotIn("web-performance.html", hrefs)
 
     def test_premium_css_and_br_geo_tooltips_are_shared_and_idempotent(self) -> None:
@@ -83,10 +84,35 @@ class ReportNavigationTests(unittest.TestCase):
 
             css = (report_dir / "css" / "site.css").read_text(encoding="utf-8")
             html = (report_dir / "index.html").read_text(encoding="utf-8")
-            self.assertEqual(css.count("searchgeo-premium-report-v1"), 1)
+            self.assertEqual(css.count("searchgeo-premium-report-v2"), 1)
+            self.assertIn("grid-template-columns:minmax(0,1fr) minmax(320px,390px)", css)
+            self.assertIn("@media(max-width:700px)", css)
+            self.assertIn(".snapshot>figure{grid-column:2;grid-row:1", css)
+            self.assertIn(".snapshot>figure{grid-column:1;grid-row:1", css)
             self.assertEqual(html.count("class='br-rule-tooltip'"), 1)
             self.assertIn("Severidade HIGH · Verifica se a página é tecnicamente recuperável.", html)
             self.assertIn("<code>BR-GEO-006</code>", html)
+
+    def test_accessibility_keeps_canonical_position_when_materialized(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            for filename in (
+                "index.html",
+                "content-suggestions.html",
+                "accessibility.html",
+                "web-performance.html",
+                "ai-usage.html",
+                "references.html",
+            ):
+                (report_dir / filename).write_text(
+                    "<html><body><aside class='app-nav'><nav></nav></aside><main></main></body></html>",
+                    encoding="utf-8",
+                )
+            normalize_report_navigation(report_dir)
+            html = (report_dir / "index.html").read_text(encoding="utf-8")
+            hrefs = [href for _, href, _ in _LINK_RE.findall(_NAV_RE.search(html).group(1))]
+            self.assertLess(hrefs.index("content-suggestions.html"), hrefs.index("accessibility.html"))
+            self.assertLess(hrefs.index("accessibility.html"), hrefs.index("web-performance.html"))
 
     def test_ai_cost_total_sums_m18_and_m20_without_double_counting(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
