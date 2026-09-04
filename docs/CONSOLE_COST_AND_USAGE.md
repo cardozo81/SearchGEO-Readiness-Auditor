@@ -1,147 +1,98 @@
 # Console — custo, quota e telemetria de execução
 
-Este documento define a fonte de verdade usada pelo `searchgeo-console` para projeção pré-execução e consolidação pós-execução.
+Este documento descreve como o `searchgeo-console` apresenta exposição prévia e consumo realmente persistido após uma auditoria.
 
-## Regra de não duplicação
+## Regra de fonte única
 
-O console **não cria uma segunda cópia de tokens, custo real estimado ou tentativas externas**.
+O console não cria uma segunda contabilidade. Depois da execução, lê os dados persistidos em `audit.db` e artifacts/logs correspondentes.
 
-A telemetria já materializada pelo pipeline permanece como fonte normativa:
-
-| Domínio | Tabela existente | Dados usados pelo console |
+| Finalidade | Fonte persistida | Dados principais |
 |---|---|---|
-| M18 análise semântica | `ai_provider_attempts` | provider/model, status, tokens, duração, `estimated_cost`, moeda, pricing version |
-| Catálogo de preço IA | `provider_pricing_catalog` | preço unitário e versão/referência pública |
-| M20 remediação textual | `content_remediation_attempts` | provider/model, status, tokens, duração, `estimated_cost`, moeda |
-| M21 Web Performance | `web_performance_attempts` | serviço, URL/device, status, HTTP, duração e quantidade de chamadas |
-| M21 execução | `web_performance_runs` | limites, páginas/contextos considerados e sucessos |
+| análise semântica por IA | `ai_provider_attempts` | provider/modelo, status, tokens, duração, custo estimado, pricing version |
+| catálogo de preço IA | `provider_pricing_catalog` | preço unitário, moeda, versão e referência |
+| remediação textual por IA | `content_remediation_attempts` | provider/modelo, tokens, status, custo quando estimável |
+| Web Performance | `web_performance_attempts` | PageSpeed/CrUX, status, HTTP, duração, erro, artifact |
+| Synthetic Apdex | `synthetic_apdex_runs` / `synthetic_apdex_samples` | tentativas, válidas/inválidas, duração/classificação |
 
-O resumo exibido ao final é calculado por `SELECT/SUM/COUNT` sobre essas tabelas. Ele não é persistido novamente como total, evitando divergência entre detalhe e agregado.
+## Antes da execução
 
-## Dado novo persistido pelo console
-
-O único dado adicional de custo/execução que não existia no pipeline é a **projeção feita antes da execução** e o **tempo observado pelo console**.
-
-Por isso o console cria, dentro do `audit.db` da própria auditoria, a tabela:
+A faixa financeira é uma heurística de exposição:
 
 ```text
-console_execution_projections
+NENHUM | BAIXO | MÉDIO | ALTO | EXCESSIVO
 ```
 
-Ela contém somente:
+Ela considera, quando aplicável:
 
-- `audit_id`;
-- timestamp em que a projeção foi calculada;
-- início e fim da execução do subprocesso;
-- duração total em ms;
-- faixa `NENHUM|BAIXO|MÉDIO|ALTO|EXCESSIVO`;
-- mínimo/máximo de páginas considerados;
+- quantidade conhecida/teto de páginas;
 - quantidade de contextos de dispositivo;
-- mínimo/máximo de tentativas de IA projetadas;
-- mínimo/máximo de chamadas M21 projetadas;
-- provider/modelos considerados;
-- configuração não sensível usada na projeção;
-- razões da classificação;
-- versão do catálogo de pricing.
+- provider/modelo de IA;
+- cadeia AUTO elegível;
+- remediação textual;
+- PageSpeed/CrUX e limites externos.
 
-A tabela **não possui** colunas `input_tokens`, `output_tokens`, `total_tokens` ou `estimated_cost`. Esses dados continuam somente nas tabelas M18/M20 que realmente registraram as tentativas.
+A faixa não é invoice e não garante preço final.
 
-Nenhuma API key, token, Authorization ou secret é persistido.
+## Esforço de IA
 
-## Projeção versus realizado
+O default público usa o modelo mais simples e o menor esforço suportado. Selecionar modelo/esforço maiores pode aumentar latência, tokens e custo, por isso o console exibe esses parâmetros na opção 4.
 
-A estrutura permite posteriormente montar no report uma comparação como:
+## Web Performance
+
+O console contabiliza chamadas PageSpeed/CrUX como consumo de API/quota. Não inventa preço monetário quando não existe catálogo confiável no projeto.
+
+O timeout configurável não representa custo por si só. Ele apenas determina quanto o cliente aguarda a chamada externa antes de registrar timeout.
+
+## Synthetic Apdex
+
+Synthetic Apdex é exibido separadamente da faixa financeira porque não possui API paga própria. A projeção é de **carga sintética**:
 
 ```text
-Antes da execução
-  exposição: MÉDIO
-  IA projetada: 6–12 tentativas
-  M21 projetado: 4–8 chamadas
-
-Realizado
-  IA: 7 tentativas / 5 sucessos
-  tokens: 54.210
-  custo IA estimado: USD 0.1834
-  PageSpeed: 4 chamadas
-  CrUX: 2 chamadas
-  duração: 00:02:48
+páginas × devices × máximo de tentativas/contexto
 ```
 
-A coluna de realizado deve sempre ser derivada das tabelas de tentativas, e não copiada para `console_execution_projections`.
+Cada navegação pode gerar muitos requests de subrecursos, portanto a quantidade de navegações não equivale a requests HTTP.
 
-## Consulta de custo IA consolidado
+## Depois da execução
 
-Exemplo conceitual para uma moeda:
+O console pode mostrar:
 
-```sql
-SELECT cost_currency, SUM(estimated_cost) AS estimated_cost
-FROM (
-    SELECT cost_currency, estimated_cost
-    FROM ai_provider_attempts
-    WHERE estimated_cost IS NOT NULL
-    UNION ALL
-    SELECT cost_currency, estimated_cost
-    FROM content_remediation_attempts
-    WHERE estimated_cost IS NOT NULL
-)
-GROUP BY cost_currency;
+```text
+Tentativas IA / sucessos
+Tokens input / cache / output / reasoning / total
+Custo IA estimado
+Chamadas Web Performance
+PageSpeed sucesso/tentativas
+CrUX sucesso/tentativas
+Cobertura de Acessibilidade e motivo
+Navegações Synthetic Apdex
+Amostras válidas / inválidas
 ```
 
-Não somar moedas distintas numa única grandeza sem conversão cambial explícita.
+Se uma tentativa possui tokens mas não existe informação suficiente de pricing, ela é apresentada como não estimável; nunca como custo zero artificial.
 
-## Consulta de tokens consolidada
+## Falhas e cobertura
 
-```sql
-SELECT
-    SUM(input_tokens) AS input_tokens,
-    SUM(cached_input_tokens) AS cached_input_tokens,
-    SUM(output_tokens) AS output_tokens,
-    SUM(reasoning_tokens) AS reasoning_tokens,
-    SUM(total_tokens) AS total_tokens
-FROM (
-    SELECT input_tokens,cached_input_tokens,output_tokens,reasoning_tokens,total_tokens
-    FROM ai_provider_attempts
-    UNION ALL
-    SELECT input_tokens,cached_input_tokens,output_tokens,reasoning_tokens,total_tokens
-    FROM content_remediation_attempts
-);
+Falha de integração é separada de finding do website. Exemplos:
+
+```text
+PageSpeed timeout
+CrUX HTTP/quota
+provider sem crédito
+provider quarantined
+artifact ausente
 ```
 
-## Consulta de consumo M21
+O console e o report devem explicar qual coleta foi afetada.
 
-```sql
-SELECT service, COUNT(*) AS attempts
-FROM web_performance_attempts
-GROUP BY service
-ORDER BY service;
-```
+## Configuração INI
 
-O console usa essa tabela, e não a contagem de linhas do log, para evitar dupla contagem ou divergência entre log e banco.
+`searchgeo-console.ini` persiste somente parâmetros não sensíveis, inclusive modelo, esforço, timeouts e limites. Credenciais não são gravadas no INI.
 
-## Quota não é invoice
+## Segurança
 
-A quantidade de requests pode ser comparada com limites publicados pelo serviço, mas quota e cobrança são conceitos distintos.
-
-A documentação oficial da CrUX API informa limite de 150 consultas/minuto por projeto Google Cloud e declara que essa quota é oferecida sem custo, sem opção de pagar por aumento:
-
-- <https://developer.chrome.com/docs/crux/api>
-
-A documentação da PageSpeed Insights API informa que o serviço pode ser utilizado com ou sem API key e recomenda chave para consultas frequentes/automatizadas:
-
-- <https://developers.google.com/speed/docs/insights/v5/get-started>
-
-O SearchGEO não converte chamadas PageSpeed/CrUX em valor monetário sem uma fonte de pricing aplicável e persistida.
-
-## Preparação para o report
-
-Quando a camada de report for atualizada, ela deve:
-
-1. ler `console_execution_projections` quando existir;
-2. ler M18/M20 para tokens/custo realizado;
-3. ler M21 para chamadas/quota realizada;
-4. manter preços por moeda;
-5. sinalizar tentativas com tokens mas sem preço estimável;
-6. mostrar `ESTIMATED_COST` como estimativa, nunca como invoice;
-7. funcionar também para auditorias executadas pelo CLI original, nas quais `console_execution_projections` pode não existir.
-
-Dessa forma o report continuará compatível com `searchgeo audit` e o console acrescentará apenas uma projeção opcional quando tiver sido a interface de execução.
+- secrets aparecem somente como `[SET]`;
+- API keys/tokens não entram no INI, report ou log;
+- custos são estimativas técnicas;
+- não assuma que key configurada implica quota/saldo;
+- não confunda carga Synthetic Apdex com custo financeiro de API.
