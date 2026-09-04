@@ -1,6 +1,8 @@
 """Live runtime observation for the optional interactive console."""
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
 import json
 import os
 from pathlib import Path
@@ -13,21 +15,104 @@ import time
 
 from searchgeo import __version__
 from searchgeo.console_config import State, build_command, environment_summary, preflight, PROVIDERS
+from searchgeo.console_ui import (
+    BLUE,
+    CYAN,
+    DIM,
+    GREEN,
+    MAGENTA,
+    RED,
+    YELLOW,
+    clear_screen,
+    paint,
+    status_color,
+)
+
+
+@dataclass(slots=True)
+class _RunTiming:
+    started_at: datetime
+    started_monotonic: float
+    finished_at: datetime | None = None
+    duration_seconds: float | None = None
+
+
+_RUN_TIMINGS: dict[int, _RunTiming] = {}
+
+
+def _start_timing(state: State) -> None:
+    _RUN_TIMINGS[id(state)] = _RunTiming(datetime.now().astimezone(), time.monotonic())
+
+
+def _finish_timing(state: State) -> None:
+    timing = _RUN_TIMINGS.get(id(state))
+    if timing is None or timing.finished_at is not None:
+        return
+    timing.finished_at = datetime.now().astimezone()
+    timing.duration_seconds = max(time.monotonic() - timing.started_monotonic, 0.0)
+
+
+def _format_duration(seconds: float) -> str:
+    total = max(int(round(seconds)), 0)
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def timing_summary(state: State) -> tuple[str, str, str] | None:
+    timing = _RUN_TIMINGS.get(id(state))
+    if timing is None:
+        return None
+    elapsed = timing.duration_seconds if timing.duration_seconds is not None else max(time.monotonic() - timing.started_monotonic, 0.0)
+    started = timing.started_at.strftime("%Y-%m-%d %H:%M:%S %z")
+    finished = timing.finished_at.strftime("%Y-%m-%d %H:%M:%S %z") if timing.finished_at else "-"
+    return started, finished, _format_duration(elapsed)
+
+
+def _operation_color(operation: str) -> str:
+    upper = operation.upper()
+    if upper.startswith("API:"):
+        return MAGENTA
+    if upper.startswith("INTEGRATION:"):
+        return CYAN
+    if upper.startswith("LOCAL:"):
+        return BLUE
+    return YELLOW
+
+
+def _colored_environment_item(item: str) -> str:
+    upper = item.upper()
+    if "=[SET]" in upper:
+        return paint(item, GREEN, bold=True)
+    value = item.rsplit("=", 1)[-1].strip().casefold() if "=" in item else ""
+    if value in {"true", "1", "yes", "on"}:
+        return paint(item, GREEN, bold=True)
+    if value in {"false", "0", "no", "off"}:
+        return paint(item, DIM)
+    return paint(item, CYAN)
 
 
 def render_header(state: State) -> None:
-    if sys.stdout.isatty():
-        print("\033[2J\033[H", end="")
+    clear_screen()
     print("=" * 100)
     print(f"SearchGEO Readiness Auditor | versão {__version__}")
-    print(f"Status      : {state.status}")
+    print(f"Status      : {paint(state.status, status_color(state.status), bold=True)}")
     print(f"URL         : {state.current_url}")
-    print(f"Dispositivo : {state.current_device}")
-    print(f"Operação    : {state.operation}")
+    print(f"Dispositivo : {paint(state.current_device, CYAN)}")
+    print(f"Operação    : {paint(state.operation, _operation_color(state.operation), bold=True)}")
     variables = environment_summary()
-    print("Ambiente    : " + (" | ".join(variables) if variables else "nenhuma variável relevante configurada"))
+    print(
+        "Ambiente    : "
+        + (" | ".join(_colored_environment_item(item) for item in variables) if variables else paint("nenhuma variável relevante configurada", DIM))
+    )
+    timing = timing_summary(state)
+    if timing:
+        started, finished, duration = timing
+        print(f"Início      : {started}")
+        print(f"Fim         : {finished}")
+        print(f"Duração     : {paint(duration, CYAN, bold=True)}")
     if state.error:
-        print(f"Erro        : {state.error}")
+        print(f"Erro        : {paint(state.error, RED, bold=True)}")
     print("=" * 100)
 
 
@@ -99,11 +184,7 @@ def observe_workspace(workspace: Path, state: State) -> None:
 
     status = state.status.upper()
     if status == "ANALYZING" and not state.operation.startswith("API:"):
-        state.operation = (
-            f"API:{state.ai_provider.upper()}"
-            if state.ai_provider != "none"
-            else "LOCAL:SEMANTIC_RULES"
-        )
+        state.operation = f"API:{state.ai_provider.upper()}" if state.ai_provider != "none" else "LOCAL:SEMANTIC_RULES"
     elif status in {"DISCOVERING", "ACQUIRING"}:
         state.operation = "INTEGRATION:HTTP"
     elif status in {"COMPARING", "SCORING", "RECOMMENDING"}:
@@ -191,6 +272,7 @@ def run_audit_from_console(state: State) -> int:
     root = Path(state.audits_root)
     before = _audit_dirs(root)
     output_queue: queue.Queue[str] = queue.Queue()
+    _start_timing(state)
     try:
         process = subprocess.Popen(
             build_command(state),
@@ -202,6 +284,7 @@ def run_audit_from_console(state: State) -> int:
             env=dict(os.environ),
         )
     except OSError as exc:
+        _finish_timing(state)
         state.status, state.operation, state.error = "START_FAILED", "LOCAL:SUBPROCESS", str(exc)
         return 2
     assert process.stdout is not None
@@ -247,6 +330,7 @@ def run_audit_from_console(state: State) -> int:
     state.status, state.operation = ("COMPLETE", "LOCAL:DONE") if code == 0 else ("FAILED", "LOCAL:ERROR")
     if code and state.output:
         state.error = state.output[-1]
+    _finish_timing(state)
     render_header(state)
     if state.audit_id:
         print(f"Audit ID    : {state.audit_id}")
