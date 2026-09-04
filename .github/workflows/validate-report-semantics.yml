@@ -1,0 +1,33 @@
+name: validate-report-semantics
+
+on:
+  push:
+    branches:
+      - ci/validate-report-semantics
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: Install package
+        run: python -m pip install -e .
+      - name: Install Chromium for rendering tests
+        run: python -m playwright install --with-deps chromium
+      - name: Run targeted report regression tests
+        run: >-
+          python -m unittest
+          tests.test_report_semantics
+          tests.test_report_navigation
+          tests.test_report_visual_contract
+      - name: Run full test suite
+        run: python -m unittest discover -s tests -p 'test_*.py'
