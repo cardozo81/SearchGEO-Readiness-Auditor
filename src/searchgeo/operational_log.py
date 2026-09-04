@@ -62,6 +62,20 @@ def append_operational_event(
     return path
 
 
+def try_append_operational_event(
+    workspace: AuditWorkspace,
+    event: str,
+    *,
+    level: str = "INFO",
+    **details: Any,
+) -> Path | None:
+    """Best-effort wrapper that never changes the audit result on log I/O failure."""
+    try:
+        return append_operational_event(workspace, event, level=level, **details)
+    except OSError:
+        return None
+
+
 def _sanitize_mapping(values: dict[str, Any]) -> dict[str, Any]:
     return {str(key): _sanitize_value(str(key), value) for key, value in values.items()}
 
