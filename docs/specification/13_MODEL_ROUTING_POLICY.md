@@ -1,7 +1,7 @@
 # MODEL_ROUTING_POLICY.md
 
-**Status:** BASELINE OPERACIONAL  
-**Objetivo:** escolher IA/modelo de acordo com esforço, risco e necessidade de acesso ao repositório.
+**Status:** BASELINE OPERACIONAL + SAFE PROVIDER EXTENSIONS  
+**Objetivo:** escolher IA/modelo de acordo com esforço, risco e necessidade de acesso ao repositório, mantendo separado o routing do produto em runtime.
 
 ## 1. Separar dois usos de IA
 
@@ -17,7 +17,7 @@
 
 ### B. IA usada pelo SearchGEO Auditor em runtime
 
-É o SemanticAnalysisProvider utilizado para avaliar páginas.
+É o `SemanticAnalysisProvider` utilizado para avaliar páginas e, quando explicitamente habilitado, apoiar M20.
 
 As duas coisas não devem ser confundidas.
 
@@ -33,9 +33,7 @@ Exemplos:
 - pequenas alterações de configuração;
 - tarefas mecânicas sem impacto arquitetural.
 
-Usar configuração rápida/default disponível.
-
-Não consumir raciocínio avançado sem necessidade.
+Usar configuração rápida/default disponível. Não consumir raciocínio avançado sem necessidade.
 
 ### Esforço médio
 
@@ -47,11 +45,7 @@ Exemplos:
 - diagnóstico de bug não trivial;
 - decisões técnicas locais.
 
-Modelo recomendado atualmente:
-
-`GPT-5.6 Sol`
-
-ou modelo equivalente de raciocínio disponível no ambiente.
+Modelo recomendado atualmente: `GPT-5.6 Sol` ou modelo equivalente de raciocínio disponível no ambiente.
 
 ### Esforço alto / crítico
 
@@ -61,68 +55,109 @@ Exemplos:
 - alteração transversal;
 - Rules Engine;
 - scoring;
-- fallback de IA;
+- fallback/routing de IA;
 - arquitetura de persistência;
 - Desktop/Mobile;
 - debugging complexo;
 - revisão de consistência entre múltiplos documentos;
 - migração que possa alterar comportamento funcional.
 
-Utilizar:
+Utilizar `GPT-5.6 Sol` com a maior capacidade de raciocínio disponível no ambiente, ou agente de código equivalente.
 
-`GPT-5.6 Sol`
-
-com a maior capacidade de raciocínio disponível no ambiente, ou agente de código equivalente.
-
-Quando a tarefa exigir criar/editar arquivos no repositório local, utilizar obrigatoriamente uma ferramenta/agente com acesso real ao filesystem.
-
-Um chat sem acesso ao filesystem não deve afirmar que gravou arquivos em:
-
-`C:\IA-PROJETOS\github\SearchGEO-Readiness-Auditor`
+Quando a tarefa exigir criar/editar arquivos no repositório, utilizar ferramenta/agente com acesso real ao repositório/filesystem. Um chat sem esse acesso não deve afirmar que gravou arquivos locais.
 
 ## 3. Runtime do produto
 
-Arquitetura:
+Arquitetura atual:
 
+```text
 SemanticAnalysisProvider
 ├── NONE
-├── OPENAI
-├── futuros providers
+├── M18 legacy
+│   ├── OPENAI
+│   ├── DEEPSEEK
+│   ├── MIMO
+│   └── AUTO = OpenAI -> DeepSeek -> MiMo
+└── provider extensions — explicit-only
+    ├── XAI / GROK
+    ├── QWEN
+    ├── GEMINI
+    └── ANTHROPIC / CLAUDE
+```
 
-MVP:
-
-- `NONE` obrigatório;
-- `OPENAI` primeiro provider real.
-
-O modelo específico da API não deve ser hardcoded na especificação funcional.
-
-Ele deve ser configurável porque:
+O modelo específico deve continuar configurável porque:
 
 - modelos mudam;
 - disponibilidade muda;
 - política corporativa pode mudar;
-- provider corporativo pode ser diferente.
+- provider corporativo pode ser diferente;
+- endpoints/regiões podem variar.
 
 O modelo escolhido em runtime deve possuir capacidade suficiente para:
 
-- saída estruturada;
+- saída estruturada compatível com o contrato do adapter;
 - interpretação semântica;
 - evidence-grounded analysis;
-- baixa propensão a inventar referências.
+- baixa propensão a inventar referências;
+- usage/telemetria adequada quando disponível.
 
-## 4. Fallback
+## 4. Baseline M18 e AUTO
+
+A cadeia homologada permanece:
+
+```text
+OPENAI gpt-5.6-terra
+→ DEEPSEEK deepseek-v4-pro
+→ MIMO mimo-v2.5-pro
+```
+
+Provider configurado mas ausente de credencial não entra na cadeia. O primeiro resultado válido encerra o contexto. Quarantine e URL lock permanecem conforme M18.
+
+A configuração de `XAI_API_KEY`, `DASHSCOPE_API_KEY`, `GEMINI_API_KEY` ou `ANTHROPIC_API_KEY` **não pode alterar AUTO**.
+
+## 5. Providers de extensão
+
+Enquanto `PROVISIONAL`, devem ser selecionados explicitamente:
+
+```text
+xai | grok
+qwen
+gemini
+anthropic | claude
+```
+
+Defaults da qualificação atual:
+
+```text
+XAI       grok-4.6
+QWEN      qwen3.8-max
+GEMINI    gemini-3.8-flash
+ANTHROPIC claude-sonnet-5
+```
+
+Qwen também admite `qwen3.8-flash` nesta qualificação.
+
+A promoção para `QUALIFIED` ou inclusão em AUTO exige D-039: regressão, smoke humano real e mudança versionada/documentada.
+
+## 6. Fallback e estados
 
 Provider não configurado:
 
-NO_AI
+```text
+NO_AI / NOT_CONFIGURED
+```
 
 Provider configurado mas indisponível:
 
-DEGRADED
+```text
+DEGRADED / UNAVAILABLE
+```
 
 Provider operacional:
 
-FULL
+```text
+FULL / AVAILABLE
+```
 
 Em NO_AI ou DEGRADED:
 
@@ -131,40 +166,62 @@ Em NO_AI ou DEGRADED:
 - semantic-only rules podem virar UNKNOWN;
 - website nunca recebe penalidade por ausência de capacidade da auditoria.
 
-## 5. Multi-provider
+Provider explicit-only não faz cross-provider fallback.
 
-Adicionar outro provider deve exigir apenas adapter/provider novo.
+## 7. Regra de extensão
 
-Não deve exigir mudança em:
+Adicionar provider não deve exigir mudança em:
 
 - Business Rules;
 - Finding;
 - Score;
-- Report;
+- Report scoring semantics;
 - Domain Model.
 
-## 6. Política de revisão
+Para a expansão regida por M22, também não deve exigir mudança no comportamento homologado de `m18_ai.py`, `cli.py`, `m20_ai.py` ou AUTO.
+
+Diferenças de Responses API, Chat Completions, Interactions ou Messages API devem ser encapsuladas pelo adapter e normalizadas para os tipos do SearchGEO.
+
+## 8. M20
+
+M20 reutiliza o provider selecionado/saudável e não introduz credencial alternativa.
+
+- legacy M18 -> router M20 legado;
+- extension explicit-only -> adapter M20 de extensão;
+- quarantine anterior deve ser respeitada;
+- M20 continua downstream de scoring e advisory.
+
+## 9. Preço/usage
+
+Usage é normalizado quando retornado pelo provider.
+
+Preço só deve ser estimado quando houver catálogo versionado/qualificado para aquele provider/model/contexto. Provider de extensão provisório pode registrar tokens com `estimated_cost = null`; estimativa falsa é pior que ausência de estimativa.
+
+## 10. Política de revisão
 
 Para mudanças críticas:
 
 1. ler especificação pertinente;
-2. implementar;
-3. executar testes mínimos;
+2. implementar em branch isolada;
+3. executar testes mínimos orientados a risco;
 4. revisar contra requisitos;
-5. quando a mudança fizer parte de um marco, cumprir todos os gates de branch, PR, merge, confirmação pós-merge e limpeza Git definidos na baseline;
-6. avançar ao marco seguinte automaticamente somente quando autorizado por D-034 e após o encerramento integral exigido por D-035.
+5. comparar explicitamente com `main` quando houver risco de regressão;
+6. cumprir gates de PR/merge e smoke definidos pela especificação aplicável;
+7. avançar somente quando blockers obrigatórios estiverem resolvidos.
 
-Blockers reais interrompem a cascata; problemas técnicos ordinários e solucionáveis devem ser corrigidos e revalidados sem solicitar nova aprovação humana.
+Para provider extensions, seguir `22_SAFE_AI_PROVIDER_EXTENSIONS.md` e D-039.
 
-## 7. Nota sobre esta política
+## 11. Nota sobre esta política
 
-A seleção exata de nomes comerciais/modelos pode mudar com disponibilidade do ambiente.
+A seleção exata de nomes comerciais/modelos pode mudar com disponibilidade do ambiente, mas qualquer alteração na allow-list do produto deve ser explícita e documentada.
 
-A regra normativa é capability-based:
+A regra normativa permanece capability-based:
 
 - tarefa simples → modelo rápido;
 - tarefa não trivial → reasoning model;
 - tarefa crítica/transversal → reasoning model forte;
-- escrita no repositório → agente com filesystem;
+- escrita no repositório → agente com acesso real;
 - runtime semântico → provider configurável;
-- ausência de provider → fallback obrigatório.
+- ausência de provider → fallback obrigatório;
+- provider novo → adapter isolado + qualificação;
+- provider `PROVISIONAL` → explicit-only até gate humano.
