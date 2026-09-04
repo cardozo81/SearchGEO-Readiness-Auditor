@@ -15,6 +15,7 @@ import re
 from zoneinfo import ZoneInfo
 
 from searchgeo import __version__
+from searchgeo.report_semantics import SEMANTIC_CSS, enhance_report_html
 
 
 NAV_ITEMS: tuple[tuple[str, str], ...] = (
@@ -53,6 +54,7 @@ _FOOTER_RE = re.compile(
     flags=re.IGNORECASE | re.DOTALL,
 )
 _PRESENTATION_MARKER = "/* searchgeo-premium-report-v2 */"
+_SEMANTIC_MARKER = "/* searchgeo-result-semantics-v1 */"
 
 _RULE_TOOLTIPS: dict[str, str] = {
     "BR-GEO-001": "Severidade CRITICAL · Valida se o target da auditoria é válido e está normalizado.",
@@ -226,7 +228,7 @@ def normalize_report_navigation(
     generated_at: datetime | None = None,
     software_version: str | None = None,
 ) -> None:
-    """Normalize menu, shared presentation, tooltips and projected API cost."""
+    """Normalize menu, semantic results, shared presentation, tooltips and API cost."""
     final_generated_at = generated_at or datetime.now(BRASILIA_TIMEZONE)
     version = software_version or __version__
     _ensure_premium_css(report_dir)
@@ -242,6 +244,7 @@ def normalize_report_navigation(
         normalized, replacements = _NAV_ASIDE_RE.subn(navigation, html, count=1)
         if replacements != 1:
             raise ValueError(f"report page has no replaceable navigation: {html_path}")
+        normalized = enhance_report_html(normalized, page_name=html_path.name, report_dir=report_dir)
         normalized = _enhance_rule_tooltips(normalized)
         normalized = _move_footer_to_end_of_main(normalized)
         html_path.write_text(normalized, encoding="utf-8", newline="\n")
@@ -264,9 +267,14 @@ def _ensure_premium_css(report_dir: Path) -> None:
     if not css_path.is_file():
         return
     css = css_path.read_text(encoding="utf-8")
-    if _PRESENTATION_MARKER in css:
+    additions: list[str] = []
+    if _PRESENTATION_MARKER not in css:
+        additions.append(_PREMIUM_CSS.strip())
+    if _SEMANTIC_MARKER not in css:
+        additions.append(SEMANTIC_CSS.strip())
+    if not additions:
         return
-    css_path.write_text(css.rstrip() + "\n\n" + _PREMIUM_CSS.strip() + "\n", encoding="utf-8", newline="\n")
+    css_path.write_text(css.rstrip() + "\n\n" + "\n\n".join(additions) + "\n", encoding="utf-8", newline="\n")
 
 
 def _enhance_ai_cost_total(report_dir: Path) -> None:
