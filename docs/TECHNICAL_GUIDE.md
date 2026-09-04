@@ -1,89 +1,69 @@
-# TECHNICAL_GUIDE.md
+# Guia técnico
 
 ## Pipeline
 
-```text
-CLI
-→ target/device config
-→ M2 acquisition
-→ M3 rendering
-→ M4 evidence
-→ M5/M6 deterministic analysis
-→ content extractability
-→ M7 semantic provider
-→ M8 device comparison
-→ pre-scoring
-→ M9 SCORE-GEO-002
-→ M10 prioritization
-→ M14 element linking
-→ M20 advisory generation (downstream de findings/scoring)
-→ M11/M16/M17 intermediate reporting
-→ M18 telemetry enrichment
-→ report_site finalization
-→ M20 report-site enrichment
-```
-
-M20 não participa do scoring. `audit.db` e artifacts continuam fonte de verdade.
-
-## Device context
-
-CLI default `mobile`; valores `mobile`, `desktop`, `both`. M3 materializa apenas o selecionado e M7/M20 só podem atuar nos snapshots existentes.
-
-## M20
-
-Modules:
+Fluxo funcional simplificado:
 
 ```text
-src/searchgeo/m20.py
-src/searchgeo/m20_ai.py
-src/searchgeo/m20_persistence.py
-src/searchgeo/m20_reporting.py
+entrada/targets
+→ discovery
+→ aquisição HTTP
+→ rendering Chromium por device
+→ extração/evidências
+→ regras determinísticas
+→ análise semântica opcional por IA
+→ comparação/scoring
+→ remediação textual e JSON-LD advisory
+→ Web Performance externo opcional
+→ Acessibilidade projetada do artifact Lighthouse
+→ Synthetic Apdex opcional
+→ persistência
+→ report site
+→ reconciliação final de consistência/navegação
 ```
 
-M20 roda depois de M9/M10/findings e cria apenas entidades auxiliares. A remediação textual é default OFF. JSON-LD determinístico é sempre materializado.
+## Separação de domínios
 
-### Contrato factual
+O produto mantém separados:
 
-Request limitado ao contexto persistido; resposta deve referenciar finding/evidence válidos. Validação local impede IDs externos e novos tokens numéricos não suportados. A saída é advisory e exige revisão humana.
+- Score/Coverage/Confidence de SearchGEO;
+- análise semântica e remediação por IA;
+- Lighthouse/Core Web Vitals/CrUX;
+- Acessibilidade automatizada;
+- Synthetic Navigation Apdex.
 
-### JSON-LD
+Uma métrica de um domínio não deve ser promovida automaticamente a score de outro.
 
-Ausência: baseline conservador `WebPage` com dados persistidos. Existente: revisão não destrutiva. Nenhuma alteração é aplicada ao site.
+## Persistência
 
-## Provider routing e credenciais
-
-M18 explicit/auto mantém quarantine e URL lock. M20 reutiliza providers elegíveis sem reativar quarantined.
-
-Credenciais são isoladas por provider. A herança do adapter OpenAI foi endurecida para impedir que subclasses DeepSeek/MiMo consultem `OPENAI_API_KEY` quando sua própria chave está ausente.
-
-## SQLite lifecycle
-
-Conexões transitórias devem ser fechadas explicitamente. O context manager nativo de `sqlite3.Connection` controla transação, **não fecha o handle**. Isso é especialmente relevante no Windows, onde um `audit.db` aberto impede remoção do `TemporaryDirectory`.
-
-## Report final
+A fonte de verdade é o conjunto:
 
 ```text
-report/index.html
-report/mobile.html       # condicional
-report/desktop.html      # condicional
-report/remediation.html
-report/content-suggestions.html
-report/ai-usage.html
-report/references.html
-report/css/site.css
+audit.db
+artifacts/
+logs/audit.log
 ```
 
-`report_site` não chama IA. `m20_reporting` projeta somente o estado M20 já persistido.
+O HTML é projeção humana e deve ser reconciliado contra a persistência, especialmente quando integrações externas falham ou retornam dados parciais.
 
-## Confidence
+## Fail-open
 
-É reliability da conclusão do auditor, não métrica direta de qualidade textual. Não pode ser gatilho isolado para M20.
+Falha de integração complementar não deve corromper a auditoria principal. O estado deve ser persistido, sanitizado e explicado no report.
 
-## Testing
+Exemplos:
 
-```powershell
-python -m compileall -q src tests
-python -m unittest discover -s tests -v
-```
+- provider indisponível/quarantined;
+- PageSpeed timeout;
+- CrUX sem dado;
+- artifact Lighthouse ausente;
+- amostra Synthetic Apdex inválida por falha de ferramenta.
 
-A estabilização final exige Windows + Linux. Regressões cobrem lifecycle SQLite no Windows, credenciais ambientais isoladas, provider credential isolation, device context, M20 OFF/ON, JSON-LD e report site.
+## Console
+
+O console é uma camada sobre a CLI, não um segundo pipeline. Configura parâmetros, executa preflight, acompanha progresso por estado persistido/log e inicia a mesma superfície `searchgeo audit`.
+
+`searchgeo-console.ini` guarda somente configuração não sensível. Secrets permanecem no ambiente/processo.
+
+## Compatibilidade histórica
+
+Nomes internos de módulos, classes, tabelas e eventos podem conservar identificadores históricos de implementação para não quebrar imports, schemas e rastreabilidade. Esses identificadores não devem ser usados como nomenclatura funcional da UI ou dos relatórios.
