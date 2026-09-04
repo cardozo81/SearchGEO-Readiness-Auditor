@@ -81,11 +81,13 @@ A instalação também registra:
 searchgeo-console
 ```
 
-Esse console não substitui nem altera `searchgeo audit`. Ele oferece menu, preflight de combinações, edição de variáveis somente para a sessão, cabeçalho de acompanhamento e bloqueio transitório de providers que terminem `QUARANTINED_FOR_AUDIT`. URL única é o default; TXT precisa ser selecionado explicitamente. Credenciais aparecem apenas como `[SET]`.
+Esse console não substitui nem altera `searchgeo audit`. Ele oferece navegação em tela única, preflight de combinações, edição de variáveis somente para a sessão, cabeçalho de acompanhamento, classificação de exposição financeira potencial, cronômetro, resumo final de tokens/custo e bloqueio transitório de providers que terminem `QUARANTINED_FOR_AUDIT`. URL única é o default; TXT precisa ser selecionado explicitamente. Credenciais aparecem apenas como `[SET]`.
 
-O menu inclui `H. Ajuda / custos`, com explicação clara da finalidade de cada parâmetro e marcadores para custo externo potencial, quota de API e multiplicadores de volume. O submenu de variáveis de ambiente também possui ajuda por variável sem revelar secrets. Ao término de uma auditoria, `I` abre diretamente `report/index.html` no navegador padrão e `P` abre a pasta `audits/<AUD-ID>/` da própria sessão; os atalhos permanecem disponíveis ao voltar ao menu.
+O menu inclui `H. Ajuda / custos`, com explicação da finalidade de cada parâmetro e marcadores para custo externo potencial, quota de API e multiplicadores de volume. A projeção considera URLs conhecidas/teto de crawl, dispositivos, IA/M20 e M21. Ao término, tokens/custo IA são consolidados das tabelas M18/M20 já existentes e chamadas M21 vêm de `web_performance_attempts`, sem duplicar telemetria. Apenas projeção prévia e timing, que não existiam no pipeline, são persistidos em `console_execution_projections`.
 
-Detalhes e smoke humano: [docs/INTERACTIVE_CONSOLE.md](docs/INTERACTIVE_CONSOLE.md).
+Ao término de uma auditoria, `I` abre diretamente `report/index.html` no navegador padrão e `P` abre a pasta `audits/<AUD-ID>/` da própria sessão; os atalhos permanecem disponíveis ao voltar ao menu.
+
+Detalhes: [docs/INTERACTIVE_CONSOLE.md](docs/INTERACTIVE_CONSOLE.md) e [docs/CONSOLE_COST_AND_USAGE.md](docs/CONSOLE_COST_AND_USAGE.md).
 
 ## Execução rápida
 
@@ -269,6 +271,7 @@ Test-Path Env:SEARCHGEO_CRUX_API_KEY
 
 - [CLI](docs/CLI_REFERENCE.md)
 - [Console interativo](docs/INTERACTIVE_CONSOLE.md)
+- [Console — custo e telemetria](docs/CONSOLE_COST_AND_USAGE.md)
 - [Compatibilidade](docs/COMPATIBILITY.md)
 - [Instalação](docs/INSTALLATION.md)
 - [Guia do usuário](docs/USER_GUIDE.md)
