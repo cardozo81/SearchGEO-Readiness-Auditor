@@ -14,6 +14,7 @@ from searchgeo.console_config import (
     State,
     apply_environment_defaults,
     is_secret,
+    preflight,
     provider_capabilities,
     validate_env_value,
 )
@@ -156,6 +157,14 @@ def _configure(state: State, choice: str) -> None:
         state.audits_root = input(f"Raiz [{state.audits_root}]: ").strip() or state.audits_root
 
 
+def _execution_readiness(state: State) -> tuple[bool, str]:
+    try:
+        preflight(state)
+    except (OSError, ValueError, UnicodeError) as exc:
+        return False, str(exc)
+    return True, "configuração válida"
+
+
 def _menu(state: State) -> str:
     render_header(state)
     capability = provider_capabilities(blocks=state.runtime_blocks)[state.ai_provider]
@@ -169,7 +178,9 @@ def _menu(state: State) -> str:
     print(f"8. WebPerf max-pages     : {state.web_max_pages}")
     print(f"9. Idioma / mercado      : {state.language} / {state.market}")
     print(f"10. Raiz auditorias      : {state.audits_root}")
-    print("\nE. Variáveis de ambiente | R. Executar | Q. Sair")
+    ready, reason = _execution_readiness(state)
+    marker = "APTO" if ready else "BLOQUEADO"
+    print(f"\nE. Variáveis de ambiente | R. Executar [{marker}] {reason} | Q. Sair")
     return input("Escolha: ").strip().upper()
 
 
@@ -185,6 +196,10 @@ def main() -> int:
             _environment_menu(state)
             continue
         if choice == "R":
+            ready, reason = _execution_readiness(state)
+            if not ready:
+                state.status, state.operation, state.error = "PRECHECK_BLOCKED", "LOCAL:PRECHECK", reason
+                continue
             run_audit_from_console(state)
             input("\nENTER para voltar ao menu...")
             state.status, state.operation, state.error = "READY", "LOCAL:MENU", ""
