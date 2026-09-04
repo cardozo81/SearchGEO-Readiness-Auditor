@@ -1,6 +1,6 @@
 # SearchGEO Readiness Auditor — Specification Index
 
-**Status:** APPROVED BASELINE + M14/M15/M16/M17/M18/M20/M21 + SCORE-GEO-002 + REPORT-SITE-GEO-001  
+**Status:** APPROVED BASELINE + M14/M15/M16/M17/M18/M20/M21 + SAFE PROVIDER EXTENSIONS + SCORE-GEO-002 + REPORT-SITE-GEO-001  
 **Baseline:** MVP Functional Specification  
 **Idioma normativo:** Português, preservando identificadores e termos técnicos quando necessário.
 
@@ -36,6 +36,7 @@ Os documentos presentes neste diretório prevalecem sobre interpretações infor
 20. `19_SCORE_APPLICABILITY_GEO_MINIMUMS.md`
 21. `20_AI_CONTENT_REMEDIATION.md`
 22. `21_EXTERNAL_WEB_PERFORMANCE_EVIDENCE.md`
+23. `22_SAFE_AI_PROVIDER_EXTENSIONS.md`
 
 ## 3. Precedência documental
 
@@ -51,6 +52,8 @@ Em caso de conflito:
 8. especificações de evolução de marco, quando não conflitarem com os itens anteriores.
 
 Nenhuma decisão funcional deve ser alterada silenciosamente durante implementação.
+
+A especificação `22_SAFE_AI_PROVIDER_EXTENSIONS.md` complementa M18/M20 sem substituir suas invariantes de routing, scoring, quarantine, telemetria ou segurança. Onde M18 enumera apenas a baseline histórica de providers, M22 formaliza providers adicionais explicit-only sem alterar `AUTO`.
 
 ## 4. Documentos
 
@@ -73,10 +76,10 @@ Score, Coverage, Confidence, Consolidation, aplicabilidade e agregações. Basel
 Severity, Impact, Effort, Confidence e Priority.
 
 ### `07_FUNCTIONAL_REQUIREMENTS.md`
-Requisitos `FR-GEO-*` e `NFR-GEO-*`. Inclui device context, report site, contrato M20 de remediação opcional e expansão M21 de evidência externa de Web Performance.
+Requisitos `FR-GEO-*` e `NFR-GEO-*`. Inclui device context, report site, contrato M20 de remediação opcional, expansão M21 de evidência externa de Web Performance e requisitos gerais de provider independente/múltiplos providers.
 
 ### `08_TECHNICAL_ARCHITECTURE.md`
-Arquitetura local/modular, seleção de dispositivo, finalização do report site, etapa M20 downstream de scoring/findings e enriquecimento M21 externo não-scoring.
+Arquitetura local/modular, seleção de dispositivo, finalização do report site, etapa M20 downstream de scoring/findings, enriquecimento M21 externo não-scoring e isolamento aditivo dos providers de extensão em relação ao núcleo M18 homologado.
 
 ### `09_IMPLEMENTATION_PLAN.md`
 Baseline de marcos e evoluções formalizadas. Quando descrição histórica de output conflitar com `FR-GEO-046`/REPORT-SITE-GEO-001, prevalece o contrato final `report/`.
@@ -106,16 +109,19 @@ M16: causa raiz evidence-backed, localização, observado versus esperado, mudan
 M17: reason code, observado versus alvo técnico, consistência e redução de duplicação.
 
 ### `18_MULTI_AI_PROVIDER_ROUTING.md`
-M18: multi-provider, routing determinístico, failover, quarantine, URL lock e telemetria. Não altera scoring.
+M18: baseline multi-provider OpenAI/DeepSeek/MiMo, routing determinístico, failover, quarantine, URL lock e telemetria. Não altera scoring.
 
 ### `19_SCORE_APPLICABILITY_GEO_MINIMUMS.md`
 `SCORE-GEO-002`, `NOT_APPLICABLE` versus `NOT_CONSOLIDATED`, JSON-LD opcional e premissas mínimas/contextuais.
 
 ### `20_AI_CONTENT_REMEDIATION.md`
-M20: sugestões textuais opcionais/evidence-bound, default OFF, separação de scoring, reutilização do routing M18, telemetria por finalidade e orientação determinística de JSON-LD por página/dispositivo.
+M20: sugestões textuais opcionais/evidence-bound, default OFF, separação de scoring, reutilização do routing/provider selecionado, telemetria por finalidade e orientação determinística de JSON-LD por página/dispositivo.
 
 ### `21_EXTERNAL_WEB_PERFORMANCE_EVIDENCE.md`
 M21: coleta opcional e controlada de Lighthouse via PageSpeed Insights e Core Web Vitals/CrUX, com persistência própria, artifacts, `report/web-performance.html`, zero chamadas LLM adicionais e separação rígida de `SCORE-GEO-002`.
+
+### `22_SAFE_AI_PROVIDER_EXTENSIONS.md`
+Extensão segura/aditiva para xAI/Grok, Alibaba Qwen, Google Gemini e Anthropic Claude. Define explicit-only, `PROVISIONAL`, isolamento de credenciais, contratos nativos, M20, regressão obrigatória, preservação de `AUTO` e gate de smoke humano antes de promoção/merge.
 
 ## 5. REPORT-SITE-GEO-001
 
@@ -151,13 +157,15 @@ Heurísticas BR-GEO sem equivalente normativo devem permanecer identificadas com
 
 ## 7. Regra de mudança
 
-Mudanças que afetem escopo, Business Rules, scoring, priorização, interpretação do relatório, device context público, conteúdo sugerido por IA, consumo externo M21 ou requisitos corporativos devem ser reconciliadas nesta baseline antes da conclusão do merge.
+Mudanças que afetem escopo, Business Rules, scoring, priorização, interpretação do relatório, device context público, conteúdo sugerido por IA, lista/routing de providers, consumo externo M21 ou requisitos corporativos devem ser reconciliadas nesta baseline antes da conclusão do merge.
 
 Decisões puramente internas de implementação podem ser tomadas sem aprovação humana quando não alterarem comportamento funcional.
 
 ## M18 — Multi-AI Provider Abstraction, Reliability Routing & Usage Telemetry
 
 Fonte normativa específica: `18_MULTI_AI_PROVIDER_ROUTING.md`. M18 não altera Business Rules, PRIORITY-GEO-001, actionability nem semântica de UNKNOWN.
+
+A baseline automática M18 permanece OpenAI/DeepSeek/MiMo. Providers adicionais explicit-only são regidos por `22_SAFE_AI_PROVIDER_EXTENSIONS.md` e não alteram essa cadeia enquanto provisórios.
 
 ## SCORE-GEO-002 — Aplicabilidade e premissas mínimas GEO
 
@@ -166,6 +174,8 @@ Fonte normativa específica: `19_SCORE_APPLICABILITY_GEO_MINIMUMS.md`. Mantém a
 ## M20 — Optional AI Content Remediation + JSON-LD Guidance
 
 Fonte normativa específica: `20_AI_CONTENT_REMEDIATION.md`. Sugestões textuais são default OFF, downstream de scoring e sempre dependentes de finding/evidência. A revisão JSON-LD é determinística e disponível mesmo sem provider externo.
+
+M22 adiciona adapters M20 explicit-only sem modificar o router legado dos providers M18 existentes.
 
 ## M21 — External Web Performance Evidence
 
@@ -176,7 +186,21 @@ M21:
 - é default OFF para evitar consumo externo não solicitado;
 - usa PageSpeed Insights/Lighthouse e CrUX quando habilitado/configurado;
 - possui limite de páginas, timeout e política de field data configuráveis;
-- adiciona zero chamadas de OpenAI/DeepSeek/MiMo;
+- adiciona zero chamadas LLM de qualquer provider;
 - persiste telemetria e raw response artifacts próprios;
 - cria `report/web-performance.html`;
 - não altera RuleExecution, Finding, Recommendation, Score, Coverage, Confidence, Consolidation ou `SCORE-GEO-002`.
+
+## Safe AI Provider Extensions
+
+Fonte normativa específica: `22_SAFE_AI_PROVIDER_EXTENSIONS.md`.
+
+A extensão:
+
+- adiciona xAI/Grok, Qwen, Gemini e Anthropic/Claude;
+- mantém todos inicialmente `PROVISIONAL` e explicit-only;
+- preserva `AUTO = OpenAI -> DeepSeek -> MiMo`;
+- isola credenciais/modelos/endpoints;
+- mantém schema/evidence validation e fail-closed;
+- adiciona M20 nativo sem reativar provider quarantined;
+- exige regressão automatizada e smoke humano antes de promoção/merge.
