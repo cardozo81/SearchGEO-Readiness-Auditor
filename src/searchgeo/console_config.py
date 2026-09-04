@@ -8,25 +8,51 @@ import sys
 from typing import Mapping
 
 from searchgeo.cli import validate_target
-from searchgeo.m18_ai import DEFAULT_MODELS, KEY_ENV, MODEL_ENV, SUPPORTED_MODELS
+from searchgeo.provider_registry import (
+    auto_provider_ids,
+    get_provider_registration,
+    provider_environment_names,
+    provider_registrations,
+)
 from searchgeo.url_utils import normalize_url, normalized_origin
 
-ENV_NAMES = (
-    "SEARCHGEO_CONFIG", "SEARCHGEO_LOG_LEVEL", "SEARCHGEO_DEVICE_CONTEXT",
-    "SEARCHGEO_AI_TIMEOUT_SECONDS", "SEARCHGEO_AI_CONTENT_REMEDIATION",
-    "OPENAI_API_KEY", "DEEPSEEK_API_KEY", "MIMO_API_KEY",
-    "SEARCHGEO_OPENAI_MODEL", "SEARCHGEO_DEEPSEEK_MODEL", "SEARCHGEO_MIMO_MODEL",
-    "SEARCHGEO_OPENAI_REASONING_EFFORT", "SEARCHGEO_DEEPSEEK_REASONING_EFFORT",
-    "SEARCHGEO_MIMO_REASONING_EFFORT", "SEARCHGEO_WEB_PERFORMANCE",
-    "SEARCHGEO_WEB_PERFORMANCE_MAX_PAGES", "SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS",
-    "SEARCHGEO_WEB_PERFORMANCE_FIELD_SOURCE", "SEARCHGEO_LIGHTHOUSE_CATEGORIES",
-    "SEARCHGEO_PAGESPEED_API_KEY", "SEARCHGEO_CRUX_API_KEY", "PLAYWRIGHT_CHROMIUM_EXECUTABLE",
+
+_REGISTRATIONS = provider_registrations()
+PROVIDERS = {item.id: item.provider_name for item in _REGISTRATIONS}
+KEY_ENV = {item.provider_name: item.key_env for item in _REGISTRATIONS}
+MODEL_ENV = {item.provider_name: item.model_env for item in _REGISTRATIONS}
+DEFAULT_MODELS = {item.provider_name: item.default_model for item in _REGISTRATIONS}
+SUPPORTED_MODELS = {item.provider_name: item.supported_models for item in _REGISTRATIONS}
+REASONING_ENV = {
+    item.provider_name: item.reasoning_env
+    for item in _REGISTRATIONS
+    if item.reasoning_env
+}
+PROVIDER_MENU_CHOICES = ("none", *(item.id for item in _REGISTRATIONS), "auto")
+
+_BASE_ENV_NAMES = (
+    "SEARCHGEO_CONFIG",
+    "SEARCHGEO_LOG_LEVEL",
+    "SEARCHGEO_DEVICE_CONTEXT",
+    "SEARCHGEO_AI_TIMEOUT_SECONDS",
+    "SEARCHGEO_AI_CONTENT_REMEDIATION",
+    "SEARCHGEO_WEB_PERFORMANCE",
+    "SEARCHGEO_WEB_PERFORMANCE_MAX_PAGES",
+    "SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS",
+    "SEARCHGEO_WEB_PERFORMANCE_FIELD_SOURCE",
+    "SEARCHGEO_LIGHTHOUSE_CATEGORIES",
+    "SEARCHGEO_PAGESPEED_API_KEY",
+    "SEARCHGEO_CRUX_API_KEY",
+    "PLAYWRIGHT_CHROMIUM_EXECUTABLE",
 )
-SECRET_NAMES = frozenset({
-    "OPENAI_API_KEY", "DEEPSEEK_API_KEY", "MIMO_API_KEY",
-    "SEARCHGEO_PAGESPEED_API_KEY", "SEARCHGEO_CRUX_API_KEY",
-})
-PROVIDERS = {"openai": "OPENAI", "deepseek": "DEEPSEEK", "mimo": "MIMO"}
+ENV_NAMES = tuple(dict.fromkeys((*_BASE_ENV_NAMES, *provider_environment_names())))
+SECRET_NAMES = frozenset(
+    {
+        *(item.key_env for item in _REGISTRATIONS),
+        "SEARCHGEO_PAGESPEED_API_KEY",
+        "SEARCHGEO_CRUX_API_KEY",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,12 +94,7 @@ def apply_environment_defaults(
     env: Mapping[str, str] | None = None,
     names: set[str] | None = None,
 ) -> tuple[str, ...]:
-    """Apply CLI-equivalent environment defaults to console state.
-
-    ``names`` limits synchronization to variables just edited in the console.
-    Invalid pre-existing values are reported but do not make the console itself
-    unusable; the user can correct/remove them from the environment menu.
-    """
+    """Apply CLI-equivalent environment defaults to console state."""
     environment = env if env is not None else os.environ
     issues: list[str] = []
 
@@ -93,12 +114,11 @@ def apply_environment_defaults(
         return default
 
     if active("SEARCHGEO_DEVICE_CONTEXT"):
-        raw_device = (environment.get("SEARCHGEO_DEVICE_CONTEXT") or "").strip().casefold()
-        if not raw_device:
+        raw = (environment.get("SEARCHGEO_DEVICE_CONTEXT") or "").strip().casefold()
+        if not raw:
             state.device, state.current_device = "mobile", "MOBILE"
-        elif raw_device in {"mobile", "desktop", "both"}:
-            state.device = raw_device
-            state.current_device = raw_device.upper()
+        elif raw in {"mobile", "desktop", "both"}:
+            state.device, state.current_device = raw, raw.upper()
         else:
             issues.append("SEARCHGEO_DEVICE_CONTEXT: use mobile, desktop ou both")
 
@@ -108,50 +128,52 @@ def apply_environment_defaults(
         state.web_performance = boolean("SEARCHGEO_WEB_PERFORMANCE", False)
 
     if active("SEARCHGEO_WEB_PERFORMANCE_MAX_PAGES"):
-        raw_max = (environment.get("SEARCHGEO_WEB_PERFORMANCE_MAX_PAGES") or "").strip()
-        if not raw_max:
+        raw = (environment.get("SEARCHGEO_WEB_PERFORMANCE_MAX_PAGES") or "").strip()
+        if not raw:
             state.web_max_pages = 10
         else:
             try:
-                parsed = int(raw_max)
-                if parsed < 0:
+                value = int(raw)
+                if value < 0:
                     raise ValueError
-                state.web_max_pages = parsed
+                state.web_max_pages = value
             except ValueError:
                 issues.append("SEARCHGEO_WEB_PERFORMANCE_MAX_PAGES: use inteiro >= 0")
 
     if active("SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS"):
-        raw_timeout = (environment.get("SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS") or "").strip()
-        if not raw_timeout:
+        raw = (environment.get("SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS") or "").strip()
+        if not raw:
             state.web_timeout = 60.0
         else:
             try:
-                parsed_timeout = float(raw_timeout)
-                if parsed_timeout <= 0:
+                value = float(raw)
+                if value <= 0:
                     raise ValueError
-                state.web_timeout = parsed_timeout
+                state.web_timeout = value
             except ValueError:
                 issues.append("SEARCHGEO_WEB_PERFORMANCE_TIMEOUT_SECONDS: use número > 0")
 
     if active("SEARCHGEO_WEB_PERFORMANCE_FIELD_SOURCE"):
-        raw_field = (environment.get("SEARCHGEO_WEB_PERFORMANCE_FIELD_SOURCE") or "").strip().casefold()
-        if not raw_field:
+        raw = (environment.get("SEARCHGEO_WEB_PERFORMANCE_FIELD_SOURCE") or "").strip().casefold()
+        if not raw:
             state.field_source = "auto"
-        elif raw_field in {"auto", "pagespeed", "crux", "none"}:
-            state.field_source = raw_field
+        elif raw in {"auto", "pagespeed", "crux", "none"}:
+            state.field_source = raw
         else:
             issues.append("SEARCHGEO_WEB_PERFORMANCE_FIELD_SOURCE: valor inválido")
 
     if active("SEARCHGEO_LIGHTHOUSE_CATEGORIES"):
-        raw_categories = (environment.get("SEARCHGEO_LIGHTHOUSE_CATEGORIES") or "").strip()
-        state.lighthouse_categories = raw_categories or "performance,accessibility,best-practices,seo"
+        raw = (environment.get("SEARCHGEO_LIGHTHOUSE_CATEGORIES") or "").strip()
+        state.lighthouse_categories = raw or "performance,accessibility,best-practices,seo"
 
     return tuple(issues)
 
 
 def is_secret(name: str) -> bool:
     upper = name.upper()
-    return name in SECRET_NAMES or any(token in upper for token in ("API_KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL"))
+    return name in SECRET_NAMES or any(
+        token in upper for token in ("API_KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL")
+    )
 
 
 def environment_summary(env: Mapping[str, str] | None = None) -> tuple[str, ...]:
@@ -167,49 +189,130 @@ def environment_summary(env: Mapping[str, str] | None = None) -> tuple[str, ...]
     return tuple(items)
 
 
+def _runtime_block(blocks: Mapping[str, str], provider_id: str) -> str | None:
+    return blocks.get(provider_id)
+
+
 def provider_capabilities(
     env: Mapping[str, str] | None = None,
     blocks: Mapping[str, str] | None = None,
 ) -> dict[str, Capability]:
     environment = env if env is not None else os.environ
     blocked = blocks or {}
-    result = {"none": Capability(True, "sem IA")}
-    ready = 0
-    for selection, provider in PROVIDERS.items():
-        key_name, model_name = KEY_ENV[provider], MODEL_ENV[provider]
-        key = (environment.get(key_name) or "").strip()
-        model = (environment.get(model_name) or DEFAULT_MODELS[provider]).strip()
-        reasoning_name = f"SEARCHGEO_{provider}_REASONING_EFFORT"
-        reasoning = (environment.get(reasoning_name) or "HIGH").strip().upper()
-        allowed_reasoning = (
-            {"NONE", "LOW", "MEDIUM", "HIGH"}
-            if provider == "MIMO"
-            else {"NONE", "LOW", "MEDIUM", "HIGH", "XHIGH", "MAX"}
-        )
-        if selection in blocked:
-            result[selection] = Capability(False, f"bloqueado após erro: {blocked[selection]}")
+    result: dict[str, Capability] = {"none": Capability(True, "sem IA")}
+    auto_ready: list[str] = []
+
+    for registration in _REGISTRATIONS:
+        provider_id = registration.id
+        key = (environment.get(registration.key_env) or "").strip()
+        model = (environment.get(registration.model_env) or registration.default_model).strip()
+        block = _runtime_block(blocked, provider_id)
+
+        if block:
+            capability = Capability(False, f"bloqueado após erro: {block}")
         elif not key:
-            result[selection] = Capability(False, f"{key_name} não configurada")
-        elif provider == "MIMO" and not key.startswith("sk-"):
-            result[selection] = Capability(False, "MIMO exige chave PAYG sk-...; tp-... não é suportada")
-        elif model not in SUPPORTED_MODELS[provider]:
-            result[selection] = Capability(False, f"modelo inválido em {model_name}: {model}")
-        elif reasoning not in allowed_reasoning:
-            result[selection] = Capability(False, f"{reasoning_name} inválido: {reasoning}")
+            capability = Capability(
+                False,
+                f"{registration.key_env} não configurada"
+                + (
+                    f" | {registration.qualification} | explicit-only"
+                    if registration.explicit_only
+                    else ""
+                ),
+            )
+        elif registration.required_key_prefixes and not key.startswith(registration.required_key_prefixes):
+            prefixes = " ou ".join(registration.required_key_prefixes)
+            capability = Capability(
+                False,
+                f"{registration.display_name} exige chave compatível ({prefixes}...)",
+            )
+        elif model not in registration.supported_models:
+            capability = Capability(
+                False,
+                f"modelo inválido em {registration.model_env}: {model}",
+            )
+        elif registration.reasoning_env:
+            reasoning = (environment.get(registration.reasoning_env) or "HIGH").strip().upper()
+            if reasoning not in set(registration.reasoning_values):
+                capability = Capability(
+                    False,
+                    f"{registration.reasoning_env} inválido: {reasoning}",
+                )
+            else:
+                suffix = (
+                    f" | {registration.qualification} | explicit-only"
+                    if registration.explicit_only
+                    else f" | {registration.qualification}"
+                )
+                capability = Capability(
+                    True,
+                    f"{registration.display_name}/{model}{suffix}",
+                )
         else:
-            result[selection] = Capability(True, f"{provider}/{model}")
-            ready += 1
+            suffix = (
+                f" | {registration.qualification} | explicit-only"
+                if registration.explicit_only
+                else f" | {registration.qualification}"
+            )
+            capability = Capability(True, f"{registration.display_name}/{model}{suffix}")
+
+        result[provider_id] = capability
+        for alias in registration.aliases:
+            result[alias] = capability
+        if registration.auto_eligible and capability.available:
+            auto_ready.append(provider_id)
+
+    auto_chain = " -> ".join(item.upper() for item in auto_provider_ids())
     result["auto"] = Capability(
-        ready > 0,
-        f"{ready} provider(s) elegível(is)" if ready else "nenhum provider elegível",
+        bool(auto_ready),
+        (
+            f"{len(auto_ready)} provider(s) elegível(is); cadeia homologada {auto_chain}"
+            if auto_ready
+            else f"nenhum provider AUTO elegível; cadeia homologada {auto_chain}"
+        ),
     )
     return result
+
+
+def _registration_by_env(name: str):
+    for registration in _REGISTRATIONS:
+        if name in {
+            registration.key_env,
+            registration.model_env,
+            registration.endpoint_env,
+            registration.reasoning_env,
+        }:
+            return registration
+    return None
 
 
 def validate_env_value(name: str, value: str) -> str:
     value = value.strip()
     if not value:
         raise ValueError("valor vazio; remova a variável em vez de gravar vazio")
+
+    registration = _registration_by_env(name)
+    if registration is not None:
+        if name == registration.key_env:
+            if registration.required_key_prefixes and not value.startswith(registration.required_key_prefixes):
+                prefixes = " ou ".join(registration.required_key_prefixes)
+                raise ValueError(f"{registration.display_name} exige chave compatível ({prefixes}...)")
+            return value
+        if name == registration.model_env:
+            if value not in registration.supported_models:
+                raise ValueError(f"modelos suportados: {', '.join(registration.supported_models)}")
+            return value
+        if name == registration.reasoning_env:
+            value = value.upper()
+            if value not in set(registration.reasoning_values):
+                raise ValueError(
+                    "reasoning effort não suportado; use "
+                    + ", ".join(registration.reasoning_values)
+                )
+            return value
+        if name == registration.endpoint_env:
+            return value
+
     if name in {"SEARCHGEO_AI_CONTENT_REMEDIATION", "SEARCHGEO_WEB_PERFORMANCE"}:
         if value.casefold() not in {"true", "false", "1", "0", "yes", "no", "on", "off"}:
             raise ValueError("booleano inválido")
@@ -229,30 +332,28 @@ def validate_env_value(name: str, value: str) -> str:
             raise ValueError("use auto, pagespeed, crux ou none")
         if value == "crux" and not (os.environ.get("SEARCHGEO_CRUX_API_KEY") or "").strip():
             raise ValueError("crux exige SEARCHGEO_CRUX_API_KEY")
-    elif name.endswith("_REASONING_EFFORT"):
-        value = value.upper()
-        allowed = (
-            {"NONE", "LOW", "MEDIUM", "HIGH"}
-            if "MIMO" in name
-            else {"NONE", "LOW", "MEDIUM", "HIGH", "XHIGH", "MAX"}
-        )
-        if value not in allowed:
-            raise ValueError("reasoning effort não suportado")
-    elif name == "MIMO_API_KEY" and not value.startswith("sk-"):
-        raise ValueError("MiMo exige chave PAYG sk-...; tp-... não é suportada")
     elif name == "PLAYWRIGHT_CHROMIUM_EXECUTABLE" and not Path(value).is_file():
         raise ValueError("arquivo Chromium configurado não existe")
-    else:
-        for provider, model_env in MODEL_ENV.items():
-            if name == model_env and value not in SUPPORTED_MODELS[provider]:
-                raise ValueError(f"modelos suportados: {', '.join(SUPPORTED_MODELS[provider])}")
     return value
+
+
+def _capability_for_selection(
+    selection: str,
+    env: Mapping[str, str],
+    blocks: Mapping[str, str],
+) -> Capability | None:
+    capabilities = provider_capabilities(env, blocks)
+    normalized = selection.strip().casefold()
+    registration = get_provider_registration(normalized)
+    key = registration.id if registration is not None else normalized
+    return capabilities.get(key)
 
 
 def preflight(state: State, env: Mapping[str, str] | None = None) -> tuple[str, ...]:
     environment = env if env is not None else os.environ
     if state.max_pages <= 0 or state.web_max_pages < 0 or state.web_timeout <= 0:
         raise ValueError("limites/timeout inválidos")
+
     if state.input_mode == "url":
         if not state.target.strip():
             raise ValueError("informe uma URL/domínio")
@@ -270,22 +371,26 @@ def preflight(state: State, env: Mapping[str, str] | None = None) -> tuple[str, 
             raise ValueError("TXT não contém targets")
     else:
         raise ValueError("modo de entrada inválido")
+
     normalized = tuple(dict.fromkeys(normalize_url(item) for item in targets))
     if len({normalized_origin(item) for item in normalized}) != 1:
         raise ValueError("todos os targets devem pertencer à mesma origem normalizada")
     if state.input_mode == "file" and len(normalized) > state.max_pages:
         raise ValueError(f"TXT possui {len(normalized)} URLs únicas e max-pages={state.max_pages}")
-    capability = provider_capabilities(environment, state.runtime_blocks).get(state.ai_provider)
+
+    capability = _capability_for_selection(state.ai_provider, environment, state.runtime_blocks)
     if not capability or not capability.available:
-        raise ValueError(
-            f"provider {state.ai_provider} indisponível: "
-            f"{capability.reason if capability else 'inválido'}"
-        )
+        reason = capability.reason if capability else "inválido"
+        raise ValueError(f"provider {state.ai_provider} indisponível: {reason}")
     if state.ai_provider == "none" and state.content_remediation:
         raise ValueError("remediação textual exige provider de IA apto")
     if state.ai_provider == "auto" and state.ai_model:
         raise ValueError("AUTO não aceita --ai-model")
-    if state.web_performance and state.field_source == "crux" and not (environment.get("SEARCHGEO_CRUX_API_KEY") or "").strip():
+    if (
+        state.web_performance
+        and state.field_source == "crux"
+        and not (environment.get("SEARCHGEO_CRUX_API_KEY") or "").strip()
+    ):
         raise ValueError("field source crux exige SEARCHGEO_CRUX_API_KEY")
     browser = (environment.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE") or "").strip()
     if browser and not Path(browser).is_file():
@@ -306,9 +411,13 @@ def build_command(state: State) -> list[str]:
         "--device-context", state.device,
         "--ai-provider", state.ai_provider,
     ]
-    if state.ai_provider in PROVIDERS and state.ai_model:
+    if get_provider_registration(state.ai_provider) is not None and state.ai_model:
         command += ["--ai-model", state.ai_model]
-    command += ["--ai-content-remediation" if state.content_remediation else "--no-ai-content-remediation"]
+    command += [
+        "--ai-content-remediation"
+        if state.content_remediation
+        else "--no-ai-content-remediation"
+    ]
     command += ["--web-performance" if state.web_performance else "--no-web-performance"]
     if state.web_performance:
         command += [
