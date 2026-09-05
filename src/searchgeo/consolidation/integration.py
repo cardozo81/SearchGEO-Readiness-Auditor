@@ -20,18 +20,22 @@ def install(interactive_console: Any) -> None:
     original_configure: Callable[..., None] = interactive_console._configure
 
     def menu_with_consolidation(state: Any) -> str:
-        original_input = builtins.input
+        had_module_input = hasattr(interactive_console, "input")
+        original_input = getattr(interactive_console, "input", builtins.input)
 
         def input_with_option(prompt: str = "") -> str:
             if prompt == "Escolha: ":
                 print("C. Histórico / relatórios consolidados [OFFLINE | sem APIs]")
             return original_input(prompt)
 
-        builtins.input = input_with_option
+        interactive_console.input = input_with_option
         try:
             return original_menu(state)
         finally:
-            builtins.input = original_input
+            if had_module_input:
+                interactive_console.input = original_input
+            else:
+                delattr(interactive_console, "input")
 
     def configure_with_consolidation(state: Any, choice: str) -> None:
         if choice != CONSOLIDATION_CHOICE:
