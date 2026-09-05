@@ -8,13 +8,13 @@ Branch:
 feature/consolidated-reporting
 ```
 
-PR de integração:
+PR:
 
 ```text
 #67
 ```
 
-A mudança é aditiva e isolada. O único arquivo runtime preexistente alterado é `src/searchgeo/console_entrypoint.py`, que instala o adapter do novo submenu antes de delegar ao mesmo `interactive_console.main()` existente.
+A mudança permanece aditiva e isolada. O único arquivo de runtime preexistente alterado é `src/searchgeo/console_entrypoint.py`, usado apenas para instalar o adapter da opção `C` antes de delegar ao mesmo console existente.
 
 Não há alteração em:
 
@@ -29,20 +29,20 @@ Não há alteração em:
 
 ## Fonte de verdade e escrita
 
-A fonte de verdade permanece:
+Fonte de verdade:
 
 ```text
 AUD-*/audit.db
 ```
 
-A leitura usa:
+Leitura:
 
 ```text
 SQLite mode=ro
 PRAGMA query_only=ON
 ```
 
-O pacote de consolidação só escreve em:
+A feature só escreve em:
 
 ```text
 .searchgeo/consolidated-index.db
@@ -52,13 +52,33 @@ consolidated/CONS-*/manifest.json
 
 O índice é derivado e reconstruível.
 
-## Comparabilidade estatística implementada
+## Formato atual do relatório
 
-### Score GEO
+```text
+CONS-2
+```
 
-Score é persistido em nível de auditoria/dispositivo/dimensão. Por isso a consolidação não recalcula score por URL.
+O bump de `CONS-1` para `CONS-2` foi intencional para invalidar o dedupe de snapshots antigos após a evolução de layout/metodologia.
 
-Uma série numérica de score é considerada comparável somente dentro da combinação mais recente de:
+`CONS-2` inclui:
+
+- leitura executiva;
+- navegação fixa;
+- modo adaptativo Snapshot / comparação de dois pontos / série histórica;
+- gráfico de Compatibilidade GEO + Cobertura quando há 2+ pontos comparáveis;
+- matriz histórica das dimensões quando há base comparável;
+- estatísticas avançadas expansíveis;
+- destaque de amostra pequena de Apdex;
+- evolução do volume de ocorrências;
+- matriz de confiabilidade analítica sem inventar novo score;
+- pesquisa/paginação das auditorias consideradas;
+- metodologia, fórmulas, política de extremos e referências técnicas no próprio HTML.
+
+## Comparabilidade estatística
+
+### Compatibilidade GEO
+
+Uma série numérica só é agregada dentro da combinação mais recente de:
 
 ```text
 scoring_version
@@ -66,29 +86,52 @@ scoring_version
 fingerprint do conjunto completo de URLs da auditoria
 ```
 
-Se houver mudança de `scoring_version` ou do universo de URLs, o relatório informa a limitação e não mistura os valores incompatíveis na mesma média/série resumida.
+O HTML traduz `scoring_version` para **Versão do método de pontuação**.
 
-Quando o usuário aplica filtro explícito de URL, um score audit-level só pode entrar se o universo completo daquela auditoria estiver contido no filtro. Caso contrário o score é omitido, sem fabricar um recálculo parcial.
+Filtro parcial de URL nunca recebe uma pontuação calculada sobre páginas fora do filtro. O consolidado não reexecuta scoring.
 
-### Web Performance
+### Média, mediana e extremos
 
-Média/mediana/mínimo/máximo usam observações persistidas do período. Para representar `Inicial` e `Atual` em um conjunto de URLs, o consolidador usa a média transversal da observação válida mais antiga e mais recente de **cada URL**, evitando que a última linha de uma única URL represente todo o domínio.
+- média = média aritmética das observações elegíveis;
+- mediana = valor central das observações elegíveis;
+- mínimo/máximo são preservados;
+- nenhum extremo é eliminado automaticamente apenas por seu valor;
+- não há trimming, winsorization ou descarte por IQR/desvio-padrão;
+- dado ausente não vira zero.
 
-Lab e field continuam separados por métrica. `field_source` e `field_scope` permanecem visíveis.
+### Desempenho Web
 
-### Synthetic Apdex
+Para `Inicial`/`Atual` em métricas por URL, usa-se a média transversal da observação válida mais antiga/recente de cada URL. Isso evita que a URL com maior frequência de auditoria represente sozinha o domínio.
 
-Só são agregados profile e threshold T compatíveis. O Apdex consolidado do período é ponderado por amostras válidas.
+### Apdex
 
-Para duração/percentis, `Inicial` e `Atual` também usam a observação mais antiga/recente por URL.
+Somente mesmo perfil + T são compatíveis. O consolidado pondera o Apdex por amostras válidas e destaca `small_group` sem `final_group` como base insuficiente para conclusão robusta.
 
-### Findings
+### Ocorrências
 
-Findings são estatística histórica de ocorrência e não alteram/recalculam Score GEO.
+Ocorrências são estatística histórica; não recalculam SCORE-GEO. O gráfico de volume bruto contém aviso para interpretação junto com o tamanho do universo auditado.
 
-## Dedupe de relatório
+## Transparência do SCORE-GEO
 
-O dedupe exige igualdade de:
+O HTML só apresenta versões efetivamente persistidas nas fontes selecionadas. `SCORE-GEO-001` não é exibido como alternativa quando não existe nos AUDs.
+
+Quando `SCORE-GEO-002` está presente, o relatório explica:
+
+- PASS = fator 1;
+- WARNING = fator padrão 0,5;
+- FAIL = fator 0;
+- agrupamento de regras correlacionadas;
+- fórmula da dimensão;
+- fórmula da Coverage;
+- exclusão de `NOT_APPLICABLE` legítimo;
+- média aritmética das dimensões aplicáveis no Overall;
+- thresholds de Confidence;
+- natureza interna/reproduzível do método;
+- ausência de validação externa estabelecida como preditor de ranking/citação.
+
+## Dedupe
+
+Exige igualdade de:
 
 ```text
 report_format_version
@@ -98,56 +141,98 @@ report_format_version
 
 Portanto:
 
-- mesmos filtros + mesmas fontes: reutiliza o `CONS-*` existente;
+- mesma requisição + mesmas fontes: reutiliza;
 - novo AUD elegível: novo snapshot;
-- alteração de filtro: novo snapshot;
+- mudança de filtro: novo snapshot;
 - mudança de formato: novo snapshot.
 
-## Testes automatizados específicos
+## Testes automatizados
 
-O workflow `.github/workflows/consolidated-reporting-ci.yml` é restrito à própria feature e executa:
+Workflow:
 
-1. instalação do pacote em CPython 3.13;
-2. `compileall` do novo pacote e entrypoint alterado;
-3. todos os testes `test_consolidation*.py`;
-4. regressões existentes do console interativo/configuração.
+```text
+.github/workflows/consolidated-reporting-ci.yml
+```
 
-Cobertura funcional específica inclui:
+Executa em CPython 3.13:
 
-- geração read-only com hash dos `audit.db` antes/depois;
-- dedupe de requisição idêntica;
-- invalidação do dedupe por novo AUD elegível;
-- proteção de score audit-level em filtro parcial de URL;
-- segregação por `scoring_version`;
-- segregação por universo de URLs;
-- estado Web Performance calculado pela observação mais recente por URL;
-- isolamento de `audit.db` inválido;
-- filtro temporal inclusivo;
-- delegação intacta das opções antigas do console;
-- falha de consolidação `fail-open`.
+1. instalação do pacote;
+2. `compileall` do pacote da feature/entrypoint/testes;
+3. `test_consolidation*.py`;
+4. regressões existentes de console/configuração.
+
+### Cobertura específica
+
+- geração read-only e hash dos `audit.db` inalterado;
+- dedupe da mesma requisição;
+- invalidação por novo AUD;
+- filtro parcial de URL sem contaminação do Score;
+- segregação de versão do método;
+- segregação de universo de URLs;
+- estado atual de Web Performance por URL;
+- isolamento de banco inválido;
+- período inclusivo;
+- integração `C` sem interceptar escolhas antigas;
+- falha do consolidado `fail-open`;
+- Snapshot com `N=1` sem falsa tendência;
+- `SCORE-GEO-001` ausente da UI quando não existe nas fontes;
+- metodologia/política de outliers materializada no HTML/manifest;
+- gráfico histórico com três pontos comparáveis;
+- matriz histórica das dimensões;
+- dedupe preservado no formato `CONS-2`.
+
+### Último gate de código antes desta atualização documental
+
+```text
+14 testes da consolidação: OK
+44 testes existentes do console/configuração: OK
+58 testes executados: 58 OK
+compileall: OK
+merge-ref PR #67 x main: OK
+```
+
+A documentação final também deve passar pelo mesmo workflow antes do smoke humano.
+
+## Smoke humano obrigatório antes de qualquer merge
+
+Executar na branch `feature/consolidated-reporting` com AUDs reais:
+
+1. abrir `iniciar.cmd`;
+2. confirmar que menu legado permanece normal;
+3. entrar em `C`;
+4. gerar um consolidado com 1 AUD e confirmar modo **Snapshot**;
+5. gerar com 2 AUDs comparáveis e confirmar aviso de variação, não tendência;
+6. gerar com 3+ AUDs comparáveis e validar gráfico/matriz;
+7. verificar Compatibilidade GEO, Coverage e Confidence contra pelo menos um `audit.db` fonte;
+8. conferir Apdex small-group quando aplicável;
+9. testar pesquisa/paginação de **Auditorias consideradas**;
+10. conferir seção de metodologia/cálculos;
+11. repetir mesmos filtros e confirmar dedupe;
+12. comparar hash de `audit.db` antes/depois;
+13. abrir HTML com console fechado e confirmar funcionamento estático.
 
 ## Gate de merge
 
-O PR deve permanecer sem merge se qualquer condição abaixo não for comprovada:
+O PR deve permanecer sem merge se qualquer condição não estiver comprovada:
 
-- CI específico verde no HEAD final;
-- branch baseada no `main` corrente ou revisada contra mudanças posteriores;
+- CI verde no HEAD final;
+- smoke humano concluído;
+- branch revisada contra `main` corrente;
 - diff sem alteração dos motores de auditoria/scoring/persistência;
-- nenhum `AUD-*/audit.db` escrito pelos testes;
-- sem chamadas de rede no pacote `consolidation`;
-- integração do console preservando as escolhas preexistentes;
-- revisão do diff final sem arquivo inesperado.
+- nenhum `AUD-*/audit.db` escrito;
+- nenhuma chamada de rede no pacote `consolidation`;
+- integração do console preservando escolhas anteriores;
+- diff final sem arquivo inesperado.
 
-A existência de testes verdes reduz risco, mas não autoriza afirmar risco matematicamente zero. Se houver qualquer dúvida material sobre impacto, o PR deve permanecer draft/sem merge.
+Testes verdes reduzem risco; não autorizam afirmar risco matematicamente zero.
 
 ## Rollback
 
-Se o PR for integrado e for necessário remover somente esta funcionalidade:
+Se futuramente integrado, usar preferencialmente **Squash and merge** para manter a feature como um único commit funcional em `main`.
 
-1. reverter o merge/squash do PR #67;
-2. não executar qualquer migration em `AUD-*` — nenhuma existe;
-3. opcionalmente excluir `.searchgeo/consolidated-index.db`;
-4. opcionalmente arquivar/excluir `consolidated/CONS-*`;
-5. nenhuma restauração de banco de auditoria é necessária.
+Rollback:
 
-Como o pipeline de auditoria não depende da feature, o rollback é restrito ao código/artefatos derivados do consolidado.
+1. reverter o commit squash do PR #67;
+2. opcionalmente apagar `.searchgeo/consolidated-index.db`;
+3. opcionalmente arquivar/remover `consolidated/CONS-*`;
+4. não restaurar/migrar `AUD-*`, pois a feature nunca grava neles.
