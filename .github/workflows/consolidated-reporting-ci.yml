@@ -25,9 +25,9 @@ jobs:
       - name: Install package
         run: python -m pip install -e .
       - name: Compile changed Python surface
-        run: python -m compileall -q src/searchgeo/consolidation src/searchgeo/console_entrypoint.py tests/test_consolidation.py tests/test_consolidation_console_integration.py
+        run: python -m compileall -q src/searchgeo/consolidation src/searchgeo/console_entrypoint.py tests/test_consolidation*.py
       - name: Run consolidation regression tests
-        run: python -m unittest -v tests.test_consolidation tests.test_consolidation_console_integration
+        run: python -m unittest discover -v -s tests -p "test_consolidation*.py"
       - name: Run existing console regression tests
         run: >-
           python -m unittest -v
