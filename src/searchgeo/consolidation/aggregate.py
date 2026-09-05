@@ -2,7 +2,8 @@
 
 The consolidator summarizes persisted observations; it never re-runs the GEO
 scoring engine or fabricates missing values. Version/profile incompatibilities
-are isolated before statistics are calculated.
+and materially different URL universes are isolated before statistics are
+calculated.
 """
 from __future__ import annotations
 
@@ -29,12 +30,16 @@ def _number(value: Any) -> float | None:
         return None
 
 
+def _empty_stats() -> NumericSummary:
+    return NumericSummary(0, None, None, None, None, None, None, None, None)
+
+
 def _stats(rows: Iterable[dict[str, Any]], field: str, *, time_field: str = "event_time") -> NumericSummary:
     usable = [(str(row.get(time_field) or ""), value) for row in rows if (value := _number(row.get(field))) is not None]
     usable.sort(key=lambda item: item[0])
     values = [item[1] for item in usable]
     if not values:
-        return NumericSummary(0, None, None, None, None, None, None, None, None)
+        return _empty_stats()
     initial = values[0]
     current = values[-1]
     delta = current - initial
@@ -42,6 +47,52 @@ def _stats(rows: Iterable[dict[str, Any]], field: str, *, time_field: str = "eve
     return NumericSummary(
         count=len(values), current=current, initial=initial, mean=mean(values), median=median(values),
         minimum=min(values), maximum=max(values), change_absolute=delta, change_percent=percent,
+    )
+
+
+def _state_stats_by_url(
+    rows: Iterable[dict[str, Any]],
+    field: str,
+    *,
+    time_field: str,
+) -> NumericSummary:
+    """Use earliest/latest observation per URL for state change.
+
+    Mean/median/min/max still describe all persisted observations in the selected
+    period. Initial/current are cross-sectional means of each URL's earliest and
+    latest valid observation, preventing one repeatedly audited URL from becoming
+    the whole domain's current value merely because it is the final row.
+    """
+    usable = [
+        row for row in rows
+        if row.get("url") and _number(row.get(field)) is not None
+    ]
+    if not usable:
+        return _stats(rows, field, time_field=time_field)
+    by_url: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in usable:
+        by_url[str(row["url"])].append(row)
+    initial_values: list[float] = []
+    current_values: list[float] = []
+    all_values: list[float] = []
+    for url_rows in by_url.values():
+        url_rows.sort(key=lambda row: str(row.get(time_field) or ""))
+        values = [value for row in url_rows if (value := _number(row.get(field))) is not None]
+        if not values:
+            continue
+        initial_values.append(values[0])
+        current_values.append(values[-1])
+        all_values.extend(values)
+    if not all_values or not initial_values or not current_values:
+        return _empty_stats()
+    initial = mean(initial_values)
+    current = mean(current_values)
+    delta = current - initial
+    percent = (delta / abs(initial) * 100.0) if initial != 0 else None
+    return NumericSummary(
+        count=len(all_values), current=current, initial=initial, mean=mean(all_values),
+        median=median(all_values), minimum=min(all_values), maximum=max(all_values),
+        change_absolute=delta, change_percent=percent,
     )
 
 
@@ -53,26 +104,36 @@ def summarize_scores(rows: tuple[dict[str, Any], ...]) -> tuple[ScoreSummary, ..
     for (device, dimension), items in sorted(grouped.items()):
         items.sort(key=lambda row: str(row.get("event_time") or row.get("calculated_at") or ""))
         versions = tuple(dict.fromkeys(str(row.get("scoring_version") or "UNKNOWN") for row in items))
+        universes = tuple(dict.fromkeys(str(row.get("url_universe") or "UNKNOWN") for row in items))
         latest_version = str(items[-1].get("scoring_version") or "UNKNOWN")
-        compatible = [row for row in items if str(row.get("scoring_version") or "UNKNOWN") == latest_version]
+        latest_universe = str(items[-1].get("url_universe") or "UNKNOWN")
+        compatible = [
+            row for row in items
+            if str(row.get("scoring_version") or "UNKNOWN") == latest_version
+            and str(row.get("url_universe") or "UNKNOWN") == latest_universe
+        ]
         coverages = [value for row in compatible if (value := _number(row.get("coverage"))) is not None]
-        limitation = None
+        limitations: list[str] = []
         if len(versions) > 1:
-            limitation = (
-                f"Mudança de scoring_version detectada ({', '.join(versions)}); estatísticas numéricas "
-                f"restritas à versão mais recente observada: {latest_version}."
+            limitations.append(
+                f"Mudança de scoring_version detectada ({', '.join(versions)}); versão comparável mais recente: {latest_version}."
+            )
+        if len(universes) > 1:
+            limitations.append(
+                f"Foram detectados {len(universes)} universos distintos de URLs; a estatística de score usa somente o universo da auditoria mais recente."
             )
         output.append(ScoreSummary(
             device=device,
             dimension=dimension,
             scoring_versions=versions,
+            url_universes=len(universes),
             observations=len(items),
             valid_observations=sum(_number(row.get("value")) is not None for row in compatible),
             average_coverage=mean(coverages) if coverages else None,
             confidence_counts=dict(Counter(str(row.get("confidence") or "UNKNOWN") for row in compatible)),
             consolidation_counts=dict(Counter(str(row.get("consolidation_status") or "UNKNOWN") for row in compatible)),
             statistics=_stats(compatible, "value"),
-            limitation=limitation,
+            limitation=" ".join(limitations) if limitations else None,
         ))
     return tuple(output)
 
@@ -100,7 +161,11 @@ def summarize_performance(rows: tuple[dict[str, Any], ...]) -> tuple[Performance
     output: list[PerformanceSummary] = []
     for device, items in sorted(grouped.items()):
         metrics = tuple(
-            MetricSummary(name=label, unit=unit, statistics=_stats(items, field, time_field="captured_at"))
+            MetricSummary(
+                name=label,
+                unit=unit,
+                statistics=_state_stats_by_url(items, field, time_field="captured_at"),
+            )
             for field, label, unit in _PERF_FIELDS
             if any(_number(row.get(field)) is not None for row in items)
         )
@@ -172,7 +237,11 @@ def summarize_apdex(rows: tuple[dict[str, Any], ...]) -> tuple[ApdexSummary, ...
             small_groups=sum(bool(row.get("small_group")) for row in compatible),
             final_groups=sum(bool(row.get("final_group")) for row in compatible),
             duration_metrics=tuple(
-                MetricSummary(label, unit, _stats(compatible, field, time_field="calculated_at"))
+                MetricSummary(
+                    label,
+                    unit,
+                    _state_stats_by_url(compatible, field, time_field="calculated_at"),
+                )
                 for field, label, unit in duration_fields
                 if any(_number(row.get(field)) is not None for row in compatible)
             ),
