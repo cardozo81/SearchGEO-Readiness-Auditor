@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .aggregate import summarize_apdex, summarize_findings, summarize_performance, summarize_scores
+from .comparability import annotate_score_url_universes
 from .index import ConsolidationIndex
 from .models import ConsolidatedData, ConsolidationFilter, GenerationResult, RefreshResult
 from .reporting import write_report
@@ -65,12 +66,13 @@ def build_data(index: ConsolidationIndex, filters: ConsolidationFilter) -> Conso
                 "continuam filtrados diretamente por URL."
             )
 
+    score_rows = annotate_score_url_universes(index.path, points["scores"])
     dates = [str(row.get("event_time") or "")[:10] for row in audits if row.get("event_time")]
     return ConsolidatedData(
         filters=filters,
         audits=audits,
         source_fingerprint=source_fp,
-        scores=summarize_scores(points["scores"]),
+        scores=summarize_scores(score_rows),
         performance=summarize_performance(points["performance"]),
         apdex=summarize_apdex(points["apdex"]),
         findings=summarize_findings(points["findings"]),
