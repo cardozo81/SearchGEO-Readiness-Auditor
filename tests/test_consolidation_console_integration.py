@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 from contextlib import redirect_stdout
 from io import StringIO
 from types import SimpleNamespace
@@ -10,11 +11,14 @@ from searchgeo.consolidation.integration import install
 
 
 class _FakeConsole:
+    """Module-like fake that resolves input through its own namespace first."""
+
     def __init__(self) -> None:
         self.configured: list[str] = []
 
     def _menu(self, state):
-        return input("Escolha: ").strip().upper()
+        reader = getattr(self, "input", builtins.input)
+        return reader("Escolha: ").strip().upper()
 
     def _configure(self, state, choice):
         self.configured.append(choice)
