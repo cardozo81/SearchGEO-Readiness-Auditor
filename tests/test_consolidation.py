@@ -149,7 +149,7 @@ class ConsolidationTests(unittest.TestCase):
             self.assertEqual(points["performance"][0]["url"], "https://example.com/a")
             data = build_data(index, filters)
             self.assertFalse(data.scores)
-            self.assertTrue(any("scores audit-level" in item for item in data.limitations))
+            self.assertTrue(any("pontuações calculadas" in item for item in data.limitations))
 
     def test_mixed_scoring_versions_are_not_averaged_together(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
