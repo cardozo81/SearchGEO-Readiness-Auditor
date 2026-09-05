@@ -45,7 +45,7 @@ def build_data(index: ConsolidationIndex, filters: ConsolidationFilter) -> Conso
     rulesets = tuple(sorted({str(row.get("ruleset_version") or "UNKNOWN") for row in audits}))
     if len(rulesets) > 1:
         limitations.append(
-            "Múltiplas ruleset_version estão presentes no período: " + ", ".join(rulesets)
+            "Múltiplas versões do conjunto de regras estão presentes no período: " + ", ".join(rulesets)
             + ". O relatório não presume equivalência metodológica entre versões."
         )
     auditors = tuple(sorted({str(row.get("auditor_version") or "UNKNOWN") for row in audits}))
@@ -61,9 +61,9 @@ def build_data(index: ConsolidationIndex, filters: ConsolidationFilter) -> Conso
         }
         if candidate_with_scores - score_audits:
             limitations.append(
-                "Filtro explícito de URL ativo: scores audit-level de auditorias cujo universo completo "
-                "não está contido nas URLs selecionadas foram excluídos. Web Performance, Apdex e Findings "
-                "continuam filtrados diretamente por URL."
+                "Filtro explícito de URL ativo: pontuações calculadas para um universo maior de páginas "
+                "foram excluídas quando o universo completo da auditoria não estava contido nas URLs selecionadas. "
+                "Desempenho Web, Apdex e ocorrências continuam filtrados diretamente por URL."
             )
 
     score_rows = annotate_score_url_universes(index.path, points["scores"])
@@ -80,6 +80,8 @@ def build_data(index: ConsolidationIndex, filters: ConsolidationFilter) -> Conso
         date_min=min(dates) if dates else None,
         date_max=max(dates) if dates else None,
         limitations=tuple(limitations),
+        score_history=score_rows,
+        finding_history=points["findings"],
     )
 
 
@@ -108,5 +110,7 @@ def generate(
             limitations=data.limitations + (
                 f"{len(refresh.issues)} AUD(s) não puderam ser indexados nesta atualização; detalhes constam no manifest.json.",
             ),
+            score_history=data.score_history,
+            finding_history=data.finding_history,
         )
     return write_report(audits_root=root, data=data, refresh=refresh)
