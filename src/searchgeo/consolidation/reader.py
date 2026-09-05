@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 import hashlib
+import json
 import sqlite3
 from typing import Any, Iterable
 from urllib.parse import urlsplit
@@ -28,6 +29,11 @@ def source_file_fingerprint(path: Path) -> str:
     stat = path.stat()
     material = f"{path.resolve()}|{stat.st_size}|{stat.st_mtime_ns}"
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def url_set_fingerprint(urls: tuple[str, ...]) -> str:
+    payload = json.dumps(sorted(set(urls)), ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 @contextmanager
@@ -222,6 +228,7 @@ def read_audit_bundle(db_path: Path) -> AuditBundle:
             audit_id=audit_id,
             db_path=db_path,
             source_fingerprint=fingerprint,
+            url_set_fingerprint=url_set_fingerprint(urls),
             project_name=str(audit.get("project_name") or ""),
             status=str(audit.get("status") or ""),
             completion_status=str(audit.get("completion_status") or "") or None,
