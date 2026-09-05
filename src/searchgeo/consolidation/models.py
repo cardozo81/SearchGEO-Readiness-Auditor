@@ -34,6 +34,7 @@ class SourceAudit:
     audit_id: str
     db_path: Path
     source_fingerprint: str
+    url_set_fingerprint: str
     project_name: str
     status: str
     completion_status: str | None
@@ -91,6 +92,7 @@ class ScoreSummary:
     device: str
     dimension: str
     scoring_versions: tuple[str, ...]
+    url_universes: int
     observations: int
     valid_observations: int
     average_coverage: float | None
