@@ -156,3 +156,8 @@ class ConsolidatedData:
     date_min: str | None
     date_max: str | None
     limitations: tuple[str, ...] = field(default_factory=tuple)
+    # Raw, already-filtered analytical points are retained only inside the
+    # consolidation boundary. They support historical charts/explainability and
+    # never become a second source of truth: every value originates in AUD-*/audit.db.
+    score_history: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    finding_history: tuple[dict[str, Any], ...] = field(default_factory=tuple)
