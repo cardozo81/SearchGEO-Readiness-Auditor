@@ -116,11 +116,11 @@ def summarize_scores(rows: tuple[dict[str, Any], ...]) -> tuple[ScoreSummary, ..
         limitations: list[str] = []
         if len(versions) > 1:
             limitations.append(
-                f"Mudança de scoring_version detectada ({', '.join(versions)}); versão comparável mais recente: {latest_version}."
+                f"Mudança de versão do método de pontuação detectada ({', '.join(versions)}); versão comparável mais recente: {latest_version}."
             )
         if len(universes) > 1:
             limitations.append(
-                f"Foram detectados {len(universes)} universos distintos de URLs; a estatística de score usa somente o universo da auditoria mais recente."
+                f"Foram detectados {len(universes)} universos distintos de URLs; a estatística da pontuação usa somente o universo da auditoria mais recente."
             )
         output.append(ScoreSummary(
             device=device,
@@ -139,15 +139,15 @@ def summarize_scores(rows: tuple[dict[str, Any], ...]) -> tuple[ScoreSummary, ..
 
 
 _PERF_FIELDS: tuple[tuple[str, str, str], ...] = (
-    ("performance_score", "Performance Lighthouse", "score"),
-    ("accessibility_score", "Accessibility Lighthouse", "score"),
-    ("best_practices_score", "Best Practices Lighthouse", "score"),
+    ("performance_score", "Desempenho Lighthouse", "score"),
+    ("accessibility_score", "Acessibilidade Lighthouse", "score"),
+    ("best_practices_score", "Boas práticas Lighthouse", "score"),
     ("seo_score", "SEO Lighthouse", "score"),
-    ("fcp_lab_ms", "FCP lab", "ms"),
-    ("speed_index_lab_ms", "Speed Index lab", "ms"),
-    ("lcp_lab_ms", "LCP lab", "ms"),
-    ("tbt_lab_ms", "TBT lab", "ms"),
-    ("cls_lab", "CLS lab", "score"),
+    ("fcp_lab_ms", "FCP laboratório", "ms"),
+    ("speed_index_lab_ms", "Speed Index (laboratório)", "ms"),
+    ("lcp_lab_ms", "LCP laboratório", "ms"),
+    ("tbt_lab_ms", "TBT laboratório", "ms"),
+    ("cls_lab", "CLS laboratório", "score"),
     ("lcp_p75_ms", "LCP p75 de campo", "ms"),
     ("inp_p75_ms", "INP p75 de campo", "ms"),
     ("cls_p75", "CLS p75 de campo", "score"),
@@ -222,7 +222,7 @@ def summarize_apdex(rows: tuple[dict[str, Any], ...]) -> tuple[ApdexSummary, ...
         limitation = None
         if len(profiles) > 1 or len(thresholds) > 1:
             limitation = (
-                "Perfis/thresholds Apdex incompatíveis foram detectados; estatísticas agregadas usam apenas "
+                "Perfis ou limiares T incompatíveis de Apdex foram detectados; as estatísticas agregadas usam apenas "
                 f"o conjunto mais recente ({latest_profile}, T={latest_threshold})."
             )
         output.append(ApdexSummary(
