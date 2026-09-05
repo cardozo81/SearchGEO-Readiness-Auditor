@@ -2,31 +2,29 @@
 
 ## Objetivo
 
-A funcionalidade de consolidação reúne indicadores já persistidos em múltiplas auditorias `AUD-*` e gera um snapshot HTML estático para análise histórica por domínio, período, dispositivo e URL.
+A funcionalidade reúne indicadores já persistidos em auditorias `AUD-*` e gera um snapshot HTML estático para análise por domínio, período, dispositivo e URL.
 
-Ela foi deliberadamente implementada fora do pipeline de auditoria.
+Ela é deliberadamente independente do pipeline de auditoria.
 
 ## Garantias de arquitetura
 
 - `AUD-*/audit.db` permanece a fonte de verdade;
-- cada `audit.db` é aberto com SQLite `mode=ro` e `PRAGMA query_only=ON`;
-- nenhuma API externa é chamada durante indexação, filtro, cálculo ou geração do relatório;
-- o pipeline `searchgeo audit`, scoring, persistence, PageSpeed/CrUX, IA e Synthetic Apdex não dependem do consolidador;
-- nenhum schema de `audit.db` é migrado ou alterado para suportar consolidação;
-- falha do consolidador é `fail-open` em relação ao console de auditoria;
-- o índice analítico pode ser apagado e reconstruído sem perda de evidência;
-- relatórios `CONS-*` são snapshots derivados e não substituem os relatórios `AUD-*`.
-
-## Fluxo
+- cada banco fonte é aberto com SQLite `mode=ro` e `PRAGMA query_only=ON`;
+- nenhuma API externa é chamada durante indexação, filtro, cálculo ou geração do consolidado;
+- `searchgeo audit`, scoring, persistence, PageSpeed/CrUX, IA e Synthetic Apdex não dependem do consolidador;
+- nenhum schema de `audit.db` é migrado ou alterado;
+- falha do consolidador é `fail-open` em relação ao console existente;
+- o índice analítico é derivado, descartável e reconstruível;
+- relatórios `CONS-*` são snapshots derivados e não substituem `AUD-*`.
 
 ```text
-AUD-*/audit.db (fonte oficial, read-only)
+AUD-*/audit.db (fonte oficial, somente leitura)
         |
         v
 .searchgeo/consolidated-index.db (cache analítico reconstruível)
         |
         v
-filtros + políticas de comparabilidade
+filtros + comparabilidade + estatística descritiva
         |
         v
 consolidated/CONS-*/report.html + manifest.json
@@ -34,25 +32,21 @@ consolidated/CONS-*/report.html + manifest.json
 
 ## Acesso pelo console
 
-O entrypoint `searchgeo-console` mantém o console já existente e adiciona a opção:
-
 ```text
 C. Histórico / relatórios consolidados [OFFLINE | sem APIs]
 ```
 
-A opção não altera a configuração da auditoria. O fluxo solicita, de forma dependente:
+O fluxo seleciona de forma dependente:
 
 1. domínio;
-2. período (`AAAA-MM-DD`);
+2. período;
 3. dispositivo;
 4. filtro opcional de URL/caminho;
-5. confirmação da geração.
+5. geração.
 
-Os dispositivos são preservados como séries separadas; selecionar todos não cria uma média Mobile + Desktop.
+Mobile e Desktop permanecem séries separadas.
 
-## Descoberta e índice analítico
-
-A raiz configurada em `Raiz auditorias` é percorrida apenas para diretórios `AUD-*` que contenham `audit.db`.
+## Índice analítico
 
 O índice é gravado em:
 
@@ -60,122 +54,203 @@ O índice é gravado em:
 audits/.searchgeo/consolidated-index.db
 ```
 
-O índice contém somente projeções necessárias para consulta histórica:
+Ele contém somente projeções necessárias para consulta histórica: metadados, domínios, URLs, dispositivos, versões, pontuações, cobertura, confiança, Web Performance/Lighthouse/CrUX, Apdex e ocorrências já persistidas.
 
-- metadados da auditoria;
-- domínio;
-- URLs;
-- dispositivos;
-- versões do auditor/ruleset/scoring;
-- scores persistidos, coverage, confidence e consolidation status;
-- Web Performance/Lighthouse/CrUX persistidos;
-- Synthetic Apdex persistido;
-- contagens/classificações de findings persistidos.
-
-Ele não contém evidência exclusiva. Se o arquivo for removido, a próxima atualização reconstrói seu conteúdo lendo novamente os `audit.db`.
+Não existe evidência exclusiva no índice. Sua exclusão não perde dados: a próxima atualização o reconstrói a partir dos `audit.db`.
 
 ### Atualização incremental
 
-Cada fonte possui fingerprint técnico baseado no arquivo `audit.db`. AUDs sem alteração são reutilizados no índice; AUDs novos/alterados são reindexados; entradas cujo diretório foi removido também são removidas do cache.
+Cada `audit.db` recebe fingerprint técnico. Fontes sem mudança são reaproveitadas; fontes novas/alteradas são reindexadas; entradas removidas do filesystem saem do cache. Um AUD inválido não interrompe os demais.
 
-Um banco inválido, incompatível ou ilegível não interrompe a indexação dos demais. O problema é registrado no resultado de atualização e posteriormente no `manifest.json` quando aplicável.
+## Elegibilidade e filtros
 
-## Elegibilidade
+Somente auditorias com `status=COMPLETED` participam.
 
-Somente auditorias com `status=COMPLETED` participam de uma consolidação.
-
-Os filtros de domínio, período e dispositivo reduzem o universo elegível antes da leitura das séries de indicadores.
-
-O período usa a data efetiva da auditoria na seguinte ordem:
+Data efetiva:
 
 ```text
 completed_at -> started_at -> created_at
 ```
 
-Os limites inicial e final são inclusivos.
+Os limites de período são inclusivos.
 
-## Filtro por URL
+### Filtro por URL
 
-Web Performance, Apdex e findings vinculados a páginas podem ser filtrados diretamente por URL.
+Web Performance, Apdex e ocorrências page-level são filtrados diretamente por URL.
 
-Scores são atualmente persistidos em nível de auditoria/dispositivo/dimensão, não em nível de URL. Portanto, com filtro explícito de URL, um score audit-level só é usado quando o universo completo de URLs daquela auditoria está contido no conjunto selecionado.
+A Compatibilidade GEO é persistida em nível de auditoria/dispositivo/dimensão. Portanto, um filtro parcial de URL não pode receber uma pontuação originalmente calculada com páginas que ficaram fora do filtro. Nesses casos o score audit-level é omitido; o consolidador nunca reexecuta o scoring para fabricar um valor por URL.
 
-Essa regra evita atribuir à URL filtrada um score calculado com páginas que ficaram fora do filtro. Quando a condição não é atendida, o score é omitido e a limitação é explicitada no relatório.
+## SCORE-GEO no consolidado
 
-O consolidador não reexecuta o motor de scoring para fabricar um score por URL.
+### Versão exibida
+
+A interface usa o rótulo **Versão do método de pontuação**. O identificador persistido vigente é `SCORE-GEO-002`.
+
+`SCORE-GEO-001` não é exibido como métrica concorrente nem recalculado em relatórios atuais. Se uma fonte histórica futura contiver outra versão persistida, a versão será tratada como quebra metodológica e não misturada silenciosamente.
+
+### Natureza
+
+`SCORE-GEO-002` é um método interno, determinístico e reproduzível do SearchGEO. Não é score oficial de Google, OpenAI ou outro mecanismo e não possui validação estabelecida como preditor de ranking, tráfego ou citação por sistemas generativos.
+
+### Aritmética
+
+No baseline atual:
+
+1. regras aplicáveis produzem `PASS`, `WARNING`, `FAIL`, `UNKNOWN`, `ERROR` ou `NOT_APPLICABLE`;
+2. `PASS` contribui com fator `1`;
+3. `WARNING` usa fator padrão `0,5`;
+4. `FAIL` contribui com fator `0`;
+5. grupos correlacionados evitam dupla penalização da mesma causa;
+6. score da dimensão = `soma(peso × fator) / soma dos pesos avaliados × 100`;
+7. cobertura da dimensão = `peso avaliado / peso aplicável`;
+8. dimensão legitimamente não aplicável não recebe `0` nem `100` e fica fora do denominador geral;
+9. Compatibilidade GEO geral = média aritmética simples das dimensões aplicáveis suficientemente consolidadas;
+10. cobertura geral = média das coberturas dessas dimensões.
+
+### Confiança
+
+A `Confidence` persistida representa força/cobertura da conclusão, não qualidade do website:
+
+- Alta: cobertura >= 90%, evidência completa e nenhum erro;
+- Média: cobertura >= 80% e nenhum erro;
+- Baixa: demais casos mensuráveis;
+- Indisponível: sem cobertura mensurável.
+
+A confiança geral é conservadora e adota o menor nível entre as dimensões aplicáveis.
 
 ## Políticas estatísticas
 
-### Princípios gerais
+- dado ausente nunca vira zero;
+- Mobile e Desktop não são combinados silenciosamente;
+- versões metodológicas incompatíveis são segregadas;
+- pontuação histórica usa mesma versão do método e mesmo universo de URLs comparável;
+- não existe interpolação de datas sem auditoria;
+- **nenhum extremo é descartado automaticamente** apenas por ser mínimo, máximo ou distante da média;
+- não há trimming, winsorization, corte por IQR/desvio-padrão ou outro descarte de outliers por valor;
+- média = média aritmética das observações elegíveis;
+- mediana = valor central das observações elegíveis;
+- mínimo e máximo permanecem visíveis.
 
-- dado ausente não vira zero;
-- Mobile e Desktop permanecem separados;
-- observações só são agregadas quando semanticamente comparáveis;
-- versão metodológica incompatível é segregada, não misturada por média;
-- séries usam somente pontos realmente observados; não existe interpolação de dias/períodos sem auditoria.
+### Estado inicial e atual em métricas por URL
 
-### Score GEO
+Para métricas page-level, o estado inicial usa a primeira observação válida de cada URL e o estado atual usa a última observação válida de cada URL; depois é feita a média transversal. Isso impede uma URL auditada mais vezes de representar sozinha o estado do domínio.
 
-Por `device + dimension` o relatório mostra, para a versão de scoring compatível mais recente:
+## Modos históricos do HTML
 
-- quantidade de observações válidas;
-- valor inicial;
+O relatório se adapta à quantidade de auditorias:
+
+| Base | Comportamento |
+|---|---|
+| 1 AUD | **Snapshot**; não sugere tendência e oculta estatísticas redundantes por padrão |
+| 2 AUDs | **Comparação de dois pontos**; mostra variação, mas declara que não caracteriza tendência |
+| 3+ AUDs comparáveis | **Série histórica descritiva**; gráficos podem ser exibidos sem atribuição causal |
+
+Gráficos usam somente observações efetivamente persistidas e compatíveis.
+
+## Visualizações e navegação
+
+O HTML `CONS-2` possui navegação fixa entre:
+
+- Resumo;
+- Evolução;
+- Compatibilidade GEO;
+- Desempenho;
+- Apdex;
+- Ocorrências;
+- Confiabilidade;
+- Auditorias;
+- Metodologia.
+
+### Compatibilidade GEO e dimensões
+
+A visão principal prioriza:
+
 - valor atual;
-- média;
-- mediana;
-- mínimo;
-- máximo;
-- variação absoluta;
-- variação percentual;
-- coverage média;
-- distribuição de confidence;
-- distribuição de consolidation status.
+- cobertura;
+- confiança;
+- estado de consolidação;
+- N;
+- versão do método.
 
-Se houver mais de uma `scoring_version`, os valores de versões diferentes não são combinados. O relatório informa a mudança metodológica e resume numericamente somente a versão mais recente observada no intervalo.
+Média, mediana, mínimo, máximo e variações ficam em uma área expansível. A tabela possui filtro textual e altura controlada.
 
-### Web Performance
+Quando há base comparável suficiente, são gerados:
 
-São consolidados, quando persistidos:
+- gráfico de Compatibilidade GEO + Cobertura ao longo do tempo;
+- matriz histórica das dimensões.
 
-- Performance score;
-- Accessibility score;
-- Best Practices score;
-- SEO score;
-- FCP lab;
-- Speed Index lab;
-- LCP lab;
-- TBT lab;
-- CLS lab;
-- LCP p75 field;
-- INP p75 field;
-- CLS p75 field;
-- distribuição de `cwv_assessment`;
-- distribuição de `field_source / field_scope`.
+### Auditorias consideradas
 
-Lab e field data continuam identificados separadamente. URL scope e origin scope não são presumidos equivalentes.
+A tabela de proveniência possui:
 
-### Synthetic Apdex
+- pesquisa local;
+- paginação local;
+- 25/50/100 linhas por página;
+- cabeçalho fixo;
+- nenhum acesso a servidor/API para filtrar ou paginar.
 
-Apdex só é agregado entre observações do mesmo dispositivo com `profile_id` e threshold T compatíveis.
+### Ocorrências
 
-Quando existem perfis/thresholds diferentes no período, o conjunto numérico usa o perfil/threshold mais recente e registra a limitação.
+São exibidos total, páginas afetadas, distribuição por severidade/categoria e evolução do volume bruto quando há pelo menos dois AUDs. O report avisa que quantidade bruta deve ser interpretada junto com o tamanho do universo auditado.
 
-O Apdex agregado é ponderado pelo número de amostras válidas:
+## Web Performance
+
+São consolidados quando persistidos:
+
+- Lighthouse Performance/Acessibilidade/Boas práticas/SEO;
+- FCP, Speed Index, LCP, TBT e CLS de laboratório;
+- LCP p75, INP p75 e CLS p75 de campo;
+- Core Web Vitals assessment;
+- fonte/escopo dos dados de campo.
+
+Dados de laboratório e de campo permanecem separados.
+
+## Apdex sintético
+
+Apdex só é agregado entre mesmo dispositivo, perfil e T compatíveis:
 
 ```text
 sum(apdex_score * valid_samples) / sum(valid_samples)
 ```
 
-Também são mostrados amostras válidas/inválidas, small groups, final groups e estatísticas de duração/percentis já persistidos.
+A interface destaca quando existem somente grupos com amostra pequena (`small_group`) e nenhum `final_group`, evitando interpretar `1,000` com poucas amostras como evidência robusta.
 
-### Findings
+## Confiabilidade analítica do consolidado
 
-Findings não recalculam SCORE GEO. O consolidado os usa somente como estatística histórica:
+O relatório não cria outro score numérico arbitrário. Em vez disso apresenta matriz com:
 
-- total de ocorrências;
-- páginas afetadas;
-- distribuição por severidade;
-- distribuição por categoria.
+- fidelidade às fontes;
+- comparabilidade metodológica;
+- suficiência da base histórica;
+- Confidence/Coverage persistidas;
+- robustez do Apdex;
+- situação da validação externa do SCORE-GEO.
+
+Essa matriz diferencia **dados fiéis** de **base estatisticamente suficiente**.
+
+## Metodologia e base técnica no HTML
+
+O final do relatório documenta:
+
+- fonte dos dados;
+- versão do método;
+- fórmula de Score e Coverage;
+- regra de Confidence;
+- média/mediana/mínimo/máximo;
+- política de outliers/extremos;
+- comparabilidade de URL/versionamento;
+- política Apdex;
+- ausência de interpolação;
+- limitações detectadas;
+- referências técnicas internas e públicas.
+
+Referência normativa interna principal:
+
+```text
+docs/specification/19_SCORE_APPLICABILITY_GEO_MINIMUMS.md
+```
+
+Referências externas apresentadas no HTML incluem documentação oficial do Google Search, Web Vitals e Apdex.
 
 ## Relatório estático
 
@@ -187,82 +262,48 @@ audits/consolidated/CONS-YYYYMMDD-HHMMSS-mmm/
     manifest.json
 ```
 
-`report.html` é autocontido e não relê banco, não chama API e não recalcula dados ao ser aberto posteriormente.
+`report.html` é autocontido quanto aos dados. JavaScript local é usado somente para interação de tabela; abrir o arquivo não relê bancos nem chama APIs.
 
-O `manifest.json` registra:
+O `manifest.json` registra também:
 
-- `cons_id`;
-- versão do formato do consolidado;
-- data/hora de geração;
-- filtros;
-- fingerprint da requisição;
-- fingerprint do conjunto de fontes;
-- AUDs utilizados;
-- versões de auditor/ruleset;
-- período efetivamente observado;
-- quantidade de URLs;
-- limitações;
-- resultado da atualização do índice e AUDs ignorados.
+- modo histórico (`Snapshot`, comparação ou série);
+- versões do método encontradas;
+- políticas de agregação;
+- política de dados ausentes;
+- política de extremos;
+- ausência de interpolação.
 
-## Evitar relatórios duplicados
+## Dedupe
 
-Antes de criar um novo `CONS-*`, o sistema calcula uma fingerprint a partir de:
+Um `CONS-*` existente é reutilizado somente se permanecerem idênticos:
 
 ```text
-versão do formato do relatório
+versão do formato
 + filtros canônicos
-+ conjunto/fingerprint dos AUDs elegíveis
++ fingerprint do conjunto de AUDs elegíveis
 ```
 
-Se já existir um `manifest.json` com a mesma fingerprint e o respectivo `report.html` estiver presente, o relatório existente é reutilizado.
+`CONS-2` invalida corretamente snapshots `CONS-1` quando o layout/metodologia muda.
 
-Consequências:
+## Reversão segura
 
-- repetir exatamente os mesmos filtros sem mudança nos AUDs não cria duplicata;
-- um novo AUD elegível altera a fingerprint e gera novo snapshot;
-- alteração de filtro gera novo snapshot;
-- mudança futura do formato do consolidado pode invalidar a reutilização de forma controlada.
+Para remover a feature após eventual merge:
 
-## Diretórios derivados
+1. reverter o commit/PR da feature;
+2. opcionalmente remover `.searchgeo/consolidated-index.db`;
+3. opcionalmente arquivar/remover `consolidated/`;
+4. nenhum `AUD-*/audit.db` precisa ser restaurado ou migrado.
 
-```text
-audits/.searchgeo/
-```
+Se o merge for autorizado, recomenda-se `Squash and merge` para materializar toda a feature em um único commit reversível.
 
-contém cache reconstruível.
+## Gate de merge
 
-```text
-audits/consolidated/
-```
+Não integrar em `main` sem:
 
-contém snapshots históricos gerados pelo usuário.
-
-Nenhum desses diretórios deve ser considerado parte de um workspace `AUD-*`.
-
-## Reversão segura da funcionalidade
-
-A implementação foi isolada na branch/PR de consolidação. Para remover a feature após eventual merge:
-
-1. reverter o PR/merge commit da feature;
-2. o pipeline de auditoria volta ao estado anterior, pois não depende do índice;
-3. opcionalmente remover `audits/.searchgeo/consolidated-index.db`;
-4. opcionalmente arquivar/remover `audits/consolidated/`;
-5. nenhum `AUD-*/audit.db` precisa ser restaurado ou migrado.
-
-Não é necessário desfazer dados dentro dos AUDs porque a funcionalidade não grava neles.
-
-## Critérios de segurança para merge
-
-A branch não deve ser integrada em `main` sem verificar:
-
-- testes atuais do projeto sem regressão;
-- testes específicos da consolidação;
-- hashes dos `audit.db` inalterados após indexação/geração;
-- `searchgeo audit` sem diferença funcional causada pela feature;
-- console funcionando quando o consolidado falha;
-- nenhum import do pacote `consolidation` em `audit_runner.py`, scoring ou persistence;
-- diff do PR restrito ao novo pacote, testes, documentação e adaptador de entrypoint;
-- ausência de migration em banco de auditoria;
-- ausência de chamadas de rede no pacote de consolidação.
-
-Sem essa evidência, o PR deve permanecer sem merge.
+- testes específicos verdes;
+- testes existentes de console/configuração verdes;
+- hashes dos bancos fonte inalterados;
+- ausência de import/acoplamento no audit runner, scoring e persistence;
+- diff restrito à feature, documentação, testes, CI e adapter mínimo do console;
+- ausência de chamadas de rede no pacote `consolidation`;
+- smoke humano do HTML em base real.
