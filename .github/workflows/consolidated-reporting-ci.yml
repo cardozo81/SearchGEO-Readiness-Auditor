@@ -28,3 +28,12 @@ jobs:
         run: python -m compileall -q src/searchgeo/consolidation src/searchgeo/console_entrypoint.py tests/test_consolidation.py tests/test_consolidation_console_integration.py
       - name: Run consolidation regression tests
         run: python -m unittest -v tests.test_consolidation tests.test_consolidation_console_integration
+      - name: Run existing console regression tests
+        run: >-
+          python -m unittest -v
+          tests.test_interactive_console
+          tests.test_console_environment_guidance
+          tests.test_console_progress_guidance
+          tests.test_console_provider_registry
+          tests.test_console_settings
+          tests.test_console_windows_environment
