@@ -51,7 +51,7 @@ valor já presente no processo/Windows
 > default do runtime
 ```
 
-**Exceção deliberada:** dentro de `rasai-console`, o toggle de execução de Improvement Intelligence é controlado pelo item **13. Análise profunda URL**. O runtime neutraliza temporariamente `RASAI_IMPROVEMENT_INTELLIGENCE` durante a fase base para impedir execução invisível ou duplicada. As variáveis `RASAI_IMPROVEMENT_*` continuam válidas para CLI, worker/SaaS, automação e diagnóstico; no console interativo, a ativação efetiva vem do item 13 e da seção `[improvement_intelligence]`.
+**Exceção deliberada:** dentro de `rasai-console`, o toggle de execução de Improvement Intelligence é controlado pelo item **13. Análise profunda URL**. O runtime neutraliza temporariamente `RASAI_IMPROVEMENT_INTELLIGENCE` durante a fase base para impedir execução invisível ou duplicada. As variáveis `RASAI_IMPROVEMENT_*` continuam válidas para CLI, worker/SaaS, automação e diagnóstico, mas não são uma segunda superfície de edição dentro do console interativo; provider, modelo, reasoning, domínios, limite de recomendações e timeout são configurados pelo item 13 e persistidos na seção `[improvement_intelligence]`.
 
 Ao salvar, o console mostra explicitamente que a operação é `SEM CHAVES`.
 
@@ -278,7 +278,7 @@ Google PageSpeed / Lighthouse
 Google Chrome UX Report (CrUX)
 SERP / Search Intelligence
 IA / <provider>
-Improvement Intelligence
+IA / idioma de análise
 Synthetic Navigation Apdex
 Synthetic User Experience Apdex
 Dynatrace / calibração Apdex
@@ -288,7 +288,7 @@ Control plane / banco
 
 Ao abrir uma variável, o console apresenta finalidade, tipo, valores aceitos, default efetivo, condição de obrigatoriedade, sensibilidade, custo/impacto, estado atual, exemplo, contexto e referências oficiais conhecidas.
 
-Para campos com domínio fechado, o console apresenta lista de opções aceitas em vez de exigir texto livre. Isso inclui booleanos (`true`/`false`), enums e listas CSV fechadas. Campos dependentes são recalculados a partir do contexto atual: por exemplo, modelo e reasoning avançados da Improvement Intelligence usam o catálogo do provider selecionado.
+Para campos com domínio fechado, o console apresenta lista de opções aceitas em vez de exigir texto livre. Isso inclui booleanos (`true`/`false`), enums e listas CSV fechadas. Campos dependentes são recalculados a partir do contexto atual e dos catálogos canônicos do runtime, evitando valores incompatíveis.
 
 Entrada livre permanece apenas para valores realmente abertos, como URL, path, property, token/secret, locale/tag BCP-47 ou número de faixa contínua.
 
@@ -304,7 +304,7 @@ Secrets são exibidos em estado apenas como presença/origem, por exemplo:
 
 Durante a **edição** do secret, terminal compatível mostra somente `*`; depois da edição, o valor continua não sendo exibido.
 
-O grupo **IA - análise profunda** inclui os overrides avançados de Improvement Intelligence. A configuração normal deve ser feita pelo item 13. `RASAI_IMPROVEMENT_INTELLIGENCE` não substitui visualmente esse item dentro de `rasai-console`; ele existe para CLI/worker/SaaS, automação e troubleshooting do contrato por ambiente.
+Improvement Intelligence é uma exceção intencional à regra de expor cada override no menu `E`: `RASAI_IMPROVEMENT_INTELLIGENCE`, `RASAI_IMPROVEMENT_AI_PROVIDER`, `RASAI_IMPROVEMENT_AI_MODEL`, `RASAI_IMPROVEMENT_AI_REASONING`, `RASAI_IMPROVEMENT_DOMAINS`, `RASAI_IMPROVEMENT_MAX_RECOMMENDATIONS` e `RASAI_IMPROVEMENT_AI_TIMEOUT_SECONDS` pertencem ao contrato de ambiente do runtime, mas **não são duplicados como campos editáveis do console interativo**. Seus equivalentes funcionais ficam no item **13. Análise profunda URL** e na seção `[improvement_intelligence]` do INI. `RASAI_AI_ANALYSIS_LANGUAGE` continua disponível na configuração avançada por ser um override global compartilhado. Essa separação evita duas fontes de verdade e impede ativação invisível de uma etapa com custo adicional.
 
 Veja [CONSOLE_CONFIGURATION_UX.md](CONSOLE_CONFIGURATION_UX.md) para o contrato normativo da interface e [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md) para o contrato variável por variável.
 
