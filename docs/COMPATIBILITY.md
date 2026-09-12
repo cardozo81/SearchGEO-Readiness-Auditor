@@ -5,20 +5,58 @@
 | Componente | Contrato |
 |---|---|
 | Python | CPython `>=3.13,<3.14` |
-| Windows/PowerShell | alvo operacional principal |
+| Windows/PowerShell | alvo operacional principal para console e runtime local |
+| Linux | alvo operacional principal para SaaS, API, workers e containers |
 | Playwright | `>=1.57,<2` |
 | Chromium | necessário para rendering e Synthetic Apdex |
 | SQLite | local/embarcado |
+| PostgreSQL | control plane centralizado/hospedado |
 
 ## Política de validação por sistema operacional
 
-Windows é o ambiente obrigatório de validação do RASAi e deve permanecer coberto pelos testes automatizados, regressões e smoke tests aplicáveis ao runtime local.
+A escolha do sistema operacional de teste deve seguir a superfície realmente alterada. O projeto não exige duplicação automática Windows + Linux para toda mudança.
 
-Mudanças que afetem runtime, console, filesystem, SQLite, multiprocessing, subprocessos, Chromium/Playwright, paths, persistência ou geração de relatórios não podem ser consideradas validadas sem execução equivalente em Windows.
+### Windows obrigatório
 
-Testes em Linux podem e devem permanecer como cobertura complementar para portabilidade, workers, containers e evolução SaaS, mas não substituem o gate Windows. Uma validação executada somente em Linux não é suficiente para declarar uma alteração pronta para integração quando o escopo também existir no runtime Windows.
+Executar validação em Windows quando a mudança envolver o produto local ou comportamento dependente do ambiente Windows, incluindo:
 
-macOS não integra o gate operacional obrigatório enquanto não for formalmente promovido a plataforma suportada do produto.
+- console interativo e CLI usada localmente;
+- launcher/bootstrap e PowerShell;
+- `rasai-console.ini` e persistência Windows/User;
+- SQLite local;
+- filesystem, paths, locks e ciclo de vida de arquivos;
+- multiprocessing/process spawning, subprocessos e sinais específicos do runtime local;
+- Chromium/Playwright quando utilizado pelo fluxo local;
+- abertura/localização de relatórios e artifacts no desktop.
+
+Uma validação somente Linux não substitui o gate Windows nesses casos.
+
+### Linux obrigatório
+
+Executar validação em Linux quando a mudança envolver a arquitetura hospedada/SaaS, incluindo:
+
+- Web/API;
+- control plane PostgreSQL hospedado;
+- workers desacoplados;
+- scheduler, queue, leases e retries do ambiente hospedado;
+- containers e deploy de serviços;
+- integrações e observabilidade específicas do runtime SaaS.
+
+Uma validação somente Windows não substitui o gate Linux nesses casos.
+
+### Testes agnósticos de sistema operacional
+
+Regras determinísticas, scoring, schemas, contratos de dados, transformações puras e outras rotinas sem dependência conhecida de sistema operacional devem rodar em um único ambiente canônico de CI. Não há ganho em duplicá-las em Windows e Linux apenas por precaução.
+
+### Quando testar nos dois
+
+Windows + Linux são obrigatórios somente quando:
+
+1. o mesmo componente é suportado e executado nos dois ambientes; ou
+2. a alteração cruza uma fronteira compartilhada suscetível a diferenças de SO, como filesystem, multiprocessing, subprocessos, browser runtime ou networking de baixo nível; ou
+3. um incidente/regressão anterior demonstrou comportamento diferente entre os ambientes.
+
+A regra é testar onde existe risco real, não maximizar a quantidade de jobs. macOS não integra o gate obrigatório enquanto não for formalmente promovido a plataforma suportada.
 
 ## Dispositivos
 
