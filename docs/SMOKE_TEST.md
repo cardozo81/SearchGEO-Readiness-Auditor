@@ -4,13 +4,18 @@ Smoke mínimo após instalação/merge.
 
 ## Política de plataforma
 
-O smoke test operacional obrigatório do RASAi deve ser executado em Windows/PowerShell. Windows é o alvo local principal do produto e não pode ser substituído por uma validação exclusiva em Linux.
+O smoke deve ser executado no ambiente que corresponde à superfície alterada.
 
-Linux permanece como validação complementar de portabilidade e como ambiente relevante para workers, containers e evolução SaaS. Quando houver cobertura Linux, ela deve complementar — e não substituir — o gate Windows.
+- **Windows/PowerShell** é obrigatório para console interativo, CLI/runtime local, SQLite local, persistência de configuração/credenciais, filesystem/paths, multiprocessing/subprocessos, Chromium/Playwright local e abertura de relatórios/artifacts.
+- **Linux** é obrigatório para Web/API, PostgreSQL hospedado, workers, scheduler/queue, containers e demais componentes do runtime SaaS.
+- Mudanças puramente determinísticas e agnósticas de SO não exigem smoke duplicado.
+- Executar Windows + Linux somente quando o mesmo componente roda nos dois ambientes ou quando existir risco técnico concreto de divergência entre sistemas operacionais.
 
-Mudanças que envolvam runtime, console, filesystem, SQLite, multiprocessing, subprocessos, Chromium/Playwright, paths, persistência ou relatórios exigem validação Windows antes de serem consideradas estabilizadas para integração.
+Portanto, Windows não é gate para uma alteração exclusivamente SaaS/Linux, e Linux não é gate para uma alteração exclusivamente do console/runtime local Windows.
 
-## 1. Ambiente
+## 1. Ambiente local Windows
+
+Aplicável quando o escopo envolver o produto local:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
@@ -92,15 +97,22 @@ Nenhuma API key/Authorization nos HTMLs/DB/artifacts. Um teste “sem token” n
 
 Validar CSS externo, ausência de `<style>` final, explicação de Coverage/Confidence e fontes oficiais em `references.html`.
 
-## 10. Suíte
+## 10. Suíte local Windows
+
+Executar quando a mudança atingir o runtime local ou uma fronteira compartilhada sensível ao SO:
 
 ```powershell
 python -m compileall -q src tests
 python -m unittest discover -s tests -v
 ```
 
-Nenhum merge com falha conhecida. A validação de estabilização deve passar obrigatoriamente em Windows. Quando houver execução Linux aplicável ao escopo, ela é uma validação adicional de portabilidade e não substitui o resultado Windows.
+## 11. Smoke SaaS Linux
 
+Quando a mudança for de SaaS, validar em Linux somente os componentes atingidos, priorizando Web/API, PostgreSQL, worker, execução desacoplada, scheduling/queue e contratos tenant-scoped. Não é necessário repetir o smoke do console Windows quando a alteração não toca o runtime local.
+
+Para componentes compartilhados, adicionar o segundo SO apenas quando houver dependência de filesystem, processo, browser, rede de baixo nível ou outro comportamento específico de plataforma.
+
+Nenhum merge pode seguir com falha conhecida no gate pertinente ao escopo alterado.
 
 ## JSON-LD observado na tela e linguagem pública
 
