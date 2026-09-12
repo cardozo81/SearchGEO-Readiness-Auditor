@@ -105,6 +105,7 @@ def finalize_audit_report_site(
     from rasai.report_ai_runtime_enrichment import enrich_ai_runtime_report
     from rasai.report_consistency_v2 import reconcile_report_outputs
     from rasai.report_manifest import write_report_manifest
+    from rasai.report_quality_reconciliation import reconcile_public_report_quality
     from rasai.report_site import materialize_report_site
     from rasai.report_validation_reconciliation import reconcile_validated_report_details
     from rasai.sari_readiness_presentation import install as install_sari_readiness_presentation
@@ -168,6 +169,12 @@ def finalize_audit_report_site(
     run(
         "ai-cost-attribution",
         lambda: enrich_ai_cost_attribution(audit_id=audit_id, workspace=workspace),
+    )
+    # This pass must be last among presentation enrichers: late AI/cost renderers can
+    # otherwise reintroduce internal delivery names or generic no-data explanations.
+    run(
+        "public-report-quality",
+        lambda: reconcile_public_report_quality(audit_id=audit_id, workspace=workspace),
     )
     run("manifest", lambda: write_report_manifest(report_dir))
 
