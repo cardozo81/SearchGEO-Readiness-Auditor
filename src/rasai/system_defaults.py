@@ -135,22 +135,32 @@ def _apply_system_environment_defaults(
     return tuple(warnings)
 
 
+def _restore_explicit_environment(values: Mapping[str, str]) -> None:
+    """Restore process/OS overrides after writers project structured state to os.environ."""
+    for name, value in values.items():
+        os.environ[name] = value
+
+
 def load_console_config_with_system_defaults(state: Any, path: Path | None = None):
     """Load system baseline first, then the existing user-INI/environment contract."""
     from rasai import console_settings as settings
 
     source = path or settings.resolve_config_path()
-    defaults_env = _system_environment_defaults()
+    # Snapshot the complete incoming environment, not only names represented by the
+    # advanced [environment] section. Structured controls such as
+    # RASAI_SYNTHETIC_APDEX are also legitimate external overrides and must remain the
+    # highest-precedence layer, including while the first rasai-console.ini is created.
     external = {
-        name: str(os.environ[name])
-        for name in defaults_env
-        if (os.environ.get(name) or "").strip()
+        name: str(value)
+        for name, value in os.environ.items()
+        if str(value).strip()
     }
     user_ini = _read_user_environment(source)
 
     warnings = list(apply_structured_defaults(state, include_presentation=False))
     result = settings.load_console_config(state, source)
     warnings.extend(result.warnings)
+    _restore_explicit_environment(external)
     warnings.extend(
         _apply_system_environment_defaults(
             external=external,
@@ -160,12 +170,16 @@ def load_console_config_with_system_defaults(state: Any, path: Path | None = Non
     )
 
     # First run must materialize the complete non-secret product baseline, including
-    # advanced metric/service defaults that are not direct State fields.
+    # advanced metric/service defaults that are not direct State fields. The canonical
+    # writer projects State into os.environ while serializing; restore the incoming
+    # explicit environment immediately afterwards so it never loses precedence.
     if result.created:
         try:
             settings.save_console_config(state, result.path)
         except (OSError, UnicodeError, ValueError) as exc:
             warnings.append(f"system-default save: {type(exc).__name__}: {exc}")
+        finally:
+            _restore_explicit_environment(external)
 
     return settings.ConfigLoadResult(result.path, result.created, tuple(dict.fromkeys(warnings)))
 
