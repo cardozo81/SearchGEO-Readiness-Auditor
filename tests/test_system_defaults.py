@@ -8,6 +8,7 @@ from unittest.mock import patch
 from rasai.console_m23 import State, apply_m23_environment_defaults
 from rasai.standards_console_runtime import install as install_standards_console_runtime
 from rasai.standards_runtime import install_pre_context
+from rasai.system_default_dependencies import normalize_apdex_environment_dependencies
 from rasai.system_defaults import (
     LOW_LOAD_EXPERIENCE_SAMPLES,
     LOW_LOAD_NAVIGATION_SAMPLES,
@@ -103,6 +104,14 @@ def test_first_run_preserves_explicit_environment_precedence() -> None:
         # but the incoming process/OS override must survive the writer unchanged.
         assert state.synthetic_apdex is True
         assert os.environ["RASAI_SYNTHETIC_APDEX"] == "false"
+
+        # Navigation is the parent capability. An explicit OFF suppresses the lower-
+        # precedence Experience default unless Experience was itself explicitly forced ON.
+        normalize_apdex_environment_dependencies(
+            state,
+            {"RASAI_SYNTHETIC_APDEX"},
+        )
+        assert state.apdex_experience is False
         issues = apply_m23_environment_defaults(
             state,
             names={"RASAI_SYNTHETIC_APDEX"},
