@@ -58,6 +58,7 @@ from rasai.standards_runtime import (
     install_pre_context as install_standards_pre_context,
 )
 from rasai.standards_structured_data_reconciliation import install as install_standards_structured_data_reconciliation
+from rasai.system_defaults import install as install_system_defaults
 from rasai.target_input_runtime import install as install_target_input_runtime
 
 
@@ -122,6 +123,9 @@ def main() -> int:
     # Cost confirmation must see the final runtime but remain inside the profile
     # wrapper so session profiles are projected before historical matching.
     install_cost_confirmation(interactive_console)
+    # System defaults are installed after all persistent state extensions so the
+    # packaged baseline and Restore Defaults include their final sections/metadata.
+    install_system_defaults(interactive_console)
     # Readiness guidance augments the profile catalog before the profile wrapper captures
     # the final console contract. Profiles remain outermost and session-only.
     install_execution_profile_readiness()
