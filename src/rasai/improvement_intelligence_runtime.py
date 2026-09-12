@@ -291,6 +291,9 @@ def install() -> None:
     global _INSTALLED
     if _INSTALLED:
         return
+    from rasai.report_quality_reconciliation import install as install_report_quality_reconciliation
+
+    install_report_quality_reconciliation()
     _install_report_contract()
     _install_consolidated_alignment()
     _install_ai_cost_attribution()
