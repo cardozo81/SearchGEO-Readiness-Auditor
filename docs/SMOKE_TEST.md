@@ -2,6 +2,14 @@
 
 Smoke mínimo após instalação/merge.
 
+## Política de plataforma
+
+O smoke test operacional obrigatório do RASAi deve ser executado em Windows/PowerShell. Windows é o alvo local principal do produto e não pode ser substituído por uma validação exclusiva em Linux.
+
+Linux permanece como validação complementar de portabilidade e como ambiente relevante para workers, containers e evolução SaaS. Quando houver cobertura Linux, ela deve complementar — e não substituir — o gate Windows.
+
+Mudanças que envolvam runtime, console, filesystem, SQLite, multiprocessing, subprocessos, Chromium/Playwright, paths, persistência ou relatórios exigem validação Windows antes de serem consideradas estabilizadas para integração.
+
 ## 1. Ambiente
 
 ```powershell
@@ -91,7 +99,7 @@ python -m compileall -q src tests
 python -m unittest discover -s tests -v
 ```
 
-Nenhum merge com falha conhecida. A validação de estabilização deve passar em Windows e Linux.
+Nenhum merge com falha conhecida. A validação de estabilização deve passar obrigatoriamente em Windows. Quando houver execução Linux aplicável ao escopo, ela é uma validação adicional de portabilidade e não substitui o resultado Windows.
 
 
 ## JSON-LD observado na tela e linguagem pública
