@@ -119,6 +119,8 @@ Detalhes: [CONTENT_ANALYSIS_CONTEXT.md](CONTENT_ANALYSIS_CONTEXT.md) e [CONTENT_
 
 Improvement Intelligence usa uma configuração de IA própria para permitir modelo e esforço diferentes da análise semântica padrão, mas reutiliza a credencial já configurada do provider selecionado. A execução continua limitada a uma única URL explícita e permanece advisory/non-scoring.
 
+Esta seção documenta o **contrato de ambiente do runtime**, não uma lista literal de campos do menu `E` do `rasai-console`. No console interativo existe deliberadamente uma única fonte de verdade visual para Improvement Intelligence: o item **13. Análise profunda URL**. Por isso, as variáveis `RASAI_IMPROVEMENT_*` não são duplicadas no editor de variáveis do console; elas continuam válidas para CLI, worker/SaaS, automação, testes e diagnóstico. `RASAI_AI_ANALYSIS_LANGUAGE` permanece disponível na configuração avançada porque é um override global de idioma compartilhado pela IA.
+
 | Variável | Default efetivo | Valores permitidos | Recomendado | Finalidade |
 |---|---|---|---|---|
 | `RASAI_AI_ANALYSIS_LANGUAGE` | `auto` | `auto` ou tag BCP-47 como `pt-BR`, `en-US` | `auto`, salvo necessidade editorial explícita | idioma preferencial das explicações e sugestões; não força o idioma real da página |
@@ -129,6 +131,21 @@ Improvement Intelligence usa uma configuração de IA própria para permitir mod
 | `RASAI_IMPROVEMENT_DOMAINS` | todos os domínios suportados | CSV de `TECHNICAL_HTML`, `SEMANTICS_STRUCTURE`, `CONTENT`, `SEARCH_RANKING`, `FILES_DISCOVERY`, `PERFORMANCE`, `ACCESSIBILITY`, `BEST_PRACTICES`, `SECURITY`, `AI_ACCESS` | manter somente domínios úteis ao objetivo | controla quais conjuntos de evidência entram no estudo |
 | `RASAI_IMPROVEMENT_MAX_RECOMMENDATIONS` | `30` | inteiro `1..100` | `30` | limita volume do backlog e output da IA |
 | `RASAI_IMPROVEMENT_AI_TIMEOUT_SECONDS` | `240` | número `> 0` | `240` | timeout da tentativa estruturada da análise profunda |
+
+Equivalência no console interativo:
+
+| Contrato de ambiente | Controle no `rasai-console` | Persistência normal do console |
+|---|---|---|
+| `RASAI_AI_ANALYSIS_LANGUAGE` | menu `E` / configuração avançada de idioma da IA | ambiente da sessão/Windows quando explicitamente persistido; não entra no INI |
+| `RASAI_IMPROVEMENT_INTELLIGENCE` | item 13 → habilitar análise profunda | `[improvement_intelligence] enabled` |
+| `RASAI_IMPROVEMENT_AI_PROVIDER` | item 13 → IA exclusiva da análise profunda | `[improvement_intelligence] provider` |
+| `RASAI_IMPROVEMENT_AI_MODEL` | item 13 → modelo | `[improvement_intelligence] model` |
+| `RASAI_IMPROVEMENT_AI_REASONING` | item 13 → esforço/profundidade | `[improvement_intelligence] reasoning_effort` |
+| `RASAI_IMPROVEMENT_DOMAINS` | item 13 → domínios | `[improvement_intelligence] domains` |
+| `RASAI_IMPROVEMENT_MAX_RECOMMENDATIONS` | item 13 → máximo de recomendações | `[improvement_intelligence] max_recommendations` |
+| `RASAI_IMPROVEMENT_AI_TIMEOUT_SECONDS` | item 13 → timeout da chamada profunda | `[improvement_intelligence] timeout_seconds` |
+
+No `rasai-console`, o item 13 prevalece sobre o toggle externo de Improvement Intelligence. Durante a auditoria base, `RASAI_IMPROVEMENT_INTELLIGENCE` é temporariamente neutralizada e restaurada depois, evitando execução invisível ou duplicada; a etapa profunda é executada somente quando o estado explícito do item 13 estiver habilitado e válido. Expor os mesmos `RASAI_IMPROVEMENT_*` também no menu `E` criaria duas fontes de verdade concorrentes e, por isso, não faz parte do contrato da interface interativa.
 
 No console local, as escolhas da análise profunda são persistidas na seção `[improvement_intelligence]` do `rasai-console.ini`; key/token nunca são duplicados nesse arquivo. No SaaS, provider/modelo/esforço/domínios/idioma são parte do payload secret-free do job, enquanto a credencial continua no boundary seguro do worker/integration. Consulte [IMPROVEMENT_INTELLIGENCE.md](IMPROVEMENT_INTELLIGENCE.md).
 
