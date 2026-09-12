@@ -20,6 +20,7 @@ from rasai.console_environment_reset import (
     install_ai_secret_cancellation,
     install_environment_reset,
 )
+from rasai.console_execution_profile_readiness import install as install_execution_profile_readiness
 from rasai.console_execution_profiles import install as install_execution_profiles
 from rasai.console_progress_presentation import install as install_console_progress_presentation
 from rasai.console_search_guidance import install as install_search_guidance
@@ -121,8 +122,9 @@ def main() -> int:
     # Cost confirmation must see the final runtime but remain inside the profile
     # wrapper so session profiles are projected before historical matching.
     install_cost_confirmation(interactive_console)
-    # Profiles must be outermost: their temporary overlay should be visible to all
-    # readiness/run adapters while never leaking back into persistent configuration.
+    # Readiness guidance augments the profile catalog before the profile wrapper captures
+    # the final console contract. Profiles remain outermost and session-only.
+    install_execution_profile_readiness()
     install_execution_profiles(interactive_console)
     return interactive_console.main()
 
