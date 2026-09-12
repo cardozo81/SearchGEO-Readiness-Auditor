@@ -1,6 +1,8 @@
-# Cancelamento de credenciais e reset de variáveis no console
+# Cancelamento de credenciais e restauração/reset no console
 
-Este documento descreve o comportamento seguro do menu **E. Variáveis de ambiente / credenciais** e do gerenciamento de credenciais de IA no `rasai-console`.
+Este documento descreve o comportamento seguro do gerenciamento de credenciais, do reset avançado por variável/grupo e da restauração integral dos padrões do produto no `rasai-console`.
+
+A baseline oficial do produto está documentada em [SYSTEM_DEFAULTS.md](SYSTEM_DEFAULTS.md) e é distribuída em `src/rasai/config/rasai-defaults.ini`.
 
 ## 1. Cancelamento ao definir Key/token/secret
 
@@ -31,15 +33,50 @@ Ao escolher `V`:
 
 O conteúdo real do secret nunca é exibido.
 
-## 2. Reset geral de variáveis
+## 2. Restaurar padrões do RASAi
 
-O menu avançado passa a oferecer:
+O menu principal oferece:
+
+```text
+D. Restaurar padrões do RASAi
+```
+
+Esse fluxo é diferente do reset avançado por grupo. Ele reconstrói a configuração operacional a partir do `rasai-defaults.ini` da versão instalada e salva o resultado usando o writer canônico do `rasai-console.ini`.
+
+O usuário escolhe entre:
+
+1. **Restaurar padrões e preservar credenciais**;
+2. **Restaurar padrões e remover credenciais** da sessão e, no Windows, de `Windows/User`.
+
+Antes de executar, é exigida a confirmação textual:
+
+```text
+RESTAURAR
+```
+
+### Overrides não secretos
+
+Overrides não secretos conhecidos pelo catálogo RASAi são removidos da sessão e, no Windows, de `Windows/User` em ambas as modalidades.
+
+Isso é necessário porque a precedência normal continua sendo ambiente/SO sobre o INI. Se o console apenas regravasse o `rasai-console.ini`, um `RASAI_*` persistido no SO poderia continuar prevalecendo e a restauração não seria efetiva.
+
+`RASAI_CONSOLE_INI` e `RASAI_CONFIG` são localizadores/bootstrap e não participam dessa limpeza operacional.
+
+### Credenciais
+
+Na opção **preservar**, secrets da sessão/Windows permanecem como estão.
+
+Na opção **remover**, o console remove secrets conhecidos da sessão e, no Windows, do escopo `Windows/User`. O arquivo restaurado nunca recebe esses valores.
+
+## 3. Reset avançado de variáveis
+
+O menu **E. Variáveis de ambiente / credenciais** continua oferecendo:
 
 ```text
 R. Resetar variáveis por grupo ou todas
 ```
 
-O reset usa o catálogo `EnvironmentSpec` vigente. Portanto, ele só atua sobre variáveis conhecidas pelo RASAi e não executa uma limpeza genérica do ambiente do sistema operacional.
+Esse fluxo é mantido para diagnóstico e administração granular. Ele usa o catálogo `EnvironmentSpec` vigente e só atua sobre variáveis conhecidas pelo RASAi; não executa limpeza genérica do ambiente do sistema operacional.
 
 ### Escopo
 
@@ -48,21 +85,21 @@ O usuário pode selecionar:
 - um grupo funcional, por exemplo `Web Performance / Google APIs`, `Métricas e padrões`, `IA - credenciais` ou `Synthetic Apdex`;
 - **Todas as variáveis conhecidas**.
 
-### Camadas que podem ser resetadas
+### Camadas
 
-Após escolher o escopo, o usuário escolhe a camada:
+Após escolher o escopo, o usuário escolhe:
 
-1. **somente sessão atual**;
-2. **sessão + persistência do estado resetado no `rasai-console.ini`**;
-3. no Windows, **sessão + INI + Windows/User**.
+1. somente sessão atual;
+2. sessão + persistência do estado resetado no `rasai-console.ini`;
+3. no Windows, sessão + INI + Windows/User.
 
-A terceira opção é deliberadamente explícita porque remove persistência do sistema operacional.
+Esse reset granular continua exigindo a confirmação textual `RESETAR`.
 
-## 3. Windows/User versus Windows/Machine
+## 4. Windows/User versus Windows/Machine
 
 O RASAi só gerencia persistência no escopo **Windows/User**.
 
-O reset nunca remove valores de **Windows/Machine**.
+Nenhum dos fluxos remove valores de **Windows/Machine**.
 
 Motivos:
 
@@ -70,43 +107,37 @@ Motivos:
 - a alteração afetaria outros usuários e processos;
 - uma ferramenta de auditoria local não deve realizar esse tipo de limpeza global implicitamente.
 
-Quando uma variável existe em `Machine`, o console informa que o valor foi preservado. Mesmo após remover sessão e User, um novo processo pode herdar novamente o valor de Machine.
+Quando uma variável existe em `Machine`, o console informa que o valor foi preservado. Um novo processo pode herdar novamente esse valor e ele poderá prevalecer sobre o INI restaurado.
 
 A remoção administrativa de `Machine` permanece responsabilidade explícita do operador/sistema.
 
-## 4. Confirmação destrutiva
-
-Nenhum reset é executado apenas pela escolha do menu.
-
-Antes da execução o console mostra uma prévia do escopo e exige a confirmação textual:
-
-```text
-RESETAR
-```
-
-Qualquer outra entrada cancela a operação sem alterar dados.
-
 ## 5. Efeito sobre defaults e AUTO
 
-Para variáveis não secretas, reset significa retornar ao comportamento canônico do runtime:
+A restauração integral usa a baseline versionada do produto.
 
-- default explícito, quando existir;
-- `AUTO`/resolução por requisitos, quando esse for o contrato;
-- ausência de valor, quando não existir default seguro.
+A política vigente é:
 
-Algumas configurações do menu principal são projetadas novamente como variáveis de runtime. Nesses casos, após o reset pode existir uma variável materializada com o **valor default efetivo**. Isso não representa a restauração do override antigo.
+- capacidade interna/local sem credencial: habilitada quando tecnicamente aplicável;
+- serviço externo gratuito sem credencial: habilitado;
+- integração dependente de credencial: AUTO/dirigida por requisitos ou inativa até cumprir os requisitos;
+- segurança/administração: fail-closed;
+- valores específicos do cliente que não podem ser inventados: vazio/AUTO.
+
+Synthetic Navigation Apdex e Synthetic User Experience Apdex ficam habilitados no baseline com carga reduzida. O console informa que `>=100` amostras válidas é o alvo recomendado para sair de `small-group` e obter resultado mais representativo. Consulte [SYSTEM_DEFAULTS.md](SYSTEM_DEFAULTS.md).
+
+O reset granular continua significando retornar ao default/AUTO vigente da variável selecionada.
 
 ## 6. INI e secrets
 
-O writer canônico do `rasai-console.ini` continua sendo usado quando o usuário escolhe persistir o reset.
+O writer canônico do `rasai-console.ini` é usado tanto no Save normal quanto na restauração integral e no reset granular que solicita persistência.
 
 Secrets permanecem fora do arquivo em qualquer cenário.
 
-O reset não converte uma credencial em texto persistente e não cria cópia de segurança contendo secrets.
+Nenhum fluxo converte credencial em texto persistente e nenhum backup de configuração deve conter secrets.
 
-## 7. Operações que não fazem parte do reset
+## 7. Operações que não fazem parte do reset/restauração
 
-O reset de variáveis não apaga:
+Os fluxos não apagam:
 
 - auditorias existentes;
 - `AUD-*/audit.db`;
@@ -124,13 +155,16 @@ O fluxo preserva os seguintes princípios:
 
 - secrets nunca aparecem em claro;
 - a troca de secret só ocorre depois de confirmação;
-- reset de Windows/User requer escolha explícita;
+- remoção de Windows/User requer escolha explícita quando envolve credenciais;
 - Windows/Machine é fail-safe/preservado;
 - erros de remoção são exibidos e não são mascarados como sucesso;
-- o catálogo canônico continua sendo a fonte de quais variáveis pertencem a cada grupo.
+- o catálogo canônico continua sendo a fonte de quais variáveis pertencem ao RASAi;
+- o arquivo de padrões é versionado e não contém secrets;
+- o INI restaurado é materializado pelo mesmo writer usado no Save normal.
 
 Documentos relacionados:
 
+- [SYSTEM_DEFAULTS.md](SYSTEM_DEFAULTS.md)
 - [CONSOLE_CONFIGURATION_UX.md](CONSOLE_CONFIGURATION_UX.md)
 - [INTERACTIVE_CONSOLE.md](INTERACTIVE_CONSOLE.md)
 - [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md)
