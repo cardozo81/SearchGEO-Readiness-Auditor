@@ -2,7 +2,9 @@
 
 Guia operacional do Synthetic Navigation Apdex do RASAi.
 
-> A funcionalidade é **desabilitada por padrão**. Ela não altera `SARI-001`, findings GEO, Coverage ou Confidence. O índice mede uma Task sintética de navegação e não deve ser confundido com RUM/APM de usuários reais.
+> O **runtime/CLI bruto** permanece opt-in: sem `--synthetic-apdex` nem variável equivalente, o módulo não inventa uma medição. O **console interativo local**, porém, aplica a baseline versionada do produto em `rasai-defaults.ini`: Synthetic Navigation Apdex habilitado, `T=3 s` e carga inicial reduzida. Essa baseline não altera `SARI-001`, findings GEO, Coverage ou Confidence. O índice mede uma Task sintética de navegação e não deve ser confundido com RUM/APM de usuários reais.
+
+Consulte também [SYSTEM_DEFAULTS.md](SYSTEM_DEFAULTS.md).
 
 ## Fórmula
 
@@ -14,7 +16,7 @@ Tolerating > T e <= 4T
 Frustrated > 4T
 ```
 
-`T` é configurado explicitamente pelo usuário e não possui default universal.
+Não existe `T` universal do padrão Apdex. No CLI bruto, `T` continua obrigatório quando o módulo é habilitado. No console, a baseline RASAi usa `T=3 s` como referência temporal compatível com a calibração Dynatrace adotada pelo produto; quando a organização possui SLO/KPM real, esse valor deve prevalecer.
 
 ## Task medida
 
@@ -31,7 +33,9 @@ Timeout ou erro de navegação/aplicação conta como `FRUSTRATED` quando o prof
 
 ## Grupos
 
-O alvo normal é `100` amostras válidas por URL/device. Grupos entre 1 e 99 amostras válidas são diagnósticos de grupo pequeno e recebem marcador específico. O objetivo é impedir que um smoke curto pareça uma baseline final.
+O alvo normal/recomendado é `100` amostras válidas por URL/device. Grupos entre 1 e 99 amostras válidas são diagnósticos de grupo pequeno e recebem marcador específico. O objetivo é impedir que uma coleta curta pareça uma baseline final.
+
+A baseline do console usa **1 amostra válida por URL/device** para manter o recurso habilitado com a menor carga operacional possível. Esse resultado é deliberadamente `small-group`/diagnóstico. Para análise mais representativa, aumente para `100` ou mais amostras válidas conforme a capacidade e autorização do alvo.
 
 Quando o alvo configurado é menor que 100 e é integralmente atingido sem amostras inválidas, o run permanece `PARTIAL` por `SMALL_GROUP_BELOW_NORMAL_MINIMUM`. Esse estado é diferente de coleta incompleta ou amostra inválida.
 
@@ -83,18 +87,18 @@ RASAI_APDEX_TABLET_HARDWARE_PROFILE
 RASAI_APDEX_TABLET_NETWORK_PROFILE
 ```
 
-| Parâmetro | Default efetivo | Valores permitidos | Recomendado |
+| Parâmetro | Fallback CLI/runtime | Baseline do console | Recomendado |
 |---|---|---|---|
-| habilitação | `false` | booleano | `false`; habilitar deliberadamente |
-| `T` | sem default | número finito `> 0` | usar SLO/KPM definido para a Task |
-| amostras válidas | `100` | inteiro `>= 1` | `100`; reduzir apenas em smoke controlado |
-| máximo de tentativas | `ceil(1.25 × alvo)` | inteiro compatível com a validação do runtime | default derivado |
-| máximo de páginas | `1` | inteiro `>= 0`; `0=todas` | `1` como baseline seguro |
-| timeout por navegação | `max(45 s, 4T + 5 s)` | número finito positivo e maior que `4T` | default derivado |
-| delay | `1 s` | número `>= 0` | `1 s` ou maior conforme sensibilidade do alvo |
-| concorrência | `1` | `1`, `2` | `1` |
+| habilitação | `false` | `true` | manter habilitado quando houver autorização para a carga sintética |
+| `T` | sem default; obrigatório se habilitado | `3 s` | usar SLO/KPM real quando conhecido; `3 s` é baseline RASAi Dynatrace-compatible |
+| amostras válidas | `100` | `1` | `>=100` para grupo normal/mais representativo |
+| máximo de tentativas | `ceil(1.25 × alvo)` | `2` com alvo 1 | manter derivado/compatível com o alvo |
+| máximo de páginas | `1` | `1` | `1` como baseline seguro; ampliar deliberadamente |
+| timeout por navegação | `max(45 s, 4T + 5 s)` | `45 s` para `T=3 s` | default derivado |
+| delay | `1 s` | `1 s` | `1 s` ou maior conforme sensibilidade do alvo |
+| concorrência | `1` | `1` | `1` |
 
-Os presets de cliente, hardware e rede são definidos no catálogo [`SYNTHETIC_RUNTIME_PROFILES.md`](SYNTHETIC_RUNTIME_PROFILES.md). A precedência efetiva é **CLI > variável de ambiente > default controlado**. Mobile e Desktop alimentam diretamente o Synthetic Navigation Apdex; os presets Tablet são compartilhados com a população do Synthetic User Experience Apdex.
+Os presets de cliente, hardware e rede são definidos no catálogo [`SYNTHETIC_RUNTIME_PROFILES.md`](SYNTHETIC_RUNTIME_PROFILES.md). A precedência operacional do console é **CLI/ação explícita > variável de ambiente/SO > `rasai-console.ini` > `rasai-defaults.ini` > fallback interno**. Mobile e Desktop alimentam diretamente o Synthetic Navigation Apdex; os presets Tablet são compartilhados com a população do Synthetic User Experience Apdex.
 
 Os perfis alteram somente a condição de laboratório. Não alteram a fórmula Apdex, o threshold `T` escolhido pelo usuário nem `SARI-001`/`SCORE-GEO-004`. CPU significa slowdown relativo aplicado pelo Chrome DevTools Protocol; RAM, GPU, estado térmico e scheduler físicos não são emulados.
 
@@ -102,13 +106,15 @@ Os perfis alteram somente a condição de laboratório. Não alteram a fórmula 
 
 O console expõe Synthetic Apdex junto das demais configurações de auditoria, explica a finalidade de cada valor, lista os presets permitidos e mostra a carga máxima projetada em quantidade de navegações iniciadas.
 
+A tela informa explicitamente que o valor padrão de baixa carga (`1`) é diagnóstico e que `>=100` amostras válidas por URL/device é a referência normal/recomendada para obter resultado mais representativo.
+
 O timeout de Apdex é independente do timeout de IA e do timeout PageSpeed/Lighthouse.
 
 ## Carga operacional
 
 Synthetic Apdex não possui API paga própria e não chama LLM/PageSpeed/CrUX, mas gera CPU/tempo local, Chromium, tráfego HTTP real contra o alvo e múltiplos requests de subrecursos por navegação.
 
-Não interprete `100 amostras` como `100 requests HTTP`. Para smoke, prefira 1 URL, 1 device, 3-5 amostras, concorrência 1 e alvo controlado. Não execute volume relevante contra produção sem autorização.
+Não interprete `100 amostras` como `100 requests HTTP`. A baseline automática usa 1 amostra por contexto para conter carga. Em smoke manual controlado, 3-5 amostras podem fornecer mais observações sem pretensão de grupo final. Não execute volume relevante contra produção sem autorização.
 
 ## Persistência
 
