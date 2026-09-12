@@ -278,7 +278,7 @@ Google PageSpeed / Lighthouse
 Google Chrome UX Report (CrUX)
 SERP / Search Intelligence
 IA / <provider>
-IA / idioma de análise
+IA - contexto editorial / YMYL
 Synthetic Navigation Apdex
 Synthetic User Experience Apdex
 Dynatrace / calibração Apdex
