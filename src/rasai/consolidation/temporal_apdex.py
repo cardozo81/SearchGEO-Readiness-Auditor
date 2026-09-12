@@ -596,7 +596,7 @@ def render_temporal_apdex(series: tuple[TemporalApdexSeries, ...]) -> str:
                 <tr><td>p99</td><td>{_fmt(item.duration_p99_ms, 1)} ms</td></tr>
                 <tr><td>Mínimo / Máximo</td><td>{_fmt(item.duration_min_ms, 1)} / {_fmt(item.duration_max_ms, 1)} ms</td></tr>
                 <tr><td>Desvio-padrão</td><td>{_fmt(item.duration_stddev_ms, 1)} ms</td></tr>
-                <tr><td>Coeficiente de variação</td><td>{_fmt(item.duration_cv * 100.0 if item.duration_cv is not None else None, 1)}%</td></tr>
+                <tr><td>Coeficiente de variação</td><td>{_fmt(item.duration_cv * 100.0, 1) + '%' if item.duration_cv is not None else '-'}</td></tr>
               </tbody></table></div>
               {limitation}
             </details>
