@@ -14,6 +14,9 @@ from .comparability import annotate_score_url_universes
 from .index import ConsolidationIndex
 from .models import ConsolidatedData, ConsolidationFilter, GenerationResult, RefreshResult
 from .reporting import write_report
+from .temporal_apdex import augment_manifest as augment_temporal_apdex_manifest
+from .temporal_apdex import augment_report as augment_temporal_apdex_report
+from .temporal_apdex import build_temporal_apdex
 
 
 def normalize_filter(
@@ -141,6 +144,17 @@ def generate(
             score_history=data.score_history,
             finding_history=data.finding_history,
         )
+
+    # Temporal Apdex is an additive, read-only projection over the same immutable
+    # AUD workspaces. It deliberately bypasses the rebuildable summary index so
+    # raw sample distributions remain exact without migrating source audit.db files.
+    temporal_apdex = build_temporal_apdex(
+        audits_root=root,
+        audits=data.audits,
+        filters=filters,
+    )
     result = write_report(audits_root=root, data=data, refresh=refresh)
+    augment_temporal_apdex_report(result.report_path, temporal_apdex)
+    augment_temporal_apdex_manifest(result.manifest_path, temporal_apdex)
     _normalize_derivative_output(result)
     return result
