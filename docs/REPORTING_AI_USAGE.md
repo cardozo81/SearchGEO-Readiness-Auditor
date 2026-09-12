@@ -96,6 +96,8 @@ GitHub Copilot é `explicit-only`; quando aparece no report, isso representa sel
 
 Quando disponível, cada comunicação externa é apresentada em bloco expansível com provider/modelo, finalidade, página/snapshot, endpoint sanitizado, duração, status, request e response sanitizados, hashes e indicação de truncamento.
 
+A projeção HTML usa nomes públicos e funcionais para etapas e contratos. Identificadores internos de entrega não fazem parte do contrato público do relatório. Quando a cópia visual de um payload precisa normalizar um identificador interno, o hash continua referindo-se ao conteúdo original persistido/enviado; `audit.db` e a evidência bruta não são reescritos. O próprio HTML informa essa distinção para evitar que a versão sanitizada seja confundida com o payload bruto usado no cálculo do hash.
+
 O conteúdo dessa tabela pertence à telemetria técnica. Ele não altera regras, findings, `SCORE-GEO-004` ou `SARI-001`.
 
 ## AUTO
