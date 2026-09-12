@@ -16,7 +16,7 @@ A configuração efetiva do console local segue:
 
 O `rasai-console.ini` continua sendo salvo pelo writer canônico já existente. API keys, bearer tokens, passwords, DSNs com credencial e demais secrets não são escritos nele.
 
-Uma configuração explícita de maior precedência também governa dependências do baseline. Exemplo: `RASAI_SYNTHETIC_APDEX=false` desativa efetivamente o Experience Apdex herdado dos padrões quando o usuário não definiu Experience explicitamente. Se o operador definir ao mesmo tempo Navigation `false` e Experience `true`, a combinação continua sendo rejeitada como configuração contraditória; o RASAi não altera silenciosamente duas escolhas explícitas.
+Uma configuração explícita de maior precedência também governa dependências do baseline. Como Synthetic User Experience Apdex depende de Synthetic Navigation Apdex, `RASAI_SYNTHETIC_APDEX=false` torna Experience efetivamente `false`, inclusive quando um valor `true` de camada inferior foi materializado pelo baseline/INI. Para executar Experience, Navigation precisa estar habilitado. Essa regra impede combinações impossíveis sem exigir que o usuário desligue manualmente pai e filho.
 
 ## Política do baseline
 
