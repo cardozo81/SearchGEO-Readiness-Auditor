@@ -32,3 +32,6 @@ rasai-console = "rasai.console_entrypoint:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+rasai = ["config/*.ini"]
