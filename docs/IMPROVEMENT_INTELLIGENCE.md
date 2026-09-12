@@ -100,6 +100,19 @@ Para findings técnicos que possuem fragmento/selector observável, o relatório
 
 A sugestão continua exigindo revisão humana.
 
+## Degradação atual e benefício esperado
+
+Toda recomendação produzida por IA deve explicar **os dois lados da decisão**, de forma vinculada às evidências disponíveis:
+
+- **Degradação/risco atual:** qual limitação, perda de clareza, problema técnico ou risco observável existe enquanto a condição permanece como está;
+- **Benefício esperado se aplicado:** qual melhoria qualitativa é razoável esperar após a correção.
+
+Esses campos são obrigatórios no contrato estruturado usado pela análise profunda. A mesma exigência é aplicada às sugestões textuais de conteúdo. A resposta é rejeitada quando um dos dois lados não é informado.
+
+O benefício é uma hipótese evidence-bound, não uma promessa. A IA não pode garantir ganho de ranking, tráfego, conversão, receita, segurança ou performance, nem inventar percentuais. O ganho efetivo continua dependendo de nova medição/before-after.
+
+Para evitar reutilizar silenciosamente uma recomendação antiga que não possua essa explicação, a versão efetiva do fingerprint de configuração muda quando esse contrato de apresentação está ativo. Assim, resultados anteriores incompatíveis não são tratados como equivalentes apenas porque URL e demais parâmetros permaneceram iguais.
+
 ## Priorização
 
 Cada recomendação recebe prioridade derivada de:
