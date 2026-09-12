@@ -3,12 +3,13 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from rasai.console_m23 import State, apply_m23_environment_defaults
 from rasai.standards_console_runtime import install as install_standards_console_runtime
 from rasai.standards_runtime import install_pre_context
-from rasai.system_default_dependencies import normalize_apdex_environment_dependencies
+from rasai.system_default_dependencies import install as install_system_default_dependencies
 from rasai.system_defaults import (
     LOW_LOAD_EXPERIENCE_SAMPLES,
     LOW_LOAD_NAVIGATION_SAMPLES,
@@ -105,19 +106,20 @@ def test_first_run_preserves_explicit_environment_precedence() -> None:
         assert state.synthetic_apdex is True
         assert os.environ["RASAI_SYNTHETIC_APDEX"] == "false"
 
-        # Navigation is the parent capability. An explicit OFF suppresses the lower-
-        # precedence Experience default unless Experience was itself explicitly forced ON.
-        normalize_apdex_environment_dependencies(
-            state,
-            {"RASAI_SYNTHETIC_APDEX"},
+        # Exercise the same final adapter installed by console_entrypoint. Navigation
+        # is the parent capability, so OFF must suppress the lower-layer Experience
+        # baseline rather than generate a false dependency error.
+        adapter = SimpleNamespace(
+            apply_m23_environment_defaults=apply_m23_environment_defaults,
         )
-        assert state.apdex_experience is False
-        issues = apply_m23_environment_defaults(
+        install_system_default_dependencies(adapter)
+        issues = adapter.apply_m23_environment_defaults(
             state,
             names={"RASAI_SYNTHETIC_APDEX"},
         )
         assert issues == ()
         assert state.synthetic_apdex is False
+        assert state.apdex_experience is False
 
 
 def test_user_ini_still_overrides_system_defaults() -> None:
