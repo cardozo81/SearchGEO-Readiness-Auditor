@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from rasai.console_m23 import State
+from rasai.console_m23 import State, apply_m23_environment_defaults
 from rasai.standards_console_runtime import install as install_standards_console_runtime
 from rasai.standards_runtime import install_pre_context
 from rasai.system_defaults import (
@@ -86,6 +86,29 @@ def test_missing_user_ini_is_created_from_system_defaults_and_external_free_serv
         assert "samples_per_context = 1" in text
         assert "samples_per_page = 20" in text
         assert "OPENAI_API_KEY" not in text
+
+
+def test_first_run_preserves_explicit_environment_precedence() -> None:
+    _install_standards_catalog()
+    with TemporaryDirectory() as directory, patch.dict(
+        os.environ,
+        {"RASAI_SYNTHETIC_APDEX": "false"},
+        clear=True,
+    ):
+        path = Path(directory) / "rasai-console.ini"
+        state = State()
+        result = load_console_config_with_system_defaults(state, path)
+        assert result.created is True
+        # The system baseline is what gets materialized in the newly-created INI,
+        # but the incoming process/OS override must survive the writer unchanged.
+        assert state.synthetic_apdex is True
+        assert os.environ["RASAI_SYNTHETIC_APDEX"] == "false"
+        issues = apply_m23_environment_defaults(
+            state,
+            names={"RASAI_SYNTHETIC_APDEX"},
+        )
+        assert issues == ()
+        assert state.synthetic_apdex is False
 
 
 def test_user_ini_still_overrides_system_defaults() -> None:
