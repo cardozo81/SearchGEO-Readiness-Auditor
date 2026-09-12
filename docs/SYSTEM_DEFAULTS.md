@@ -16,6 +16,8 @@ A configuração efetiva do console local segue:
 
 O `rasai-console.ini` continua sendo salvo pelo writer canônico já existente. API keys, bearer tokens, passwords, DSNs com credencial e demais secrets não são escritos nele.
 
+Uma configuração explícita de maior precedência também governa dependências do baseline. Exemplo: `RASAI_SYNTHETIC_APDEX=false` desativa efetivamente o Experience Apdex herdado dos padrões quando o usuário não definiu Experience explicitamente. Se o operador definir ao mesmo tempo Navigation `false` e Experience `true`, a combinação continua sendo rejeitada como configuração contraditória; o RASAi não altera silenciosamente duas escolhas explícitas.
+
 ## Política do baseline
 
 A baseline procura habilitar o máximo de capacidade de auditoria sem exigir credencial:
@@ -98,7 +100,7 @@ A restauração não apaga auditorias, `AUD-*/audit.db`, HTML reports, bancos do
 
 O arquivo `src/rasai/config/rasai-defaults.ini` é package data do pacote `rasai`, portanto faz parte da instalação Python e não depende do diretório do repositório existir ao lado do executável.
 
-A versão do arquivo é validada antes do uso. Testes de contrato verificam os valores de baixa carga do Apdex, a ativação das capacidades sem credencial, a precedência do `rasai-console.ini` e a preservação/remoção opcional de credenciais.
+A versão do arquivo é validada antes do uso. Testes de contrato verificam os valores de baixa carga do Apdex, a ativação das capacidades sem credencial, a precedência do `rasai-console.ini`, a precedência de overrides explícitos e a preservação/remoção opcional de credenciais.
 
 Documentos relacionados:
 
