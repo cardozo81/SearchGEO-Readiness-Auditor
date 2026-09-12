@@ -48,6 +48,8 @@ def _suggestions() -> dict[str, object]:
             "proposed_text": "Produto Alpha possui descrição observada.",
             "evidence_ids": ["EVD-1"],
             "confidence": 0.8,
+            "current_degradation": "A descrição curta limita a clareza do contexto observado para o usuário.",
+            "expected_benefit": "Uma descrição mais clara pode facilitar a compreensão do conteúdo observado.",
             "review_note": "Revisar antes de publicar.",
         }]
     }
@@ -67,6 +69,8 @@ class ProviderExtensionM20Tests(unittest.TestCase):
         self.assertEqual(result.state, ProviderState.AVAILABLE)
         self.assertEqual(result.provider, provider.name)
         self.assertEqual(len(result.suggestions), 1)
+        self.assertIn("Degradação/risco atual:", result.suggestions[0].review_note)
+        self.assertIn("Benefício esperado se aplicado:", result.suggestions[0].review_note)
         self.assertIn(expected_fragment, json.dumps(calls[0]["body"]))
         attempts = router.consume_attempts()
         self.assertEqual(len(attempts), 1)
