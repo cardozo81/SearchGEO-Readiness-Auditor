@@ -33,7 +33,8 @@ class ConsolidationReportingUXTests(unittest.TestCase):
             self.assertNotIn('{&quot;HIGH&quot;', html)
 
             manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
-            self.assertEqual(manifest["report_format_version"], "CONS-3")
+            self.assertEqual(manifest["report_format_version"], "CONS-4")
+            self.assertEqual(manifest["temporal_apdex"]["contract"], "TEMPORAL-APDEX-001")
             self.assertEqual(manifest["summary"]["historical_mode"], "Snapshot")
             self.assertEqual(manifest["aggregation_policy"]["outliers"], "no_automatic_removal")
 
@@ -57,7 +58,7 @@ class ConsolidationReportingUXTests(unittest.TestCase):
             self.assertIn("Cobertura", html)
             self.assertIn("Matriz histórica das dimensões", html)
 
-    def test_identical_request_still_reuses_cons2_snapshot(self) -> None:
+    def test_identical_request_reuses_cons4_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _make_audit(root, "AUD-001", when="2026-09-05T10:00:00-03:00", scoring_version="SCORE-GEO-004")
@@ -67,6 +68,8 @@ class ConsolidationReportingUXTests(unittest.TestCase):
             self.assertFalse(first.reused)
             self.assertTrue(second.reused)
             self.assertEqual(first.report_path, second.report_path)
+            manifest = json.loads(second.manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(manifest["report_format_version"], "CONS-4")
 
 
 if __name__ == "__main__":

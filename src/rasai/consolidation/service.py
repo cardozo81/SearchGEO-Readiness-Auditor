@@ -14,8 +14,9 @@ from .comparability import annotate_score_url_universes
 from .index import ConsolidationIndex
 from .models import ConsolidatedData, ConsolidationFilter, GenerationResult, RefreshResult
 from .reporting import write_report
-from .temporal_apdex import augment_manifest as augment_temporal_apdex_manifest
-from .temporal_apdex import augment_report as augment_temporal_apdex_report
+from .cons4 import find_existing as find_cons4
+from .cons4 import materialize as materialize_cons4
+from .cons4 import request_fingerprint as cons4_request_fingerprint
 from .temporal_apdex import build_temporal_apdex
 
 
@@ -145,6 +146,14 @@ def generate(
             finding_history=data.finding_history,
         )
 
+    # CONS-4 has its own request identity. This prevents a previously generated
+    # CONS-3 snapshot from being modified in place when temporal aggregation is enabled.
+    temporal_fingerprint = cons4_request_fingerprint(data.source_fingerprint, filters)
+    existing_temporal = find_cons4(root, temporal_fingerprint, refresh)
+    if existing_temporal is not None:
+        _normalize_derivative_output(existing_temporal)
+        return existing_temporal
+
     # Temporal Apdex is an additive, read-only projection over the same immutable
     # AUD workspaces. It deliberately bypasses the rebuildable summary index so
     # raw sample distributions remain exact without migrating source audit.db files.
@@ -153,8 +162,13 @@ def generate(
         audits=data.audits,
         filters=filters,
     )
-    result = write_report(audits_root=root, data=data, refresh=refresh)
-    augment_temporal_apdex_report(result.report_path, temporal_apdex)
-    augment_temporal_apdex_manifest(result.manifest_path, temporal_apdex)
+    base_result = write_report(audits_root=root, data=data, refresh=refresh)
+    result = materialize_cons4(
+        audits_root=root,
+        base_result=base_result,
+        source_fingerprint=data.source_fingerprint,
+        filters=filters,
+        series=temporal_apdex,
+    )
     _normalize_derivative_output(result)
     return result
