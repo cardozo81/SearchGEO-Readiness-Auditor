@@ -10,6 +10,16 @@
 | Chromium | necessário para rendering e Synthetic Apdex |
 | SQLite | local/embarcado |
 
+## Política de validação por sistema operacional
+
+Windows é o ambiente obrigatório de validação do RASAi e deve permanecer coberto pelos testes automatizados, regressões e smoke tests aplicáveis ao runtime local.
+
+Mudanças que afetem runtime, console, filesystem, SQLite, multiprocessing, subprocessos, Chromium/Playwright, paths, persistência ou geração de relatórios não podem ser consideradas validadas sem execução equivalente em Windows.
+
+Testes em Linux podem e devem permanecer como cobertura complementar para portabilidade, workers, containers e evolução SaaS, mas não substituem o gate Windows. Uma validação executada somente em Linux não é suficiente para declarar uma alteração pronta para integração quando o escopo também existir no runtime Windows.
+
+macOS não integra o gate operacional obrigatório enquanto não for formalmente promovido a plataforma suportada do produto.
+
 ## Dispositivos
 
 ```text
