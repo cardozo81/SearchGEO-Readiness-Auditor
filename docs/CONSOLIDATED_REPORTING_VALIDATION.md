@@ -2,19 +2,25 @@
 
 ## Estado atual
 
-O relatório consolidado faz parte do baseline de desenvolvimento em `main`. Este documento descreve o contrato que deve permanecer verdadeiro antes da aprovação de uma versão publicável do RASAi; referências a branches/PRs usados durante a implementação não definem o comportamento do produto.
+O relatório consolidado faz parte do baseline de desenvolvimento em `main`.
 
-Formato atual:
+Formato materializado vigente:
 
 ```text
-CONS-3
+CONS-4
 ```
 
-A alteração do identificador de formato invalida dedupe de snapshots produzidos com estruturas anteriores de desenvolvimento quando a semântica do HTML/manifest não é equivalente. Isso é controle interno de reprodutibilidade, não histórico de releases públicas.
+Contrato temporal associado:
+
+```text
+TEMPORAL-APDEX-001
+```
+
+`CONS-3` permanece como formato/base anterior. Ele pode ser lido/reutilizado pelo renderizador base, mas não deve ser reescrito em lugar para adquirir semântica `CONS-4`.
 
 ## Fonte de verdade e escrita
 
-As fontes são os `AUD-*/audit.db`, abertos em modo somente leitura (`SQLite mode=ro` e `PRAGMA query_only=ON`). A consolidação não recalcula auditorias e não grava nos bancos fonte.
+As fontes são os `AUD-*/audit.db`, abertas em modo somente leitura (`SQLite mode=ro` e `PRAGMA query_only=ON`). A consolidação não recalcula auditorias, não migra schema e não grava nos bancos fonte.
 
 Artefatos derivados:
 
@@ -24,122 +30,166 @@ consolidated/CONS-*/report.html
 consolidated/CONS-*/manifest.json
 ```
 
-O índice consolidado é reconstruível.
+O índice e os snapshots consolidados são reconstruíveis.
 
-## Contrato comportamental CONS-3
+## Contrato comportamental CONS-4
 
-- resumo executivo de SARI informa pontuação, Cobertura, Confiança e estado de Consolidação;
-- score não consolidado é identificado como pontuação parcial, não como SARI consolidado;
-- a dimensão atual mais fraca é lida do mesmo `audit_id` do Overall atual;
-- séries SARI exigem mesma `scoring_version` e mesmo fingerprint do universo completo de URLs;
-- filtro parcial de URL não recebe score calculado com URLs que ficaram fora do filtro;
-- mudança de método de scoring permanece segmentada e não é normalizada silenciosamente;
-- Lighthouse/lab e Core Web Vitals/field continuam domínios distintos;
-- Apdex só é agregado entre mesmo perfil e mesmo `T`, ponderado por amostras válidas;
-- grupos `small_group` sem grupo final permanecem diagnósticos de base insuficiente;
-- evolução de findings usa **ocorrências por URL auditada** como série comportamental; contagem bruta é apenas contexto;
+- SARI mostra pontuação, Coverage, Confidence e estado de Consolidation persistidos;
+- score parcial não é apresentado como SARI consolidado;
+- séries de readiness exigem `scoring_version` e universo de URLs comparáveis;
+- filtro parcial de URL não reutiliza score calculado sobre páginas excluídas;
+- Lighthouse/lab e Core Web Vitals/field continuam separados;
+- Navigation e User Experience Apdex continuam domínios separados;
+- Apdex do período usa soma de Satisfied/Tolerating/Frustrated sobre amostras válidas comparáveis;
+- p50/p75/p90/p95/p99, média, desvio-padrão e CV do período usam o pool bruto por URL/contexto, nunca média de percentis individuais;
+- grupos `small_group` continuam explicitamente identificados;
+- findings permanecem contextualizados pelo universo auditado;
 - dado ausente não vira zero;
-- extremos não são eliminados automaticamente por valor;
-- estados acionáveis seguem a mesma semântica visual dos relatórios individuais;
-- métodos anteriores encontrados em bases de teste são referências de desenvolvimento não comparáveis ao `SCORE-GEO-004`, salvo quando o próprio contrato de comparabilidade provar o contrário.
+- extremos não são eliminados automaticamente;
+- mudanças materiais de método criam fronteiras de comparabilidade;
+- `CONS-3` legado não é mutado ao materializar `CONS-4`.
 
-## Estatística e comparabilidade
+## Comparabilidade do Apdex
 
-### Readiness Search & AI
+### Synthetic Navigation Apdex
 
-Uma série numérica é agregada somente na combinação compatível mais recente de:
+A série deve preservar, no mínimo:
 
 ```text
-scoring_version
-+
-fingerprint do conjunto completo de URLs da auditoria
+URL
++ device
++ task
++ profile
++ T / 4T
++ pacing relevante
 ```
 
-`scoring_version` é apresentado ao usuário como **Versão do método de pontuação**.
+### Synthetic User Experience Apdex
 
-### Média, mediana e extremos
-
-- média = média aritmética das observações elegíveis;
-- mediana = valor central das observações elegíveis;
-- mínimo/máximo são preservados;
-- não há trimming, winsorization nem descarte automático por IQR/desvio-padrão;
-- `NULL`/ausência de dado não é imputado como zero.
-
-### Desempenho Web
-
-Para estados Inicial/Atual de métricas por URL, a consolidação usa a média transversal da observação válida mais antiga/recente de cada URL elegível, evitando que a URL mais frequentemente auditada represente sozinha o domínio.
-
-### Apdex
-
-O agregado exige mesmo perfil sintético e mesmo limiar `T`. O valor é ponderado por amostras válidas. Coeficiente de variação é diagnóstico de estabilidade e não entra na fórmula Apdex. Consulte [`SYNTHETIC_APDEX.md`](SYNTHETIC_APDEX.md).
-
-### Ocorrências
-
-Findings não recalculam SCORE-GEO. Para comparar auditorias de escopos diferentes, o gráfico comportamental usa `quantidade de findings / quantidade de URLs auditadas`. A contagem absoluta permanece disponível para dimensionar volume operacional.
-
-## Metodologia e transparência
-
-O HTML mostra somente versões realmente persistidas nas fontes selecionadas. `SCORE-GEO-004` é o contrato vigente para novas auditorias. Dados criados por propostas anteriores durante o desenvolvimento permanecem identificados por sua `scoring_version` e não são apresentados como versões públicas anteriormente lançadas.
-
-O consolidado não deve afirmar validação externa do SARI/SCORE-GEO como preditor de ranking/citação. Fontes públicas sustentam métricas/domínios específicos, não homologam o índice proprietário.
-
-## Dedupe
-
-Exige igualdade de:
+A série deve preservar, no mínimo:
 
 ```text
-report_format_version
+URL
++ device/POPULATION
++ task
++ profile
++ KPM
++ Satisfied/Frustrated thresholds
++ session mode
++ errors_affect_apdex/error scope
++ pacing/settle
++ device mix para POPULATION
+```
+
+Contextos incompatíveis não podem entrar no mesmo denominador nem no mesmo pool de durações/KPM.
+
+## Estatística
+
+### Apdex do período
+
+```text
+Apdex = (ΣSatisfied + 0,5 × ΣTolerating) / ΣValid
+```
+
+Se as contagens S/T/F persistidas não fecharem com `valid_samples`, o denominador persistido é preservado e a limitação deve aparecer no output.
+
+### Distribuição temporal
+
+Amostras válidas com duração/KPM numérica formam o pool usado para:
+
+- média;
+- mediana/p50;
+- p75/p90/p95/p99;
+- mínimo/máximo;
+- desvio-padrão populacional;
+- coeficiente de variação.
+
+Amostra válida sem valor temporal continua no Apdex, mas fica fora da distribuição; a diferença deve ser declarada.
+
+### Demais métricas
+
+Readiness, Web Performance, findings, estados categóricos e dados externos mantêm suas políticas específicas. O consolidado não aplica uma média universal a todos os tipos de indicador.
+
+## Integridade do snapshot e dedupe
+
+O fingerprint `CONS-4` depende de:
+
+```text
+CONS-4
++ TEMPORAL-APDEX-001
 + filtros canônicos
-+ conjunto/fingerprint dos AUDs elegíveis
++ source_fingerprint dos AUDs elegíveis
 ```
 
-Assim:
+Comportamento esperado:
 
-- mesma requisição + mesmas fontes: pode reutilizar;
-- novo AUD elegível: novo snapshot;
-- mudança de filtro: novo snapshot;
-- mudança de formato: novo snapshot.
+- mesma requisição + mesmas fontes: reutiliza o mesmo `CONS-4`;
+- novo AUD/filtro/contrato: novo fingerprint;
+- se o gerador base retornar um `CONS-3` reutilizado, o materializador cria outro diretório `CONS-*`, copia HTML/manifest e só então aplica `CONS-4`;
+- hashes/bytes do `CONS-3` original permanecem iguais;
+- `request_fingerprint`, `report_format_version`, `cons_id` e `generated_at` do novo snapshot permanecem coerentes;
+- o manifest não duplica as amostras brutas.
 
 ## Gates automatizados
 
-Workflow principal da feature consolidada:
+Workflow principal:
 
 ```text
 .github/workflows/consolidated-reporting-ci.yml
 ```
 
-O gate deve cobrir, no mínimo:
+O gate deve cobrir:
 
+- compile da superfície de consolidação;
 - geração read-only e hash dos `audit.db` inalterado;
-- dedupe e invalidação por novo AUD/filtro/formato;
-- segregação de método e universo de URLs;
-- Snapshot com `N=1` sem falsa tendência;
-- série histórica somente quando comparável;
-- Apdex com regra de perfil + `T`;
-- findings normalizados por URL;
+- dedupe e invalidação por novo AUD/filtro/contrato;
+- segregação de método/universo de URLs;
+- Snapshot com N=1 sem falsa tendência;
+- série histórica apenas quando comparável;
+- Apdex calculado pelas contagens persistidas;
+- percentis recalculados do pool bruto;
+- separação de thresholds incompatíveis;
+- Experience `POPULATION` baseada na união das amostras elegíveis;
+- preservação byte a byte de `CONS-3` reutilizado ao materializar `CONS-4`;
+- findings normalizados/contextualizados;
 - HTML/manifest com metodologia e limitações;
-- regressões do console/configuração;
-- contrato público de relatórios.
+- regressões de console/configuração previstas pelo workflow.
+
+## Testes pontuais mínimos
+
+1. dois AUDs Navigation com durações conhecidas e quantidades diferentes de S/T/F;
+2. confirmar Apdex do período por contagens e p95 pelo pool bruto;
+3. alterar `T` em um AUD e confirmar duas séries;
+4. repetir para Experience/`POPULATION`;
+5. calcular hash dos `audit.db` antes/depois;
+6. partir de um `CONS-3` existente e confirmar criação de outro snapshot `CONS-4` sem alterar bytes do legado;
+7. repetir a mesma solicitação e confirmar reuse do `CONS-4`;
+8. conferir que seções não relacionadas do HTML permanecem presentes;
+9. validar `manifest.json` e ausência de raw samples completos.
 
 ## Smoke humano
 
-Após atualizar o checkout local de `main`:
+Quando necessário validar visualmente no ambiente local:
 
-1. abrir `iniciar.cmd`;
-2. confirmar navegação normal do console;
-3. gerar consolidado com 1 AUD e confirmar **Snapshot**;
-4. gerar com 2 AUDs comparáveis e confirmar comparação sem afirmar tendência robusta;
-5. gerar com 3+ AUDs comparáveis e validar gráfico/matriz;
-6. conferir SARI, Cobertura, Confiança e Consolidação contra pelo menos um `audit.db`;
-7. validar Apdex e indicação de amostra pequena quando aplicável;
-8. validar evolução de ocorrências por URL e conferir o volume bruto contextual;
-9. testar pesquisa/paginação das auditorias consideradas;
-10. repetir mesmos filtros e confirmar dedupe;
-11. comparar hash do `audit.db` antes/depois;
-12. abrir o HTML com o console fechado e confirmar funcionamento estático.
+1. atualizar checkout de `main`;
+2. gerar consolidado com 1 AUD e confirmar **Snapshot**;
+3. gerar com 2 AUDs comparáveis e confirmar comparação sem narrativa de tendência;
+4. gerar com 3+ AUDs e confirmar série histórica descritiva;
+5. validar seção Apdex por URL/contexto, p95 e amostras válidas;
+6. conferir SARI/Coverage/Confidence contra um `audit.db` fonte;
+7. testar pesquisa/paginação das auditorias consideradas;
+8. repetir filtros e confirmar dedupe `CONS-4`;
+9. comparar hashes dos `audit.db` antes/depois;
+10. abrir o HTML com o console fechado e confirmar funcionamento estático.
+
+## SaaS/control plane
+
+Nenhuma migração de schema é necessária para esta evolução. Scheduling já permite distribuir N execuções pelo período. A consolidação usa os `AUD-*` resultantes.
+
+Quando o produto executar medições por hubs/regiões distintas, a origem/região deverá entrar no contrato de comparabilidade assim que essa proveniência existir de forma persistida.
 
 ## Reversibilidade
 
-O consolidado é derivado. Em caso de falha, a reversão não exige migração dos `AUD-*`: os artefatos `consolidated/CONS-*` e o índice derivado podem ser reconstruídos a partir das fontes.
+O consolidado é derivado. Reversão não exige migração dos `AUD-*`: cache e `CONS-*` podem ser removidos e reconstruídos.
 
-Veja também [`CONSOLIDATED_REPORTING.md`](CONSOLIDATED_REPORTING.md), [`REPORT_GUIDE.md`](REPORT_GUIDE.md), [`SCORING_GUIDE.md`](SCORING_GUIDE.md) e [`SYNTHETIC_APDEX.md`](SYNTHETIC_APDEX.md).
+Veja também [`CONSOLIDATED_REPORTING.md`](CONSOLIDATED_REPORTING.md), [`CONSOLIDATED_REPORTING_TEMPORAL.md`](CONSOLIDATED_REPORTING_TEMPORAL.md), [`REPORT_GUIDE.md`](REPORT_GUIDE.md), [`SCORING_GUIDE.md`](SCORING_GUIDE.md) e [`SYNTHETIC_APDEX.md`](SYNTHETIC_APDEX.md).
