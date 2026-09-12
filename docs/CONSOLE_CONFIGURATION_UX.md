@@ -1,61 +1,56 @@
 # Contrato de UX para configuração no console
 
-Este documento define o padrão canônico para qualquer variável, credencial ou opção avançada exposta pelo `rasai-console`.
+Este documento define o padrão canônico para variáveis, credenciais, opções avançadas e Perfis de Execução expostos pelo `rasai-console`.
 
-O objetivo é impedir que o operador precise conhecer previamente o código, o nome interno de um enum ou a documentação de um fornecedor para configurar uma capacidade do RASAi.
+O objetivo é permitir que o operador configure capacidades do RASAi sem precisar conhecer previamente nomes internos, enums, registries ou documentação de fornecedores.
 
 ## 1. Regra principal
 
 Nenhuma configuração com domínio fechado deve depender de texto livre.
 
-O console deve aplicar a seguinte ordem:
+Ordem preferencial:
 
 1. **booleano**: seleção explícita `true` / `false`;
-2. **enum**: seleção entre os valores aceitos pelo runtime/registry;
-3. **lista fechada**: seleção múltipla entre os valores aceitos;
-4. **provider/model/reasoning**: lista derivada do registry canônico correspondente;
-5. **valor dependente**: quando o domínio depende de outra configuração, a lista deve ser recalculada a partir da dependência vigente;
-6. **valor aberto**: entrada textual somente quando o dado realmente não possuir domínio finito, por exemplo URL, caminho, token, property, locale ou número contínuo.
+2. **enum**: seleção entre valores aceitos pelo runtime/registry;
+3. **lista fechada**: seleção múltipla;
+4. **provider/model/reasoning**: lista derivada do registry canônico;
+5. **valor dependente**: recalculado a partir da dependência vigente;
+6. **valor aberto**: texto apenas quando o dado realmente não possui domínio finito, como URL, caminho, token, property, locale ou número contínuo.
 
-O runtime continua sendo a autoridade de validação. O console não deve manter uma segunda lista divergente quando um registry ou contrato já publicar os valores válidos.
+O runtime continua sendo a autoridade de validação. O console não deve manter uma lista paralela divergente quando um registry ou contrato já publica os valores válidos.
 
 ## 2. Informações obrigatórias por variável
 
-Ao abrir uma variável, a UI deve tornar visíveis, quando aplicáveis:
+A UI deve tornar visíveis, quando aplicáveis:
 
-- nome canônico da variável;
-- grupo funcional;
-- **contexto/recurso** ao qual ela pertence;
-- finalidade em linguagem operacional;
-- tipo do dado;
-- valores válidos;
-- default efetivo;
+- nome canônico e grupo funcional;
+- contexto/recurso;
+- finalidade operacional;
+- tipo, valores válidos e default efetivo;
 - condição que torna a configuração necessária;
-- indicação se o valor é sensível;
+- indicação de dado sensível;
 - impacto de custo, quota, carga, segurança ou comportamento;
-- valor/estado atual;
-- exemplo de preenchimento;
-- referência interna detalhada;
-- documentação oficial do recurso externo;
-- URL oficial de criação/login/credencial quando existir;
-- observações de quota, free tier ou limitação metodológica relevantes.
+- estado atual;
+- exemplo;
+- referência interna;
+- documentação oficial;
+- URL oficial de criação/login/credencial;
+- observações de free tier ou limitações metodológicas.
 
-Uma variável não deve aparecer apenas como `RASAI_* = ?` sem explicar para que será usada.
+Uma variável não deve aparecer apenas como `RASAI_* = ?` sem contexto.
 
 ## 3. Organização por contexto
 
-A categoria continua representando a área funcional ampla. Dentro dela, o console agrupa as variáveis pelo recurso operacional sempre que for possível.
+A categoria representa a área funcional ampla e, dentro dela, a UI agrupa por recurso operacional.
 
-Exemplos:
+Exemplo:
 
 ```text
 Métricas e padrões
   [Google Search Console]
     RASAI_GSC_ENABLED
     RASAI_GOOGLE_SEARCH_CONSOLE_SITE_URL
-    RASAI_GSC_SEARCH_ANALYTICS_DAYS
-    RASAI_GSC_SEARCH_MAX_ROWS
-    RASAI_GSC_FINAL_DATA_LAG_DAYS
+    ...
 
 Web Performance / Google APIs
   [Google PageSpeed / Lighthouse]
@@ -63,7 +58,7 @@ Web Performance / Google APIs
     RASAI_PAGESPEED_API_KEY
     RASAI_LIGHTHOUSE_CATEGORIES
 
-  [Google Chrome UX Report (CrUX)]
+  [Google Chrome UX Report]
     RASAI_CRUX_ENABLED
     RASAI_CRUX_API_KEY
 
@@ -73,27 +68,25 @@ Synthetic Apdex
   [Dynatrace / calibração Apdex]
 ```
 
-Secrets podem permanecer em uma categoria tecnicamente apropriada para persistência/segurança, mas a UI deve deixar explícito o contexto ao qual pertencem e as dependências cruzadas.
+Secrets podem permanecer em uma categoria tecnicamente apropriada, mas a UI deve deixar claro a qual integração pertencem.
 
-## 4. Semântica de cores
+## 4. Semântica de estados e cores
 
-Cor é reforço visual; o texto do estado continua obrigatório.
+Cor é reforço visual; o texto do estado é obrigatório.
 
 | Estado | Cor | Semântica |
 |---|---|---|
-| `APTO`, `DEFINIDO`, `ON`, credencial presente | verde | capacidade/configuração disponível |
-| `CONFIGURAR`, atenção, requisito pendente | amarelo | ação necessária ou condição a revisar |
-| `INDISPONÍVEL`, erro, bloqueio | vermelho | execução impedida |
-| `PADRÃO`, `OPCIONAL`, `DESABILITADA`, ausente/inativo | cinza/dim | ausência deliberada, default ou hard-off |
-| contexto, breadcrumb, informação explicativa | ciano | navegação/informação |
+| `APTO`, `DEFINIDO`, `ON` | verde | capacidade disponível |
+| `CONFIGURAR`, atenção | amarelo | ação obrigatória ou condição a revisar |
+| `INDISPONÍVEL`, erro, bloqueio | vermelho | recurso não utilizável no contexto atual |
+| `PADRÃO`, `OPCIONAL`, `DESABILITADA` | cinza/dim | ausência deliberada/default |
+| contexto/informação | ciano | orientação |
 
-Valores booleanos seguem a mesma convenção: `true` é destacado como ativo; `false` aparece como desabilitado/dim.
+`CONFIGURAR` não deve ser usado como sinônimo de falha do runtime: ele representa uma pendência conhecida antes da execução.
 
 ## 5. Seleção guiada
 
 ### Booleano
-
-Exemplo:
 
 ```text
 RASAI_GSC_ENABLED
@@ -104,11 +97,7 @@ Valores válidos:
  V. Voltar
 ```
 
-A documentação pode mencionar aliases aceitos pelo parser (`1/0`, `yes/no`, `on/off`), mas o console deve apresentar `true` e `false` como forma canônica.
-
 ### Enum
-
-Exemplo:
 
 ```text
 RASAI_DEVICE_CONTEXT
@@ -121,12 +110,10 @@ Valores válidos:
 
 ### Lista fechada
 
-Exemplo:
-
 ```text
 RASAI_LIGHTHOUSE_CATEGORIES
 
-Valores válidos (seleção múltipla):
+Valores válidos:
  1. performance
  2. accessibility
  3. best-practices
@@ -134,82 +121,68 @@ Valores válidos (seleção múltipla):
  5. agentic-browsing
 ```
 
-O usuário pode selecionar os itens sem digitar manualmente os tokens canônicos.
-
 ### Domínio dependente
 
-Alguns valores só podem ser determinados depois de outra escolha. Exemplo: em Improvement Intelligence, modelo e reasoning dependem do provider selecionado. Nesses casos, o console deve recalcular a lista ao abrir a variável, sem exigir que o usuário conheça o catálogo do provider.
+Quando modelo/reasoning dependem do provider, a lista deve ser recalculada depois da escolha do provider. O usuário não deve precisar conhecer o catálogo interno.
 
 ## 6. Valores abertos
 
-Texto livre continua correto para dados cujo conjunto não é enumerável, por exemplo:
+Texto livre permanece correto para:
 
 - URL e endpoint;
 - caminho de arquivo;
-- Search Console property (`sc-domain:...` ou URL-prefix);
+- Search Console property;
 - API key/token/secret;
 - número com faixa contínua;
 - locale/tag BCP-47;
-- identificadores externos do cliente/IdP.
+- identificadores externos.
 
-Nesses casos, a UI deve exibir tipo, formato, exemplo, dependências e documentação antes da edição.
+A UI deve exibir formato, exemplo, dependências e documentação antes da edição.
 
-`RASAI_WEB_FEATURES_DATASET` é um exemplo importante: o valor não é uma opção como `latest` ou `stable`; é o caminho para um arquivo local existente do dataset versionado WebDX/web-features. O contrato e a limitação atual da capacidade Baseline estão em [WEB_PLATFORM_BASELINE.md](WEB_PLATFORM_BASELINE.md).
+`RASAI_WEB_FEATURES_DATASET`, por exemplo, é caminho para arquivo local do dataset WebDX/web-features, não enum como `latest`/`stable`.
 
-## 7. Entrada de secrets mascarada e cancelável
+## 7. Secrets mascarados e canceláveis
 
-Secrets não devem aparecer em claro, mas a ausência total de feedback visual também prejudica a usabilidade. O padrão do console é:
+Secrets não aparecem em claro. Quando o terminal permite leitura segura caractere a caractere, o feedback visual é mascarado:
 
 ```text
 OPENAI_API_KEY: ************************
 ```
 
-Cada caractere digitado ou colado é armazenado normalmente em memória para validação/configuração, porém somente `*` é desenhado no terminal. Backspace remove o último caractere real e o último `*` visível.
-
-A edição é **staged**: digitar/colar não altera imediatamente o valor atual. Após a leitura e validação, o console oferece:
+A edição é staged:
 
 ```text
 C. Confirmar alteração
 V. Cancelar e manter o valor atual
 ```
 
-Somente `C` efetiva a troca. `V` descarta o candidato e preserva integralmente o valor anterior; se ainda não existia credencial, continua não existindo.
+Regras:
 
-Regras de segurança:
-
-- o valor real nunca é ecoado no terminal;
-- o mascaramento é apenas apresentação; não altera o secret armazenado;
-- o secret continua fora do `rasai-console.ini`;
-- a quantidade de `*` revela apenas o comprimento aproximado do valor digitado, trade-off deliberado para dar feedback ao operador;
-- em terminal sem suporte seguro a leitura caractere a caractere, o console faz fallback para `getpass` sem eco, nunca para texto em claro;
-- falha do mecanismo de máscara não pode reduzir o nível de proteção do secret;
-- cancelamento ocorre antes de qualquer mutação de sessão ou persistência do SO.
-
-Essa regra vale para credenciais de IA, SERP, Google APIs, GSC OAuth, Dynatrace, OIDC e demais variáveis classificadas como sensíveis.
+- valor real nunca é ecoado;
+- secret não entra no `rasai-console.ini`;
+- cancelamento ocorre antes de mutação de sessão/persistência;
+- fallback de terminal usa `getpass`, nunca texto em claro;
+- falha de mascaramento não pode reduzir o nível de proteção.
 
 ## 8. Reset de variáveis
 
-O menu avançado deve disponibilizar um reset seguro baseado no catálogo canônico, com escopo por grupo funcional ou para todas as variáveis conhecidas.
+O console disponibiliza reset seguro pelo catálogo canônico, distinguindo:
 
-O fluxo deve distinguir as camadas:
+1. sessão atual;
+2. sessão + `rasai-console.ini`;
+3. Windows: sessão + INI + Windows/User.
 
-1. **sessão atual**;
-2. **sessão + persistência do estado resetado no `rasai-console.ini`**;
-3. no Windows, **sessão + INI + Windows/User**.
+Remoção de Windows/User exige confirmação destrutiva. Windows/Machine nunca é removido pelo RASAi.
 
-A remoção de `Windows/User` exige escolha explícita e confirmação destrutiva `RESETAR`.
-
-`Windows/Machine` nunca é removido pelo RASAi. O console apenas informa sua existência porque esse escopo pode exigir privilégios administrativos e afetar outros usuários/processos. Um valor preservado em Machine pode voltar a ser herdado por processos futuros.
-
-Reset significa retornar cada variável ao default/auto/ausência definido pelo runtime, não inventar novos valores. Secrets continuam fora do INI em qualquer opção.
+Reset significa retornar ao default/auto/ausência do runtime, não inventar valores.
 
 Contrato detalhado: [CONSOLE_VARIABLE_RESET.md](CONSOLE_VARIABLE_RESET.md).
 
 ## 9. Perfis de Execução de sessão
 
-Perfis de Execução são uma camada temporária de UX para reduzir a necessidade de alternar várias configurações antes de cada auditoria. Eles não criam uma segunda fonte de verdade e não reescrevem defaults do programa.
+Perfis reduzem a necessidade de alternar várias configurações antes de uma auditoria. São overlays temporários e não criam nova fonte de verdade.
 
-No escopo inicial, o recurso é disponibilizado apenas quando existe **uma URL única explícita**. A UI deve expor:
+Disponíveis apenas com **uma URL única explícita**:
 
 ```text
 F. Perfil da execução
@@ -217,30 +190,68 @@ F. Perfil da execução
 
 Regras obrigatórias:
 
-- o perfil existe somente na sessão/execução atual;
-- não é gravado no `rasai-console.ini`;
-- não altera `Windows/User` ou `Windows/Machine`;
-- não cria, troca ou persiste credenciais;
-- antes da aplicação, apresenta descrição, módulos envolvidos, dependências e custo/quota/carga estimada;
-- perfis podem ser combinados por composição de módulos sem exigir presets permanentes para cada combinação possível;
-- ajustes finos feitos depois da seleção vencem o preset no domínio explicitamente alterado;
-- a configuração-base deve ser restaurada após a projeção temporária da execução.
+- existem apenas na sessão/execução atual;
+- não são gravados no INI;
+- não alteram Windows/User ou Windows/Machine;
+- não criam/trocam/persistem credenciais;
+- apresentam módulos, dependências e custo/quota/carga antes da aplicação;
+- ajustes finos posteriores vencem o preset no domínio alterado;
+- a configuração-base é restaurada depois da projeção temporária.
 
-Dependências humanas ou operacionais nunca são inventadas pelo perfil. Exemplos:
+### 9.1 Catálogo sempre visível
 
-- Search Intelligence exige termos SERP fornecidos na sessão;
-- GEO preserva contexto editorial/YMYL explícito ou mantém `AUTO` como hipótese, sem convertê-lo em fato;
-- Experiência sintética exige os parâmetros Apdex já configurados e não inventa threshold/amostras/carga;
-- Análise profunda exige o item 13 previamente habilitado e válido;
-- a opção de IA padrão do perfil pode ser `SEM IA` ou `IA SE DISPONÍVEL`; ausência de provider apto nesse segundo modo não bloqueia o core.
+Todos os presets devem permanecer visíveis mesmo quando ainda não podem ser usados.
 
-Quando uma capacidade selecionada possui dependência obrigatória ausente, o perfil pode permanecer escolhido, mas o preflight deve indicar `CONFIGURAR` e impedir `R. Executar` somente conforme o contrato dessa dependência.
+```text
+ 1. [APTO] SEO / Search Readiness
+ ...
+ 8. [CONFIGURAR] Search Intelligence / SERP
+     Falta: termos SERP no item T
+ 9. [CONFIGURAR] Experiência sintética
+     Falta: Synthetic/Experience Apdex
+10. [CONFIGURAR] Análise profunda URL
+     Falta: item 13 / IA deep
+12. [CONFIGURAR] Completo máximo
+     Falta: ...
+```
+
+A finalidade é transformar o catálogo também em guia de parametrização.
+
+### 9.2 Perfil `CONFIGURAR` não é selecionável
+
+Quando um preset possui dependência obrigatória ausente:
+
+- continua visível;
+- mostra cada pendência em linguagem operacional;
+- informa o item/menu onde o usuário deve configurar;
+- **não entra no estado ativo da sessão**;
+- não chega ao passo de aplicação até ficar `APTO`.
+
+Depois da parametrização, o operador retorna ao catálogo e o estado é recalculado dinamicamente.
+
+Isso evita a falsa expectativa de uma execução "completa" quando SERP, Apdex ou Improvement Intelligence ainda não podem rodar.
+
+### 9.3 Dependências que nunca são inventadas
+
+- Search Intelligence exige termos e contrato SERP válido, incluindo provider/credencial quando aplicável;
+- GEO preserva contexto editorial/YMYL explícito ou `AUTO`;
+- Experiência sintética exige parâmetros Apdex já configurados;
+- Análise profunda exige item 13 habilitado e IA deep válida;
+- IA padrão pode ser `SEM IA` ou `IA SE DISPONÍVEL`; ausência de provider apto no segundo modo não bloqueia o core.
+
+### 9.4 Completo seguro e Completo máximo
+
+`Completo seguro` cobre SEO, GEO, Performance, Acessibilidade e Web Quality sem ativar automaticamente SERP, carga sintética ou análise profunda.
+
+`Completo máximo` cobre todos os módulos do catálogo, mas só fica `APTO` depois que Search Intelligence, Experiência sintética e Análise profunda estiverem devidamente parametrizados.
+
+"Máximo" significa cobertura funcional, não redução de segurança ou limites.
 
 Contrato detalhado: [EXECUTION_PROFILES.md](EXECUTION_PROFILES.md).
 
 ## 10. Referências oficiais de integrações
 
-As URLs devem preferencialmente vir dos registries canônicos usados pelo runtime.
+As URLs devem vir preferencialmente dos registries canônicos.
 
 | Recurso | Documentação | Credencial/login |
 |---|---|---|
@@ -251,44 +262,15 @@ As URLs devem preferencialmente vir dos registries canônicos usados pelo runtim
 | W3C CSS Validation Service | https://jigsaw.w3.org/css-validator/api.html | não exige credencial |
 | MDN HTTP Observatory | https://developer.mozilla.org/en-US/observatory/docs/faq | não exige credencial |
 | Web Platform Baseline / WebDX | https://github.com/web-platform-dx/web-features | dataset local/versionado |
-| OpenID Connect | https://openid.net/specs/openid-connect-core-1_0.html | depende do IdP escolhido |
-| PostgreSQL connection strings | https://www.postgresql.org/docs/current/libpq-connect.html | depende do deployment |
+| OpenID Connect | https://openid.net/specs/openid-connect-core-1_0.html | depende do IdP |
+| PostgreSQL | https://www.postgresql.org/docs/current/libpq-connect.html | depende do deployment |
 | Playwright browsers | https://playwright.dev/python/docs/browsers | não exige credencial |
 
-Para IA e SERP, as URLs oficiais são derivadas respectivamente de `provider_registry` e `search_intelligence.provider_catalog`, evitando duplicação manual no console.
+Para IA e SERP, URLs oficiais devem ser derivadas de `provider_registry` e `search_intelligence.provider_catalog`.
 
-## 11. Google Search Console como exemplo completo
+## 11. Fonte de verdade
 
-`RASAI_GSC_ENABLED` controla a elegibilidade da coleta observacional do Search Console.
-
-O contexto completo inclui:
-
-```text
-RASAI_GSC_ENABLED
-RASAI_GOOGLE_SEARCH_CONSOLE_ACCESS_TOKEN
-RASAI_GOOGLE_SEARCH_CONSOLE_SITE_URL
-RASAI_GSC_SEARCH_ANALYTICS_DAYS
-RASAI_GSC_SEARCH_MAX_ROWS
-RASAI_GSC_FINAL_DATA_LAG_DAYS
-```
-
-Sem override de `RASAI_GSC_ENABLED`, o serviço pode entrar em modo automático quando token e property obrigatórios estiverem disponíveis. `false` representa hard-off explícito. `true` solicita explicitamente o serviço, mas não substitui os requisitos de autenticação/property.
-
-A property deve corresponder a uma propriedade à qual o usuário autenticado tenha acesso:
-
-```text
-sc-domain:example.com
-```
-
-ou uma propriedade URL-prefix HTTP(S) válida.
-
-O access token é secret e nunca entra no `rasai-console.ini`.
-
-## 12. Fonte de verdade e extensibilidade
-
-A UX não deve criar contratos paralelos.
-
-A prioridade é:
+Prioridade:
 
 ```text
 runtime / registry canônico
@@ -300,27 +282,35 @@ console guiado
 documentação
 ```
 
-Quando uma extensão adicionar um novo booleano ou enum ao catálogo em runtime, a superfície guiada deve herdar automaticamente o comportamento de seleção. Quando um provider registrado informar URLs oficiais, a UI deve apresentá-las sem exigir duplicação manual.
+Perfis apenas projetam escolhas sobre contratos existentes. Não mantêm metodologia, credenciais ou defaults paralelos.
 
-Perfis de Execução obedecem a mesma regra: eles apenas projetam temporariamente escolhas sobre contratos existentes; não mantêm valores metodológicos ou defaults paralelos.
+## 12. Reporting e expectativa do usuário
+
+O console deve impedir dependências conhecidas antes da seleção, mas não pode prometer que uma integração externa concluirá com sucesso.
+
+Depois da execução, os HTMLs continuam representando o que foi realmente persistido:
+
+- solicitado e concluído;
+- solicitado e parcial/falho;
+- não solicitado/desabilitado;
+- indisponível por provider/rede/contrato.
+
+Perfis não fabricam evidência nem score. `ai-usage.html` e os quadros de consumo por página permanecem a fonte de transparência para chamadas/tokens/custo de IA.
 
 ## 13. Critério de aderência
 
-Uma nova variável configurável só está aderente quando:
+Uma nova configuração/superfície só está aderente quando:
 
-- possui finalidade compreensível;
-- possui tipo e default explícitos;
-- possui domínio fechado registrado quando aplicável;
-- não exige digitação livre para booleano/enum conhecido;
-- aparece no contexto funcional correto;
-- explica dependências;
-- informa impacto/custo quando material;
-- apresenta documentação/credencial oficial quando o recurso externo fornecer referência;
-- respeita a semântica de cores do console;
-- secrets recebem feedback mascarado quando o terminal suporta isso;
-- edição de secret pode ser cancelada antes do commit;
-- reset destrutivo exige confirmação explícita e nunca remove Windows/Machine;
-- Perfis de Execução permanecem session-only, exibem dependências/custo e não persistem overrides silenciosamente;
-- não expõe secrets no INI, logs ou relatórios.
+- finalidade, tipo e default são compreensíveis;
+- domínio fechado é guiado;
+- dependências são explicadas;
+- custo/impacto é informado quando material;
+- referências oficiais são apresentadas quando disponíveis;
+- semântica de estados/cores é respeitada;
+- secrets são mascarados, canceláveis e não vazam em INI/log/report;
+- reset destrutivo exige confirmação;
+- Perfis de Execução permanecem session-only;
+- presets `CONFIGURAR` ficam visíveis para orientação, mas não são aplicados;
+- relatórios continuam evidence-bound e distinguem ausência, falha e execução real.
 
 Documentos complementares: [INTERACTIVE_CONSOLE.md](INTERACTIVE_CONSOLE.md), [EXECUTION_PROFILES.md](EXECUTION_PROFILES.md), [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md), [PROVIDER_SETUP.md](PROVIDER_SETUP.md), [STANDARDS_METRICS_AND_SERVICES.md](STANDARDS_METRICS_AND_SERVICES.md), [CONSOLE_SEARCH_INTELLIGENCE.md](CONSOLE_SEARCH_INTELLIGENCE.md), [CONSOLE_VARIABLE_RESET.md](CONSOLE_VARIABLE_RESET.md) e [WEB_PLATFORM_BASELINE.md](WEB_PLATFORM_BASELINE.md).
