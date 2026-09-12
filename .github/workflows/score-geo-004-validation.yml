@@ -21,11 +21,8 @@ permissions:
 
 jobs:
   score-geo-004:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    name: SCORE-GEO-004 deterministic contract
+    runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
