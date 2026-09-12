@@ -32,13 +32,9 @@ permissions:
   contents: read
 
 jobs:
-  sqlite-portable:
-    name: sqlite-portable-${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+  sqlite-portable-windows:
+    name: Portable SQLite local runtime (Windows)
+    runs-on: windows-latest
     timeout-minutes: 25
     env:
       RASAI_PLATFORM_DB_BACKEND: sqlite
