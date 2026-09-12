@@ -36,7 +36,8 @@ O console oferece:
 
 - configuração em uma tela por vez;
 - preflight;
-- Perfis de Execução temporários para uma URL explícita, incluindo SEO, GEO, Performance, Acessibilidade, Web Quality e combinações;
+- Perfis de Execução temporários para uma URL explícita, incluindo `Completo seguro` e `Completo máximo`;
+- estado `APTO`/`CONFIGURAR` e pendências visíveis antes da seleção;
 - descrição, dependências e custo/exposição antes de aplicar um perfil;
 - ajuste fino posterior, sem persistir o preset no INI ou no sistema operacional;
 - provider/modelo/esforço/timeout de IA;
@@ -61,7 +62,13 @@ F. Perfil da execução
 
 O perfil é um overlay somente da sessão. Ele não altera defaults do RASAi, não grava o preset no `rasai-console.ini`, não modifica `Windows/User` ou `Windows/Machine` e não cria/troca credenciais.
 
-Dependências que exigem informação humana ou configuração prévia continuam explícitas. Por exemplo, Search Intelligence não inventa termos SERP, GEO não transforma contexto YMYL `AUTO` em fato, Experiência sintética não inventa parâmetros de carga e Análise profunda exige o item 13 previamente configurado. Se uma dependência obrigatória faltar, o perfil pode permanecer selecionado, mas a execução aparece como `CONFIGURAR` até a correção.
+Todos os presets permanecem visíveis. Um preset `APTO` pode ser selecionado. Um preset `CONFIGURAR` continua aparecendo para orientar a parametrização, mostra exatamente o que falta e **não pode ser aplicado** até que as dependências obrigatórias sejam resolvidas.
+
+Dependências humanas ou operacionais continuam explícitas: Search Intelligence não inventa termos SERP, GEO não transforma contexto YMYL `AUTO` em fato, Experiência sintética não inventa parâmetros de carga e Análise profunda exige o item 13 e sua IA própria devidamente configurados.
+
+`Completo seguro` combina SEO, GEO, Performance, Acessibilidade e Web Quality sem ativar automaticamente SERP, carga sintética ou análise profunda.
+
+`Completo máximo` combina todos os módulos do catálogo. Ele permanece `CONFIGURAR` até Search Intelligence, Experiência sintética e Análise profunda estarem aptos. O nome "máximo" indica cobertura funcional, não redução de segurança ou limites.
 
 A IA padrão do perfil pode ficar desligada ou ser usada somente se houver provider `APTO`; a ausência de IA nesse segundo modo não bloqueia o core. Improvement Intelligence continua usando sua configuração de IA própria e independente.
 
@@ -168,6 +175,8 @@ parcial
 indisponível por timeout/quota/HTTP/ausência de artifact
 ```
 
+Um perfil `APTO` significa que as dependências conhecidas estavam válidas antes da execução; não é garantia de sucesso de rede/provider. Se uma integração falhar em runtime, o HTML deve mostrar falha/parcialidade em vez de fabricar dados.
+
 ## Acessibilidade
 
 A página `accessibility.html` reutiliza evidência Lighthouse persistida. Não é certificação WCAG.
@@ -180,7 +189,7 @@ Se o artifact Lighthouse não existir, o relatório deve dizer por que não foi 
 
 ## Uso de IA
 
-`ai-usage.html` apresenta provider, modelo, tentativas, tokens e custo estimado quando disponíveis.
+`ai-usage.html` apresenta provider, modelo, tentativas, tokens e custo estimado quando disponíveis e distingue finalidades não solicitadas de chamadas efetivamente realizadas/falhas.
 
 Custo é estimativa técnica; não substitui billing/invoice do provider.
 
